@@ -14,6 +14,7 @@
     "lint": "npm run lint -ws --if-present",
     "infra:up:integration": "docker compose -f infra/docker-compose.integration.yml up -d",
     "infra:down:integration": "docker compose -f infra/docker-compose.integration.yml down -v",
-    "test:integration:api": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration --passWithNoTests"
+    "test:integration:api": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration",
+    "test:integration:api:workflow": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration/workflow.integration.test.ts"
   }
 }
