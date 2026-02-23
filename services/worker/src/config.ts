@@ -37,6 +37,13 @@ export type WorkerConfig = {
   bgRemoveMaxRetries: number;
 };
 
+/**
+ * Load and validate environment variables into a typed WorkerConfig.
+ *
+ * @param env - The environment object to read variables from (defaults to `process.env`)
+ * @returns The validated WorkerConfig with normalized and typed fields
+ * @throws Throws a validation error if required environment variables are missing or invalid
+ */
 export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   const parsed = envSchema.parse(env);
   return {

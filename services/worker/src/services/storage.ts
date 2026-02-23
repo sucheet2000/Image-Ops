@@ -1,6 +1,12 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { WorkerConfig } from "../config";
 
+/**
+ * Convert a readable stream (Web ReadableStream<Uint8Array> or Node.js ReadableStream) into a single Buffer.
+ *
+ * @param stream - The source stream to read from; may be a web ReadableStream of Uint8Array or a Node.js ReadableStream.
+ * @returns A Buffer containing all bytes read from the stream (empty if the stream has no data).
+ */
 async function streamToBuffer(stream: ReadableStream<Uint8Array> | NodeJS.ReadableStream): Promise<Buffer> {
   if ("getReader" in stream) {
     const reader = stream.getReader();

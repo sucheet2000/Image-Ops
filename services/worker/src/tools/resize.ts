@@ -1,6 +1,15 @@
 import { mimeToFormat, type ResizeOptions } from "@image-ops/core";
 import sharp from "sharp";
 
+/**
+ * Resize and re-encode an image buffer based on the input MIME type and resize options.
+ *
+ * @param input - The resize request
+ * @param input.bytes - Source image data as a Buffer
+ * @param input.contentType - Source MIME type used to choose the output format
+ * @param input.options - ResizeOptions specifying width, height, and fit behavior
+ * @returns An object containing the transformed image bytes and the resulting MIME type (`image/png`, `image/webp`, or `image/jpeg`)
+ */
 export async function runResize(input: {
   bytes: Buffer;
   contentType: string;

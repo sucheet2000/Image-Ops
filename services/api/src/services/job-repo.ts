@@ -32,14 +32,32 @@ export interface JobRepository {
   listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]>;
 }
 
+/**
+ * Builds the namespaced Redis key for a job record.
+ *
+ * @param id - The job's unique identifier
+ * @returns The Redis key for the job (JOB_KEY_PREFIX + `id`)
+ */
 function jobKey(id: string): string {
   return `${JOB_KEY_PREFIX}${id}`;
 }
 
+/**
+ * Builds the Redis key used to store a subject's quota window.
+ *
+ * @param subjectId - The subject identifier to include in the key
+ * @returns The namespaced Redis key for the subject's quota (e.g. `imageops:quota:<subjectId>`)
+ */
 function quotaKey(subjectId: string): string {
   return `${QUOTA_KEY_PREFIX}${subjectId}`;
 }
 
+/**
+ * Build the Redis key used to store a cleanup idempotency record for the given identifier.
+ *
+ * @param key - The idempotency identifier to namespace
+ * @returns The Redis key string (prefixed for cleanup idempotency)
+ */
 function idempotencyKey(key: string): string {
   return `${CLEANUP_IDEMPOTENCY_PREFIX}${key}`;
 }

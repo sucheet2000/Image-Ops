@@ -1,5 +1,11 @@
 import sharp from "sharp";
 
+/**
+ * Escape special XML characters in a string for safe inclusion in XML or SVG content.
+ *
+ * @param value - The input string to escape
+ * @returns The input string with `&`, `<`, `>`, `"` and `'` replaced by their XML entity equivalents
+ */
 function escapeXml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -9,6 +15,14 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
+/**
+ * Apply a right-aligned watermark label over an image and return the composited image.
+ *
+ * @param input.bytes - Source image data
+ * @param input.contentType - Original image content type; returned unchanged
+ * @param input.label - Optional watermark text; defaults to "Image Ops" when omitted
+ * @returns An object with `bytes` containing the image data with the watermark applied and `contentType` preserved from the input
+ */
 export async function applyWatermark(input: {
   bytes: Buffer;
   contentType: string;
