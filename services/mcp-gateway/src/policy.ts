@@ -1,3 +1,4 @@
+import { config } from "./config";
 import { OPERATION_BY_ID } from "./operations";
 import type { ExecuteRequest } from "./types";
 
