@@ -9,6 +9,7 @@ SEO-first image utility platform for marketplace sellers (Etsy/Amazon/Shopify), 
 ## Monorepo Structure
 - `apps/web`: Next.js frontend
 - `services/api`: API service (quota, jobs, cleanup)
+- `services/mcp-gateway`: constrained MCP gateway (`search` + `execute`)
 - `services/worker`: image processing worker
 - `packages/core`: shared domain logic (quota rules, types)
 - `infra/sql`: database migrations
@@ -32,6 +33,7 @@ npm run dev
 - Architecture and TDD complete: `docs/image-ops-tdd.md`
 - Initial scaffold in place
 - Core quota logic + tests implemented in `packages/core`
+- MCP V1 starter files added for reduced OpenAPI surface and gateway controls.
 
 ## Parallel Development (Git Worktrees)
 - Team worktree workflow: `docs/git-worktree-plan.md`
