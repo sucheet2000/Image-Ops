@@ -30,6 +30,7 @@ export interface JobRepository {
   setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void>;
   appendDeletionAudit(record: DeletionAuditRecord): Promise<void>;
   listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]>;
+  close(): Promise<void>;
 }
 
 /**
@@ -64,6 +65,7 @@ function idempotencyKey(key: string): string {
 
 export class RedisJobRepository implements JobRepository {
   private readonly redis: IORedis;
+  private closePromise: Promise<void> | null = null;
 
   constructor(input: { redisUrl: string }) {
     this.redis = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
@@ -140,6 +142,22 @@ export class RedisJobRepository implements JobRepository {
     const rows = await this.redis.lrange(DELETION_AUDIT_LIST_KEY, Math.max(-limit, -1000), -1);
     return rows.map((value) => JSON.parse(value) as DeletionAuditRecord);
   }
+
+  async close(): Promise<void> {
+    if (this.closePromise) {
+      return this.closePromise;
+    }
+
+    this.closePromise = (async () => {
+      try {
+        await this.redis.quit();
+      } catch {
+        this.redis.disconnect(false);
+      }
+    })();
+
+    return this.closePromise;
+  }
 }
 
 export class InMemoryJobRepository implements JobRepository {
@@ -204,4 +222,6 @@ export class InMemoryJobRepository implements JobRepository {
   async listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]> {
     return this.deletionAudit.slice(-limit);
   }
+
+  async close(): Promise<void> {}
 }

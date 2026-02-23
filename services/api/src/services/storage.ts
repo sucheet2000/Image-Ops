@@ -24,6 +24,7 @@ export interface ObjectStorageService {
   createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
   deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult>;
+  close(): Promise<void>;
 }
 
 export class S3ObjectStorageService implements ObjectStorageService {
@@ -105,6 +106,10 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
     return { deleted, notFound };
   }
+
+  async close(): Promise<void> {
+    this.client.destroy();
+  }
 }
 
 export class InMemoryObjectStorageService implements ObjectStorageService {
@@ -149,4 +154,6 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
   setObject(objectKey: string, contentType: string, bytes: Buffer = Buffer.from("test")): void {
     this.objects.set(objectKey, { contentType, bytes });
   }
+
+  async close(): Promise<void> {}
 }

@@ -4,14 +4,17 @@ import IORedis from "ioredis";
 
 export interface JobQueueService {
   enqueue(payload: ImageJobQueuePayload): Promise<void>;
+  close(): Promise<void>;
 }
 
 export class BullMqJobQueueService implements JobQueueService {
   private readonly queue: Queue<ImageJobQueuePayload>;
+  private readonly connection: IORedis;
+  private closePromise: Promise<void> | null = null;
 
   constructor(input: { queueName: string; redisUrl: string }) {
-    const connection = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
-    this.queue = new Queue<ImageJobQueuePayload>(input.queueName, { connection });
+    this.connection = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
+    this.queue = new Queue<ImageJobQueuePayload>(input.queueName, { connection: this.connection });
   }
 
   async enqueue(payload: ImageJobQueuePayload): Promise<void> {
@@ -26,6 +29,28 @@ export class BullMqJobQueueService implements JobQueueService {
       }
     });
   }
+
+  async close(): Promise<void> {
+    if (this.closePromise) {
+      return this.closePromise;
+    }
+
+    this.closePromise = (async () => {
+      try {
+        await this.queue.close();
+      } catch {
+        // Continue closing connection even if queue close fails.
+      }
+
+      try {
+        await this.connection.quit();
+      } catch {
+        this.connection.disconnect(false);
+      }
+    })();
+
+    return this.closePromise;
+  }
 }
 
 export class InMemoryJobQueueService implements JobQueueService {
@@ -34,4 +59,6 @@ export class InMemoryJobQueueService implements JobQueueService {
   async enqueue(payload: ImageJobQueuePayload): Promise<void> {
     this.items.push(payload);
   }
+
+  async close(): Promise<void> {}
 }
