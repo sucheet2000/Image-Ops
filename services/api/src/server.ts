@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import cors from "cors";
 import express from "express";
 import { applyQuota, FREE_PLAN_LIMIT, FREE_PLAN_WINDOW_HOURS, type QuotaWindow } from "@image-ops/core";
@@ -41,11 +40,39 @@ type QueueItem = {
   enqueuedAt: string;
 };
 
+type DeletionReason = "page_exit" | "ttl_expiry" | "manual";
+type DeletionResult = "success" | "not_found";
+
+type DeletionAuditRecord = {
+  id: string;
+  objectKey: string;
+  reason: DeletionReason;
+  result: DeletionResult;
+  deletedAt: string;
+};
+
+type CleanupResponse = {
+  accepted: true;
+  cleaned: number;
+  notFound: number;
+  expiredPurged: number;
+  idempotencyKey: string;
+};
+
+type IdempotencyRecord = {
+  requestSignature: string;
+  status: number;
+  response: CleanupResponse;
+  createdAt: string;
+};
+
 type ApiState = {
   windows: Map<string, QuotaWindow>;
   tempUploads: Map<string, TempUploadRecord>;
   jobs: Map<string, JobRecord>;
   queue: QueueItem[];
+  deletionAudit: DeletionAuditRecord[];
+  cleanupIdempotency: Map<string, IdempotencyRecord>;
 };
 
 type CreateApiAppOptions = {
@@ -53,8 +80,10 @@ type CreateApiAppOptions = {
   state?: ApiState;
 };
 
-function workerToken(): string {
-  return process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
+function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  const message = error instanceof Error ? error.message : "Internal server error";
+  logError("api.error", { message });
+  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message });
 }
 
 function createInitialState(): ApiState {
@@ -62,20 +91,10 @@ function createInitialState(): ApiState {
     windows: new Map<string, QuotaWindow>(),
     tempUploads: new Map<string, TempUploadRecord>(),
     jobs: new Map<string, JobRecord>(),
-    queue: []
+    queue: [],
+    deletionAudit: [],
+    cleanupIdempotency: new Map<string, IdempotencyRecord>()
   };
-}
-
-function sanitizeSubjectId(value: string): string {
-  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-  return sanitized || "anonymous";
-}
-
-function fileExtension(filename: string): string {
-  const normalized = filename.trim();
-  if (!normalized.includes(".")) {
-    return "";
-  }
 
   return normalized.split(".").pop()?.toLowerCase() || "";
 }
@@ -86,12 +105,29 @@ function createTempObjectKey(subjectId: string, filename: string, now: Date): st
   return `tmp/${subjectId}/${now.getTime()}-${crypto.randomUUID()}${suffix}`;
 }
 
+function addDeletionAudit(
+  state: ApiState,
+  objectKey: string,
+  reason: DeletionReason,
+  result: DeletionResult,
+  at: Date
+): void {
+  state.deletionAudit.push({
+    id: `del_${crypto.randomUUID().replace(/-/g, "")}`,
+    objectKey,
+    reason,
+    result,
+    deletedAt: at.toISOString()
+  });
+}
+
 function pruneExpired(state: ApiState, now: Date): number {
   let removed = 0;
   for (const [key, record] of state.tempUploads.entries()) {
     if (now > new Date(record.expiresAt)) {
       state.tempUploads.delete(key);
       removed += 1;
+      addDeletionAudit(state, key, "ttl_expiry", "success", now);
     }
   }
 
@@ -112,17 +148,43 @@ function requireWorkerAuth(req: express.Request, res: express.Response): boolean
   return true;
 }
 
+function normalizeObjectKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique = new Set<string>();
+  for (const item of value) {
+    const key = String(item || "").trim();
+    if (key) {
+      unique.add(key);
+    }
+  }
+
+  return [...unique].sort((a, b) => a.localeCompare(b));
+}
+
+function cleanupSignature(keys: string[]): string {
+  return keys.join("|");
+}
+
 export function createApiApp(options: CreateApiAppOptions = {}) {
   const now = options.now || (() => new Date());
   const state = options.state || createInitialState();
   const app = express();
-
-  app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:3000" }));
-  app.use(express.json());
+  app.use(cors({ origin: deps.config.webOrigin }));
+  app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => {
     const purged = pruneExpired(state, now());
-    res.json({ status: "ok", tempUploads: state.tempUploads.size, jobs: state.jobs.size, queueDepth: state.queue.length, purged });
+    res.json({
+      status: "ok",
+      tempUploads: state.tempUploads.size,
+      jobs: state.jobs.size,
+      queueDepth: state.queue.length,
+      deletionAuditCount: state.deletionAudit.length,
+      purged
+    });
   });
 
   app.get("/api/quota/:subjectId", (req, res) => {
@@ -265,71 +327,13 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
     });
   });
 
-  app.post("/api/jobs", (req, res) => {
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
-    const tool = String(req.body.tool || "").trim();
-    const inputObjectKey = String(req.body.inputObjectKey || "").trim();
-    const options = req.body.options && typeof req.body.options === "object" ? req.body.options : {};
-
-    if (!tool || !inputObjectKey) {
-      res.status(400).json({
-        error: "INVALID_JOB_REQUEST",
-        message: "tool and inputObjectKey are required."
-      });
-      return;
-    }
-
-    if (!ALLOWED_JOB_TOOLS.has(tool)) {
-      res.status(400).json({
-        error: "UNSUPPORTED_TOOL",
-        message: "Tool is not supported."
-      });
-      return;
-    }
-
-    const upload = state.tempUploads.get(inputObjectKey);
-    if (!upload) {
-      res.status(404).json({
-        error: "INPUT_OBJECT_NOT_FOUND",
-        message: "Input object key was not found or has expired."
-      });
-      return;
-    }
-
-    if (upload.subjectId !== subjectId) {
-      res.status(403).json({
-        error: "INPUT_OBJECT_FORBIDDEN",
-        message: "Input object does not belong to this subject."
-      });
-      return;
-    }
-
-    const id = `job_${crypto.randomUUID().replace(/-/g, "")}`;
-    const job: JobRecord = {
-      id,
-      subjectId,
-      tool,
-      inputObjectKey,
-      options: options as Record<string, unknown>,
-      status: "queued",
-      createdAt: currentNow.toISOString(),
-      updatedAt: currentNow.toISOString()
-    };
-
-    state.jobs.set(id, job);
-    state.queue.push({ jobId: id, enqueuedAt: currentNow.toISOString() });
-
-    res.status(201).json({
-      id: job.id,
-      status: job.status,
-      tool: job.tool,
-      inputObjectKey: job.inputObjectKey,
-      createdAt: job.createdAt,
-      queuePosition: state.queue.length
-    });
+  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerJobsRoutes(app, {
+    config: deps.config,
+    storage: deps.storage,
+    queue: deps.queue,
+    jobRepo: deps.jobRepo,
+    now: deps.now
   });
 
   app.get("/api/jobs/:id", (req, res) => {
@@ -460,30 +464,105 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
     });
   });
 
+  app.post("/api/internal/temp/sweep", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const currentNow = now();
+    const swept = pruneExpired(state, currentNow);
+    res.json({
+      swept,
+      deletionAuditCount: state.deletionAudit.length,
+      at: currentNow.toISOString()
+    });
+  });
+
+  app.get("/api/internal/deletion-audit", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const limitRaw = Number(req.query.limit || 20);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 20;
+    const items = state.deletionAudit.slice(-limit);
+
+    res.json({
+      count: state.deletionAudit.length,
+      items
+    });
+  });
+
   app.post("/api/cleanup", (req, res) => {
+    const idempotencyKey = String(req.header("idempotency-key") || "").trim();
+    if (!idempotencyKey) {
+      res.status(400).json({
+        error: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "idempotency-key header is required."
+      });
+      return;
+    }
+
+    const keys = normalizeObjectKeys(req.body.objectKeys);
+    const signature = cleanupSignature(keys);
+
+    const existing = state.cleanupIdempotency.get(idempotencyKey);
+    if (existing) {
+      if (existing.requestSignature !== signature) {
+        res.status(409).json({
+          error: "IDEMPOTENCY_KEY_CONFLICT",
+          message: "idempotency-key has already been used with different objectKeys."
+        });
+        return;
+      }
+
+      res.setHeader("x-idempotent-replay", "true");
+      res.status(existing.status).json(existing.response);
+      return;
+    }
+
     const currentNow = now();
     const expiredPurged = pruneExpired(state, currentNow);
-
-    const keys = Array.isArray(req.body.objectKeys) ? req.body.objectKeys.map((key) => String(key)) : [];
     let cleaned = 0;
+    let notFound = 0;
 
     for (const key of keys) {
       if (state.tempUploads.delete(key)) {
         cleaned += 1;
+        addDeletionAudit(state, key, "page_exit", "success", currentNow);
+      } else {
+        notFound += 1;
+        addDeletionAudit(state, key, "page_exit", "not_found", currentNow);
       }
     }
 
-    res.status(202).json({ accepted: true, cleaned, expiredPurged });
-  });
+    const response: CleanupResponse = {
+      accepted: true,
+      cleaned,
+      notFound,
+      expiredPurged,
+      idempotencyKey
+    };
 
+    state.cleanupIdempotency.set(idempotencyKey, {
+      requestSignature: signature,
+      status: 202,
+      response,
+      createdAt: currentNow.toISOString()
+    });
+
+    res.status(202).json(response);
+  });
+  registerQuotaRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
+
+  app.use(errorHandler);
   return app;
 }
 
 if (require.main === module) {
-  const port = Number(process.env.API_PORT || 4000);
-  const app = createApiApp();
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Image Ops API listening on http://localhost:${port}`);
+  const config = loadApiConfig();
+  const app = createApiApp({ config });
+  app.listen(config.port, () => {
+    logInfo("api.started", { port: config.port });
   });
 }

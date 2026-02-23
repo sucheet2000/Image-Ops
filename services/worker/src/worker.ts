@@ -16,6 +16,7 @@ type ClaimResponse = {
 
 const API_BASE = process.env.WORKER_API_BASE_URL || "http://localhost:4000";
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
+const SWEEP_EVERY = Number(process.env.WORKER_SWEEP_EVERY || 10);
 const TOKEN = process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
 
 async function sleep(ms: number): Promise<void> {
@@ -73,33 +74,54 @@ async function processClaimedJob(job: ClaimedJob): Promise<void> {
     await markComplete(job.id, false, undefined, "SIMULATED_WORKER_FAILURE");
     return;
   }
+);
 
   await markComplete(job.id, true, outputKeyFor(job));
+}
+
+async function sweepExpired(): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/internal/temp/sweep`, {
+    method: "POST",
+    headers: {
+      "x-worker-token": TOKEN
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Sweep failed with status ${response.status}`);
+  }
 }
 
 async function pollLoop(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`Worker started. Polling ${API_BASE} every ${POLL_MS}ms`);
+  let cycle = 0;
 
   for (;;) {
     try {
+      cycle += 1;
+      if (cycle % SWEEP_EVERY === 0) {
+        await sweepExpired();
+      }
+
       const job = await claimJob();
       if (!job) {
         await sleep(POLL_MS);
         continue;
       }
 
-      // eslint-disable-next-line no-console
-      console.log(`Claimed job ${job.id} (${job.tool})`);
-      await processClaimedJob(job);
-      // eslint-disable-next-line no-console
-      console.log(`Completed job ${job.id}`);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Worker loop error", error);
-      await sleep(POLL_MS);
-    }
-  }
-}
+worker.on("completed", (job) => {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({ event: "worker.completed", jobId: job.id }));
+});
 
-void pollLoop();
+worker.on("failed", (job, error) => {
+  // eslint-disable-next-line no-console
+  console.error(
+    JSON.stringify({
+      event: "worker.failed",
+      jobId: job?.id,
+      message: error.message
+    })
+  );
+});

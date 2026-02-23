@@ -24,30 +24,24 @@ Branch: `codex/agent-core-postgres`
 - Image transform algorithm changes.
 - Web UI changes.
 
-# Agent Ownership: Worker Processing Pipeline
+# Agent Ownership: Integration Test Harness
 
-Branch: `codex/agent-worker-pipeline`
+Branch: `codex/agent-integration-tests`
 
 ## Scope
-- Implement BullMQ worker with sharp transforms.
-- Implement tool modules: resize/compress/convert/background-remove/watermark.
-- Ensure lifecycle transitions queued -> running -> done/failed.
+- Add docker-backed integration harness (Redis + MinIO + optional Postgres).
+- Add end-to-end tests validating upload-init -> job -> worker -> status -> cleanup.
 
 ## Owned Areas
-- `services/worker/src/worker.ts`
-- `services/worker/src/processor.ts`
-- `services/worker/src/tools/*`
-- `services/worker/src/providers/*`
-- `services/worker/src/services/storage.ts`
-- `services/worker/src/services/job-repo.ts`
-- `services/worker/test/*`
+- `infra/docker-compose.integration.yml`
+- `services/api/test/integration/*`
+- `services/worker/test/integration/*`
+- `README.md` (integration run instructions)
 
 ## Acceptance Checks
-1. Worker processes real image bytes with sharp.
-2. Watermark applies only when advanced + free.
-3. Provider retry/timeout logic covered by tests.
-4. Failure classification updates job status with code/message.
+1. Infra can start locally with one command.
+2. Integration tests run against real services (not in-memory fakes).
+3. Includes cleanup and idempotency verification.
 
 ## Out of Scope
-- API route restructuring.
-- Postgres repository migration.
+- Core API/worker algorithm changes except minimal testability hooks.
