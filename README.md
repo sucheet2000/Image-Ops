@@ -35,7 +35,7 @@ npm run dev -w services/worker
 ```
 
 ## Environment
-Required variables are listed in `/Users/sucheetboppana/Documents/New project/.env.example`.
+Required variables are listed in `.env.example`.
 
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
@@ -57,12 +57,27 @@ docker run --rm -p 9000:9000 -p 9001:9001 \
 ```
 
 ## Test Commands
-From `/Users/sucheetboppana/Documents/New project`:
+From the project root:
 ```bash
 npm run test
 npm run test -w services/api
 npm run test -w services/worker
 npm run test -w packages/core
+```
+
+## Integration Harness (Agent 2 Starter)
+1. Start integration dependencies:
+```bash
+npm run infra:up:integration
+```
+2. Run API + worker locally against the integration stack (separate terminals).
+3. Run integration smoke tests:
+```bash
+RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run test:integration:api
+```
+4. Tear down stack:
+```bash
+npm run infra:down:integration
 ```
 
 ## V1 Notes
