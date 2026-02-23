@@ -45,7 +45,7 @@ export function getViewerPlan(): ViewerPlan {
     return explicitPlan;
   }
 
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
   if (!token) {
     return "free";
   }

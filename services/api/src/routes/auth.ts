@@ -1,10 +1,15 @@
-import { isPlan, toSafeSubjectId, type ImagePlan, type SubjectProfile } from "@image-ops/core";
+import { isPlan, toSafeSubjectId, type AuthRefreshSession, type ImagePlan, type SubjectProfile } from "@image-ops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
-import type { Router } from "express";
+import type { Request, Response, Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
-import type { AuthService } from "../services/auth";
+import {
+  issueRefreshToken,
+  parseRefreshToken,
+  verifyRefreshTokenSecret,
+  type AuthService
+} from "../services/auth";
 import type { JobRepository } from "../services/job-repo";
 
 const createSessionSchema = z.object({
@@ -19,6 +24,84 @@ const getSessionParamSchema = z.object({
 const googleAuthSchema = z.object({
   idToken: z.string().min(1)
 });
+
+function sameSiteCookieValue(value: ApiConfig["authRefreshCookieSameSite"]): "Lax" | "Strict" | "None" {
+  if (value === "strict") {
+    return "Strict";
+  }
+  if (value === "none") {
+    return "None";
+  }
+  return "Lax";
+}
+
+function serializeRefreshCookie(config: ApiConfig, value: string, maxAgeSeconds: number): string {
+  const parts = [
+    `${config.authRefreshCookieName}=${encodeURIComponent(value)}`,
+    `Path=${config.authRefreshCookiePath}`,
+    "HttpOnly",
+    `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`,
+    `Max-Age=${maxAgeSeconds}`
+  ];
+
+  if (config.authRefreshCookieSecure) {
+    parts.push("Secure");
+  }
+  if (config.authRefreshCookieDomain) {
+    parts.push(`Domain=${config.authRefreshCookieDomain}`);
+  }
+
+  return parts.join("; ");
+}
+
+function clearRefreshCookie(config: ApiConfig): string {
+  const parts = [
+    `${config.authRefreshCookieName}=`,
+    `Path=${config.authRefreshCookiePath}`,
+    "HttpOnly",
+    `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`,
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+  ];
+
+  if (config.authRefreshCookieSecure) {
+    parts.push("Secure");
+  }
+  if (config.authRefreshCookieDomain) {
+    parts.push(`Domain=${config.authRefreshCookieDomain}`);
+  }
+
+  return parts.join("; ");
+}
+
+function parseCookieHeader(request: Request): Map<string, string> {
+  const raw = request.header("cookie") || "";
+  const map = new Map<string, string>();
+  for (const segment of raw.split(";")) {
+    const [name, ...valueParts] = segment.trim().split("=");
+    if (!name || valueParts.length === 0) {
+      continue;
+    }
+
+    const encoded = valueParts.join("=");
+    try {
+      map.set(name, decodeURIComponent(encoded));
+    } catch {
+      map.set(name, encoded);
+    }
+  }
+
+  return map;
+}
+
+function readRefreshTokenFromCookie(request: Request, cookieName: string): string | null {
+  return parseCookieHeader(request).get(cookieName) || null;
+}
+
+function sendRefreshUnauthorized(res: Response, config: ApiConfig): void {
+  res.setHeader("set-cookie", clearRefreshCookie(config));
+  res.status(401).json({ error: "UNAUTHORIZED", message: "Invalid or expired refresh session." });
+}
 
 export function registerAuthRoutes(
   router: Router,
@@ -94,12 +177,110 @@ export function registerAuthRoutes(
       now
     });
 
+    const refreshIssued = issueRefreshToken(now);
+    const refreshSession: AuthRefreshSession = {
+      id: refreshIssued.sessionId,
+      subjectId,
+      plan: profile.plan,
+      email: identity.email,
+      secretHash: refreshIssued.secretHash,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      expiresAt: new Date(now.getTime() + deps.config.authRefreshTtlSeconds * 1000).toISOString()
+    };
+    await deps.jobRepo.putAuthRefreshSession(refreshSession, deps.config.authRefreshTtlSeconds);
+
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("set-cookie", serializeRefreshCookie(deps.config, refreshIssued.token, deps.config.authRefreshTtlSeconds));
     res.status(200).json({
       token,
       tokenType: "Bearer",
       expiresIn: deps.config.authTokenTtlSeconds,
       profile
     });
+  }));
+
+  router.post("/api/auth/refresh", asyncHandler(async (req, res) => {
+    const refreshToken = readRefreshTokenFromCookie(req, deps.config.authRefreshCookieName);
+    if (!refreshToken) {
+      sendRefreshUnauthorized(res, deps.config);
+      return;
+    }
+
+    const parsed = parseRefreshToken(refreshToken);
+    if (!parsed) {
+      sendRefreshUnauthorized(res, deps.config);
+      return;
+    }
+
+    const now = deps.now();
+    const nowIso = now.toISOString();
+    const existingSession = await deps.jobRepo.getAuthRefreshSession(parsed.sessionId);
+    if (!existingSession) {
+      sendRefreshUnauthorized(res, deps.config);
+      return;
+    }
+
+    if (existingSession.revokedAt || new Date(existingSession.expiresAt).getTime() <= now.getTime()) {
+      await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
+      sendRefreshUnauthorized(res, deps.config);
+      return;
+    }
+
+    if (!verifyRefreshTokenSecret(parsed.secret, existingSession.secretHash)) {
+      sendRefreshUnauthorized(res, deps.config);
+      return;
+    }
+
+    const profile = await deps.jobRepo.getSubjectProfile(existingSession.subjectId);
+    const plan = profile?.plan || existingSession.plan;
+
+    await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
+
+    const rotated = issueRefreshToken(now);
+    const rotatedSession: AuthRefreshSession = {
+      id: rotated.sessionId,
+      subjectId: existingSession.subjectId,
+      plan,
+      email: existingSession.email,
+      secretHash: rotated.secretHash,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      expiresAt: new Date(now.getTime() + deps.config.authRefreshTtlSeconds * 1000).toISOString()
+    };
+    await deps.jobRepo.putAuthRefreshSession(rotatedSession, deps.config.authRefreshTtlSeconds);
+
+    const token = deps.auth.issueApiToken({
+      sub: existingSession.subjectId,
+      plan,
+      email: existingSession.email,
+      now
+    });
+
+    res.setHeader("cache-control", "no-store");
+    res.setHeader("set-cookie", serializeRefreshCookie(deps.config, rotated.token, deps.config.authRefreshTtlSeconds));
+    res.status(200).json({
+      token,
+      tokenType: "Bearer",
+      expiresIn: deps.config.authTokenTtlSeconds,
+      profile: {
+        subjectId: existingSession.subjectId,
+        plan
+      }
+    });
+  }));
+
+  router.post("/api/auth/logout", asyncHandler(async (req, res) => {
+    const refreshToken = readRefreshTokenFromCookie(req, deps.config.authRefreshCookieName);
+    if (refreshToken) {
+      const parsed = parseRefreshToken(refreshToken);
+      if (parsed) {
+        await deps.jobRepo.revokeAuthRefreshSession(parsed.sessionId, deps.now().toISOString());
+      }
+    }
+
+    res.setHeader("set-cookie", clearRefreshCookie(deps.config));
+    res.status(204).end();
   }));
 
   router.get("/api/auth/session/:subjectId", asyncHandler(async (req, res) => {

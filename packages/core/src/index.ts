@@ -145,6 +145,18 @@ export type SubjectProfile = {
   updatedAt: string;
 };
 
+export type AuthRefreshSession = {
+  id: string;
+  subjectId: string;
+  plan: ImagePlan;
+  email?: string;
+  secretHash: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  revokedAt?: string;
+};
+
 export const BILLING_CHECKOUT_STATUSES = ["created", "paid", "canceled", "expired"] as const;
 export type BillingCheckoutStatus = (typeof BILLING_CHECKOUT_STATUSES)[number];
 

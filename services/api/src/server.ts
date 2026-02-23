@@ -91,7 +91,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   };
 
   const app = express();
-  app.use(cors({ origin: deps.config.webOrigin }));
+  app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 

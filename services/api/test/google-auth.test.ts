@@ -53,6 +53,7 @@ describe("POST /api/auth/google", () => {
     expect(payload.expiresIn).toBe(7200);
     expect(payload.profile.subjectId).toBe("google_google-subject-1");
     expect(payload.profile.plan).toBe("free");
+    expect(response.headers.get("set-cookie")).toContain("image_ops_refresh_token=");
 
     await server.close();
   });
