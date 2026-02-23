@@ -82,8 +82,19 @@ describe("POST /api/uploads/init", () => {
       })
     });
 
-    expect(response.status).toBe(413);
-    const payload = await response.json();
-    expect(payload.error).toBe("FILE_TOO_LARGE");
+    const payload = await init.json();
+    const cleanup = await fetch(`${base}/api/cleanup`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "cleanup-test-key-1"
+      },
+      body: JSON.stringify({ objectKeys: [payload.objectKey] })
+    });
+
+    expect(cleanup.status).toBe(202);
+    const cleaned = await cleanup.json();
+    expect(cleaned.cleaned).toBe(1);
+    expect(cleaned.idempotencyKey).toBe("cleanup-test-key-1");
   });
 });

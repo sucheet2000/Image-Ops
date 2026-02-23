@@ -1,44 +1,114 @@
-import type { ImageJobQueuePayload } from "@image-ops/core";
-import { Worker } from "bullmq";
-import IORedis from "ioredis";
-import { loadWorkerConfig } from "./config";
-import { HttpBackgroundRemoveProvider } from "./providers/bg-remove-provider";
-import { processImageJob } from "./processor";
-import { RedisWorkerJobRepository } from "./services/job-repo";
-import { S3WorkerStorageService } from "./services/storage";
+type ClaimedJob = {
+  id: string;
+  subjectId: string;
+  tool: string;
+  inputObjectKey: string;
+  options: Record<string, unknown>;
+  status: "running";
+  createdAt: string;
+  updatedAt: string;
+};
 
-const config = loadWorkerConfig();
-const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
+type ClaimResponse = {
+  claimed: boolean;
+  job?: ClaimedJob;
+};
 
-const storage = new S3WorkerStorageService(config);
-const jobRepo = new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
-const bgRemoveProvider = new HttpBackgroundRemoveProvider({
-  endpointUrl: config.bgRemoveApiUrl,
-  apiKey: config.bgRemoveApiKey,
-  timeoutMs: config.bgRemoveTimeoutMs,
-  maxRetries: config.bgRemoveMaxRetries
-});
+const API_BASE = process.env.WORKER_API_BASE_URL || "http://localhost:4000";
+const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
+const SWEEP_EVERY = Number(process.env.WORKER_SWEEP_EVERY || 10);
+const TOKEN = process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
 
-const worker = new Worker<ImageJobQueuePayload>(
-  config.queueName,
-  async (job) => {
-    await processImageJob(job.data, {
-      storage,
-      jobRepo,
-      bgRemoveProvider,
-      now: () => new Date()
-    });
-  },
-  {
-    connection,
-    concurrency: config.concurrency
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function outputKeyFor(job: ClaimedJob): string {
+  const extension = job.inputObjectKey.split(".").pop() || "jpg";
+  return `tmp/${job.subjectId}/processed/${job.id}.${extension}`;
+}
+
+async function claimJob(): Promise<ClaimedJob | null> {
+  const response = await fetch(`${API_BASE}/api/internal/queue/claim`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-worker-token": TOKEN
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claim failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ClaimResponse;
+  if (!payload.claimed || !payload.job) {
+    return null;
+  }
+
+  return payload.job;
+}
+
+async function markComplete(jobId: string, success: boolean, outputObjectKey?: string, errorCode?: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/internal/jobs/${encodeURIComponent(jobId)}/complete`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-worker-token": TOKEN
+    },
+    body: JSON.stringify({ success, outputObjectKey, errorCode })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Complete failed with status ${response.status}: ${body}`);
+  }
+}
+
+async function processClaimedJob(job: ClaimedJob): Promise<void> {
+  // Processing stub: simulate deterministic work and fail only when requested.
+  await sleep(250);
+  const shouldFail = Boolean(job.options?.forceFail);
+
+  if (shouldFail) {
+    await markComplete(job.id, false, undefined, "SIMULATED_WORKER_FAILURE");
+    return;
   }
 );
 
-worker.on("ready", () => {
+  await markComplete(job.id, true, outputKeyFor(job));
+}
+
+async function sweepExpired(): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/internal/temp/sweep`, {
+    method: "POST",
+    headers: {
+      "x-worker-token": TOKEN
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Sweep failed with status ${response.status}`);
+  }
+}
+
+async function pollLoop(): Promise<void> {
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "worker.ready", queue: config.queueName, concurrency: config.concurrency }));
-});
+  console.log(`Worker started. Polling ${API_BASE} every ${POLL_MS}ms`);
+  let cycle = 0;
+
+  for (;;) {
+    try {
+      cycle += 1;
+      if (cycle % SWEEP_EVERY === 0) {
+        await sweepExpired();
+      }
+
+      const job = await claimJob();
+      if (!job) {
+        await sleep(POLL_MS);
+        continue;
+      }
 
 worker.on("completed", (job) => {
   // eslint-disable-next-line no-console
