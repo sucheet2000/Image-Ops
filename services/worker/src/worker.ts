@@ -16,6 +16,7 @@ type ClaimResponse = {
 
 const API_BASE = process.env.WORKER_API_BASE_URL || "http://localhost:4000";
 const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
+const SWEEP_EVERY = Number(process.env.WORKER_SWEEP_EVERY || 10);
 const TOKEN = process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
 
 async function sleep(ms: number): Promise<void> {
@@ -77,12 +78,31 @@ async function processClaimedJob(job: ClaimedJob): Promise<void> {
   await markComplete(job.id, true, outputKeyFor(job));
 }
 
+async function sweepExpired(): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/internal/temp/sweep`, {
+    method: "POST",
+    headers: {
+      "x-worker-token": TOKEN
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Sweep failed with status ${response.status}`);
+  }
+}
+
 async function pollLoop(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`Worker started. Polling ${API_BASE} every ${POLL_MS}ms`);
+  let cycle = 0;
 
   for (;;) {
     try {
+      cycle += 1;
+      if (cycle % SWEEP_EVERY === 0) {
+        await sweepExpired();
+      }
+
       const job = await claimJob();
       if (!job) {
         await sleep(POLL_MS);
