@@ -1,6 +1,7 @@
+import { TOKEN_KEY } from "./auth-constants";
+
 export type ViewerPlan = "free" | "pro" | "team";
 
-const TOKEN_KEY = "image_ops_api_token";
 const PLAN_KEY = "image_ops_subject_plan";
 
 function parseBase64Url(input: string): string | null {

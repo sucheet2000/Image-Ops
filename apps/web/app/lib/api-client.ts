@@ -1,8 +1,6 @@
-const TOKEN_KEY = "image_ops_api_token";
+import { getApiBaseUrl, TOKEN_KEY } from "./auth-constants";
 
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
-}
+export { getApiBaseUrl } from "./auth-constants";
 
 export function getApiToken(): string | null {
   if (typeof window === "undefined") {
@@ -31,23 +29,28 @@ export function clearApiToken(): void {
 }
 
 async function refreshApiToken(): Promise<string | null> {
-  const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
-    method: "POST",
-    credentials: "include"
-  });
-  if (!response.ok) {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include"
+    });
+    if (!response.ok) {
+      clearApiToken();
+      return null;
+    }
+
+    const payload = await response.json() as { token?: string };
+    if (!payload.token) {
+      clearApiToken();
+      return null;
+    }
+
+    setApiToken(payload.token);
+    return payload.token;
+  } catch {
     clearApiToken();
     return null;
   }
-
-  const payload = await response.json() as { token?: string };
-  if (!payload.token) {
-    clearApiToken();
-    return null;
-  }
-
-  setApiToken(payload.token);
-  return payload.token;
 }
 
 export async function apiFetch(input: string, init: RequestInit = {}, retryOnUnauthorized = true): Promise<Response> {

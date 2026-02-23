@@ -35,13 +35,12 @@ function sameSiteCookieValue(value: ApiConfig["authRefreshCookieSameSite"]): "La
   return "Lax";
 }
 
-function serializeRefreshCookie(config: ApiConfig, value: string, maxAgeSeconds: number): string {
+function buildRefreshCookieParts(config: ApiConfig, rawValue: string): string[] {
   const parts = [
-    `${config.authRefreshCookieName}=${encodeURIComponent(value)}`,
+    `${config.authRefreshCookieName}=${rawValue}`,
     `Path=${config.authRefreshCookiePath}`,
     "HttpOnly",
-    `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`,
-    `Max-Age=${maxAgeSeconds}`
+    `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`
   ];
 
   if (config.authRefreshCookieSecure) {
@@ -50,30 +49,27 @@ function serializeRefreshCookie(config: ApiConfig, value: string, maxAgeSeconds:
   if (config.authRefreshCookieDomain) {
     parts.push(`Domain=${config.authRefreshCookieDomain}`);
   }
+
+  return parts;
+}
+
+function serializeRefreshCookie(config: ApiConfig, value: string, maxAgeSeconds: number): string {
+  const parts = buildRefreshCookieParts(config, encodeURIComponent(value));
+  parts.push(`Max-Age=${maxAgeSeconds}`);
 
   return parts.join("; ");
 }
 
 function clearRefreshCookie(config: ApiConfig): string {
-  const parts = [
-    `${config.authRefreshCookieName}=`,
-    `Path=${config.authRefreshCookiePath}`,
-    "HttpOnly",
-    `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`,
-    "Max-Age=0",
-    "Expires=Thu, 01 Jan 1970 00:00:00 GMT"
-  ];
-
-  if (config.authRefreshCookieSecure) {
-    parts.push("Secure");
-  }
-  if (config.authRefreshCookieDomain) {
-    parts.push(`Domain=${config.authRefreshCookieDomain}`);
-  }
+  const parts = buildRefreshCookieParts(config, "");
+  parts.push("Max-Age=0");
+  parts.push("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
 
   return parts.join("; ");
 }
 
+// Keep explicit cookie parsing here to avoid an extra runtime dependency for a single refresh-token cookie read path.
+// Parsing joins segments after the first "=" so signed/base64 values remain intact.
 function parseCookieHeader(request: Request): Map<string, string> {
   const raw = request.header("cookie") || "";
   const map = new Map<string, string>();
@@ -228,12 +224,23 @@ export function registerAuthRoutes(
     }
 
     if (!verifyRefreshTokenSecret(parsed.secret, existingSession.secretHash)) {
+      try {
+        await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
+      } catch {
+        // Best-effort revocation; still return unauthorized.
+      }
       sendRefreshUnauthorized(res, deps.config);
       return;
     }
 
-    const profile = await deps.jobRepo.getSubjectProfile(existingSession.subjectId);
-    const plan = profile?.plan || existingSession.plan;
+    const storedProfile = await deps.jobRepo.getSubjectProfile(existingSession.subjectId);
+    const plan = storedProfile?.plan || existingSession.plan;
+    const profile: SubjectProfile = storedProfile || {
+      subjectId: existingSession.subjectId,
+      plan,
+      createdAt: existingSession.createdAt,
+      updatedAt: nowIso
+    };
 
     await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
 
@@ -263,10 +270,8 @@ export function registerAuthRoutes(
       token,
       tokenType: "Bearer",
       expiresIn: deps.config.authTokenTtlSeconds,
-      profile: {
-        subjectId: existingSession.subjectId,
-        plan
-      }
+      plan: profile.plan,
+      profile
     });
   }));
 

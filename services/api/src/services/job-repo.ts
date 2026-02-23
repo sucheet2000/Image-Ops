@@ -124,6 +124,14 @@ function authRefreshSessionKey(id: string): string {
   return `${AUTH_REFRESH_SESSION_PREFIX}${id}`;
 }
 
+function timestampMsOrNow(input: string): number {
+  const parsed = Date.parse(input);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return Date.now();
+}
+
 export class RedisJobRepository implements JobRepository {
   private readonly redis: IORedis;
   private closePromise: Promise<void> | null = null;
@@ -231,7 +239,7 @@ export class RedisJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000);
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - timestampMsOrNow(revokedAt)) / 1000);
     if (ttlSeconds <= 0) {
       await this.redis.del(authRefreshSessionKey(id));
       return;
@@ -330,7 +338,7 @@ export class RedisJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - timestampMsOrNow(updatedAt)) / 1000));
     await this.redis.set(
       billingCheckoutKey(id),
       JSON.stringify({
@@ -623,7 +631,7 @@ export class PostgresJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000);
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - timestampMsOrNow(revokedAt)) / 1000);
     if (ttlSeconds <= 0) {
       await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [authRefreshSessionKey(id)]);
       return;
@@ -723,7 +731,7 @@ export class PostgresJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - timestampMsOrNow(updatedAt)) / 1000));
     await this.setStoredValue(
       billingCheckoutKey(id),
       {

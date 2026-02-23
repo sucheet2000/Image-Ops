@@ -2,36 +2,25 @@ import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryAuthService } from "../src/services/auth";
 import { createApiApp } from "../src/server";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
+import { startExpressTestServer } from "./helpers/server";
 
 function cookieValue(setCookieHeader: string | null, cookieName: string): string | null {
   if (!setCookieHeader) {
     return null;
   }
   const firstPart = setCookieHeader.split(";")[0] || "";
-  const [name, value] = firstPart.split("=");
+  const separatorIndex = firstPart.indexOf("=");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const name = firstPart.slice(0, separatorIndex);
+  const value = firstPart.slice(separatorIndex + 1);
   if (!name || name !== cookieName || !value) {
     return null;
   }
-  return decodeURIComponent(value);
-}
 
-async function startServer(app: ReturnType<typeof createApiApp>): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const server = app.listen(0);
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    close: async () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      })
-  };
+  return decodeURIComponent(value);
 }
 
 const closers: Array<() => Promise<void>> = [];
@@ -53,7 +42,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startExpressTestServer(app);
     closers.push(server.close);
 
     const response = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -77,7 +66,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startExpressTestServer(app);
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -121,7 +110,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startExpressTestServer(app);
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -160,7 +149,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startExpressTestServer(app);
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {

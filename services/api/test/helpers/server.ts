@@ -1,4 +1,5 @@
 import type { AddressInfo } from "node:net";
+import type { Express } from "express";
 import type { ApiConfig } from "../../src/config";
 import { createApiApp } from "../../src/server";
 import type { InMemoryJobRepository } from "../../src/services/job-repo";
@@ -11,6 +12,28 @@ export type TestServices = {
   queue: InMemoryJobQueueService;
   jobRepo: InMemoryJobRepository;
 };
+
+export async function startExpressTestServer(app: Express): Promise<{
+  baseUrl: string;
+  close: () => Promise<void>;
+}> {
+  const server = app.listen(0);
+  const address = server.address() as AddressInfo;
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: async () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      })
+  };
+}
 
 /**
  * Starts the API application on an ephemeral port for use in tests.
@@ -30,20 +53,5 @@ export async function startApiTestServer(input: TestServices & { now?: () => Dat
     now: input.now || (() => new Date("2026-02-23T00:00:00.000Z"))
   });
 
-  const server = app.listen(0);
-  const address = server.address() as AddressInfo;
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      })
-  };
+  return startExpressTestServer(app);
 }
