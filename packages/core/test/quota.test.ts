@@ -6,7 +6,8 @@ import {
   FREE_PLAN_WINDOW_HOURS,
   isAdvancedTool,
   normalizeObjectKeys,
-  shouldApplyWatermark
+  shouldApplyWatermark,
+  toStructuredLog
 } from "../src";
 
 describe("quota", () => {
@@ -64,5 +65,41 @@ describe("cleanup helpers", () => {
   it("normalizes object key arrays", () => {
     expect(normalizeObjectKeys(["a", " ", "a", "b"])).toEqual(["a", "b"]);
     expect(normalizeObjectKeys(null)).toEqual([]);
+  });
+});
+
+describe("structured log privacy guards", () => {
+  it("redacts secret-like keys and signed-url query values", () => {
+    const raw = toStructuredLog("test.event", {
+      token: "abc123",
+      authToken: "secret-token",
+      signedUrl: "https://example.test/file?X-Amz-Signature=abcdef&token=xyz",
+      uploadUrl: "https://example.test/file?X-Amz-Signature=abcdef&token=xyz",
+      nested: {
+        apiKey: "k-12345",
+        authorization: "Bearer secret"
+      }
+    });
+
+    const payload = JSON.parse(raw).payload as Record<string, unknown>;
+    expect(payload.token).toBe("[REDACTED]");
+    expect(payload.authToken).toBe("[REDACTED]");
+    expect(payload.signedUrl).toBe("[REDACTED]");
+    expect(payload.uploadUrl).toBe("https://example.test/file?X-Amz-Signature=[REDACTED]&token=[REDACTED]");
+    expect(payload.nested).toEqual({
+      apiKey: "[REDACTED]",
+      authorization: "[REDACTED]"
+    });
+  });
+
+  it("replaces binary payloads with redacted markers", () => {
+    const raw = toStructuredLog("test.binary", {
+      bytes: Buffer.from([1, 2, 3, 4]),
+      nested: { view: new Uint8Array([5, 6, 7]) }
+    });
+
+    const payload = JSON.parse(raw).payload as Record<string, unknown>;
+    expect(payload.bytes).toBe("[BINARY_REDACTED length=4]");
+    expect(payload.nested).toEqual({ view: "[BINARY_REDACTED length=3]" });
   });
 });

@@ -459,5 +459,50 @@ export function classifyProcessingError(error: unknown): { code: string; message
  * @returns A JSON string containing `ts` (ISO timestamp), `event`, and `payload`
  */
 export function toStructuredLog(event: string, payload: Record<string, unknown>): string {
-  return JSON.stringify({ ts: new Date().toISOString(), event, payload });
+  return JSON.stringify({
+    ts: new Date().toISOString(),
+    event,
+    payload: sanitizeLogValue(payload)
+  });
+}
+
+const REDACTED = "[REDACTED]";
+const SECRET_KEY_PATTERN = /(authorization|token|api[-_]?key|secret|signature|signed[-_]?url)/i;
+const URL_SECRET_PATTERN = /((?:token|signature|x-amz-signature|x-amz-credential|x-amz-security-token)=)([^&]+)/gi;
+
+function sanitizeLogValue(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return `[BINARY_REDACTED length=${value.length}]`;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return `[BINARY_REDACTED length=${value.byteLength}]`;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeLogValue(item));
+  }
+
+  if (typeof value === "string") {
+    return value.replace(URL_SECRET_PATTERN, (_match, prefix: string) => `${prefix}${REDACTED}`);
+  }
+
+  if (typeof value !== "object") {
+    return value;
+  }
+
+  const input = value as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  for (const [key, nestedValue] of Object.entries(input)) {
+    if (SECRET_KEY_PATTERN.test(key)) {
+      output[key] = REDACTED;
+      continue;
+    }
+    output[key] = sanitizeLogValue(nestedValue);
+  }
+  return output;
 }
