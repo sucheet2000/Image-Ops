@@ -53,6 +53,10 @@ type CreateApiAppOptions = {
   state?: ApiState;
 };
 
+function workerToken(): string {
+  return process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
+}
+
 function createInitialState(): ApiState {
   return {
     windows: new Map<string, QuotaWindow>(),
@@ -96,6 +100,16 @@ function pruneExpired(state: ApiState, now: Date): number {
 
 function currentQuotaWindow(state: ApiState, subjectId: string, now: Date): QuotaWindow {
   return state.windows.get(subjectId) || { windowStartAt: now.toISOString(), usedCount: 0 };
+}
+
+function requireWorkerAuth(req: express.Request, res: express.Response): boolean {
+  const token = req.header("x-worker-token") || "";
+  if (!token || token !== workerToken()) {
+    res.status(401).json({ error: "UNAUTHORIZED_WORKER", message: "Worker token is missing or invalid." });
+    return false;
+  }
+
+  return true;
 }
 
 export function createApiApp(options: CreateApiAppOptions = {}) {
@@ -343,6 +357,106 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
       createdAt: job.createdAt,
       updatedAt: job.updatedAt,
       queuePosition
+    });
+  });
+
+  app.post("/api/internal/queue/claim", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const currentNow = now();
+    pruneExpired(state, currentNow);
+
+    while (state.queue.length > 0) {
+      const item = state.queue.shift();
+      if (!item) {
+        break;
+      }
+
+      const job = state.jobs.get(item.jobId);
+      if (!job || job.status !== "queued") {
+        continue;
+      }
+
+      job.status = "running";
+      job.updatedAt = currentNow.toISOString();
+      state.jobs.set(job.id, job);
+
+      res.json({
+        claimed: true,
+        job: {
+          id: job.id,
+          subjectId: job.subjectId,
+          tool: job.tool,
+          inputObjectKey: job.inputObjectKey,
+          options: job.options,
+          status: job.status,
+          createdAt: job.createdAt,
+          updatedAt: job.updatedAt
+        }
+      });
+      return;
+    }
+
+    res.json({ claimed: false });
+  });
+
+  app.post("/api/internal/jobs/:id/complete", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const id = String(req.params.id || "").trim();
+    const job = state.jobs.get(id);
+    if (!job) {
+      res.status(404).json({ error: "JOB_NOT_FOUND", message: "Job does not exist." });
+      return;
+    }
+
+    if (job.status !== "running") {
+      res.status(409).json({ error: "JOB_NOT_RUNNING", message: "Only running jobs can be completed." });
+      return;
+    }
+
+    const success = Boolean(req.body.success);
+    const outputObjectKey = String(req.body.outputObjectKey || "").trim();
+    const errorCode = String(req.body.errorCode || "").trim();
+    const currentNow = now();
+
+    if (success) {
+      if (!outputObjectKey) {
+        res.status(400).json({
+          error: "OUTPUT_KEY_REQUIRED",
+          message: "outputObjectKey is required when marking job success."
+        });
+        return;
+      }
+      job.status = "done";
+      job.outputObjectKey = outputObjectKey;
+      job.errorCode = undefined;
+    } else {
+      if (!errorCode) {
+        res.status(400).json({
+          error: "ERROR_CODE_REQUIRED",
+          message: "errorCode is required when marking job failure."
+        });
+        return;
+      }
+      job.status = "failed";
+      job.outputObjectKey = undefined;
+      job.errorCode = errorCode;
+    }
+
+    job.updatedAt = currentNow.toISOString();
+    state.jobs.set(job.id, job);
+
+    res.json({
+      id: job.id,
+      status: job.status,
+      outputObjectKey: job.outputObjectKey || null,
+      errorCode: job.errorCode || null,
+      updatedAt: job.updatedAt
     });
   });
 

@@ -1,14 +1,105 @@
-/*
-Worker placeholder.
-Production implementation will:
-1) Pull jobs from queue.
-2) Transform image by tool settings.
-3) Apply watermark for eligible free advanced outputs.
-4) Upload output to temporary object storage.
-5) Emit deletion schedule and audit events.
-*/
+type ClaimedJob = {
+  id: string;
+  subjectId: string;
+  tool: string;
+  inputObjectKey: string;
+  options: Record<string, unknown>;
+  status: "running";
+  createdAt: string;
+  updatedAt: string;
+};
 
-setInterval(() => {
+type ClaimResponse = {
+  claimed: boolean;
+  job?: ClaimedJob;
+};
+
+const API_BASE = process.env.WORKER_API_BASE_URL || "http://localhost:4000";
+const POLL_MS = Number(process.env.WORKER_POLL_MS || 2000);
+const TOKEN = process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function outputKeyFor(job: ClaimedJob): string {
+  const extension = job.inputObjectKey.split(".").pop() || "jpg";
+  return `tmp/${job.subjectId}/processed/${job.id}.${extension}`;
+}
+
+async function claimJob(): Promise<ClaimedJob | null> {
+  const response = await fetch(`${API_BASE}/api/internal/queue/claim`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-worker-token": TOKEN
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Claim failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as ClaimResponse;
+  if (!payload.claimed || !payload.job) {
+    return null;
+  }
+
+  return payload.job;
+}
+
+async function markComplete(jobId: string, success: boolean, outputObjectKey?: string, errorCode?: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/internal/jobs/${encodeURIComponent(jobId)}/complete`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-worker-token": TOKEN
+    },
+    body: JSON.stringify({ success, outputObjectKey, errorCode })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Complete failed with status ${response.status}: ${body}`);
+  }
+}
+
+async function processClaimedJob(job: ClaimedJob): Promise<void> {
+  // Processing stub: simulate deterministic work and fail only when requested.
+  await sleep(250);
+  const shouldFail = Boolean(job.options?.forceFail);
+
+  if (shouldFail) {
+    await markComplete(job.id, false, undefined, "SIMULATED_WORKER_FAILURE");
+    return;
+  }
+
+  await markComplete(job.id, true, outputKeyFor(job));
+}
+
+async function pollLoop(): Promise<void> {
   // eslint-disable-next-line no-console
-  console.log("Worker heartbeat", new Date().toISOString());
-}, 30000);
+  console.log(`Worker started. Polling ${API_BASE} every ${POLL_MS}ms`);
+
+  for (;;) {
+    try {
+      const job = await claimJob();
+      if (!job) {
+        await sleep(POLL_MS);
+        continue;
+      }
+
+      // eslint-disable-next-line no-console
+      console.log(`Claimed job ${job.id} (${job.tool})`);
+      await processClaimedJob(job);
+      // eslint-disable-next-line no-console
+      console.log(`Completed job ${job.id}`);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("Worker loop error", error);
+      await sleep(POLL_MS);
+    }
+  }
+}
+
+void pollLoop();
