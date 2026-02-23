@@ -126,4 +126,62 @@ describe("billing routes", () => {
     const payload = await response.json();
     expect(payload.error).toBe("INVALID_BILLING_SIGNATURE");
   });
+
+  it("treats repeated provider events as idempotent replays", async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_4",
+        plan: "team",
+        successUrl: "https://example.com/success",
+        cancelUrl: "https://example.com/cancel"
+      })
+    });
+    expect(checkoutResponse.status).toBe(201);
+    const checkoutPayload = await checkoutResponse.json();
+
+    const webhookPayload = {
+      eventId: "evt_replay_1",
+      checkoutSessionId: checkoutPayload.checkoutSessionId,
+      subjectId: "seller_4",
+      plan: "team",
+      status: "paid"
+    };
+
+    const billing = new HmacBillingService({
+      publicBaseUrl: config.billingPublicBaseUrl,
+      providerSecret: config.billingProviderSecret,
+      webhookSecret: config.billingWebhookSecret
+    });
+
+    const signature = billing.signWebhookPayload(JSON.stringify(webhookPayload));
+
+    const first = await fetch(`${server.baseUrl}/api/webhooks/billing`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-billing-signature": signature
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+    expect(first.status).toBe(200);
+    expect((await first.json()).replay).toBe(false);
+
+    const second = await fetch(`${server.baseUrl}/api/webhooks/billing`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-billing-signature": signature
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+    expect(second.status).toBe(200);
+    expect((await second.json()).replay).toBe(true);
+  });
 });

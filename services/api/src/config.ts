@@ -41,6 +41,7 @@ const envSchema = z.object({
   BILLING_WEBHOOK_SECRET: z.string().min(1, "BILLING_WEBHOOK_SECRET is required").default("dev-webhook-secret"),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().positive().default(300),
   STRIPE_PRICE_ID_PRO: z.string().default("price_pro"),
   STRIPE_PRICE_ID_TEAM: z.string().default("price_team"),
   S3_REGION: z.string().default("us-east-1"),
@@ -116,6 +117,7 @@ export type ApiConfig = {
   billingWebhookSecret: string;
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
+  stripeWebhookToleranceSeconds: number;
   stripePriceIdPro: string;
   stripePriceIdTeam: string;
   s3Region: string;
@@ -164,6 +166,7 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     billingWebhookSecret: parsed.BILLING_WEBHOOK_SECRET,
     stripeSecretKey: parsed.STRIPE_SECRET_KEY,
     stripeWebhookSecret: parsed.STRIPE_WEBHOOK_SECRET,
+    stripeWebhookToleranceSeconds: parsed.STRIPE_WEBHOOK_TOLERANCE_SECONDS,
     stripePriceIdPro: parsed.STRIPE_PRICE_ID_PRO,
     stripePriceIdTeam: parsed.STRIPE_PRICE_ID_TEAM,
     s3Region: parsed.S3_REGION,

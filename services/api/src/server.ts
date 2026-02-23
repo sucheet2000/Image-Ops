@@ -50,6 +50,7 @@ function createBillingService(config: ApiConfig): BillingService {
     return new StripeBillingService({
       secretKey: config.stripeSecretKey || "",
       webhookSecret: config.stripeWebhookSecret || "",
+      webhookToleranceSeconds: config.stripeWebhookToleranceSeconds,
       priceIdByPlan: {
         pro: config.stripePriceIdPro,
         team: config.stripePriceIdTeam

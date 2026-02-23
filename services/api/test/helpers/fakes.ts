@@ -42,6 +42,7 @@ export function createTestConfig(): ApiConfig {
     billingWebhookSecret: "test-webhook-secret",
     stripeSecretKey: "sk_test_example",
     stripeWebhookSecret: "whsec_example",
+    stripeWebhookToleranceSeconds: 300,
     stripePriceIdPro: "price_pro",
     stripePriceIdTeam: "price_team",
     s3Region: "us-east-1",
