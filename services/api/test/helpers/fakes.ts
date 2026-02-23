@@ -16,6 +16,10 @@ export function createTestConfig(): ApiConfig {
   return {
     port: 4000,
     webOrigin: "http://localhost:3000",
+    apiAuthRequired: false,
+    googleClientId: "test-google-client",
+    authTokenSecret: "test-auth-token-secret",
+    authTokenTtlSeconds: 3600,
     maxUploadBytes: 10 * 1024 * 1024,
     signedUploadTtlSeconds: 300,
     signedDownloadTtlSeconds: 300,

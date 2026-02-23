@@ -119,6 +119,25 @@ export type UploadInitResponse = {
   expiresAt: string;
 };
 
+export type UploadCompletionRecord = {
+  objectKey: string;
+  canonicalObjectKey: string;
+  subjectId: string;
+  sha256: string;
+  sizeBytes: number;
+  contentType: string;
+  deduplicated: boolean;
+  createdAt: string;
+};
+
+export type DedupObjectRecord = {
+  sha256: string;
+  objectKey: string;
+  sizeBytes: number;
+  contentType: string;
+  createdAt: string;
+};
+
 export type SubjectProfile = {
   subjectId: string;
   plan: ImagePlan;

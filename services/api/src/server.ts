@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { loadApiConfig, type ApiConfig } from "./config";
+import { requireApiAuth } from "./lib/auth-middleware";
 import { logError, logInfo } from "./lib/log";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerBillingRoutes } from "./routes/billing";
@@ -9,7 +10,8 @@ import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
-import { HmacBillingService, StripeBillingService, type BillingService } from "./services/billing";
+import { HmacBillingService, type BillingService } from "./services/billing";
+import { GoogleTokenAuthService, type AuthService } from "./services/auth";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
 import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
@@ -20,6 +22,7 @@ export type ApiDependencies = {
   queue: JobQueueService;
   jobRepo: JobRepository;
   billing: BillingService;
+  auth: AuthService;
   now: () => Date;
 };
 
@@ -78,7 +81,16 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
     queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
     jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
-    billing: incomingDeps?.billing || createBillingService(config),
+    billing: incomingDeps?.billing || new HmacBillingService({
+      publicBaseUrl: config.billingPublicBaseUrl,
+      providerSecret: config.billingProviderSecret,
+      webhookSecret: config.billingWebhookSecret
+    }),
+    auth: incomingDeps?.auth || new GoogleTokenAuthService({
+      googleClientId: config.googleClientId,
+      authTokenSecret: config.authTokenSecret,
+      authTokenTtlSeconds: config.authTokenTtlSeconds
+    }),
     now: incomingDeps?.now || (() => new Date())
   };
 
@@ -91,8 +103,15 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     res.json({ status: "ok" });
   });
 
+  if (deps.config.apiAuthRequired) {
+    app.use("/api/jobs", requireApiAuth(deps.auth));
+    app.use("/api/cleanup", requireApiAuth(deps.auth));
+    app.use("/api/quota", requireApiAuth(deps.auth));
+    app.use("/api/billing/checkout", requireApiAuth(deps.auth));
+  }
+
   registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
-  registerAuthRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
+  registerAuthRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, auth: deps.auth, now: deps.now });
   registerBillingRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, billing: deps.billing, now: deps.now });
   registerJobsRoutes(app, {
     config: deps.config,

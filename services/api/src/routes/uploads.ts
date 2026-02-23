@@ -1,9 +1,19 @@
-import { inferUploadObjectKeyPrefix, isTool, toSafeSubjectId, type ImageTool } from "@image-ops/core";
+import { createHash } from "node:crypto";
+import { Readable } from "node:stream";
+import {
+  inferUploadObjectKeyPrefix,
+  isTool,
+  toSafeSubjectId,
+  type DedupObjectRecord,
+  type ImageTool,
+  type UploadCompletionRecord
+} from "@image-ops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
+import type { JobRepository } from "../services/job-repo";
 import type { ObjectStorageService } from "../services/storage";
 
 const SUPPORTED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -16,12 +26,12 @@ const uploadInitSchema = z.object({
   size: z.number().int().positive()
 });
 
-/**
- * Selects a default image file extension based on the MIME type string.
- *
- * @param mime - The MIME type to examine (for example `"image/png"` or `"image/jpeg"`).
- * @returns The chosen extension: `"png"` if `mime` contains `"png"`, `"webp"` if it contains `"webp"`, otherwise `"jpg"`.
- */
+const uploadCompleteSchema = z.object({
+  subjectId: z.string().min(1),
+  objectKey: z.string().min(1),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/i).optional()
+});
+
 function mimeToDefaultExtension(mime: string): string {
   if (mime.includes("png")) {
     return "png";
@@ -32,13 +42,6 @@ function mimeToDefaultExtension(mime: string): string {
   return "jpg";
 }
 
-/**
- * Determine the preferred image file extension using the client's filename when valid, otherwise fall back to the MIME type.
- *
- * @param filename - Original filename provided by the client; may include an extension.
- * @param mime - The image MIME type (e.g., "image/png", "image/jpeg").
- * @returns The selected file extension: `"jpg"`, `"png"`, or `"webp"` (maps `"jpeg"` to `"jpg"`).
- */
 function selectExtension(filename: string, mime: string): string {
   const normalized = filename.trim();
   if (normalized.includes(".")) {
@@ -51,18 +54,32 @@ function selectExtension(filename: string, mime: string): string {
   return mimeToDefaultExtension(mime);
 }
 
-/**
- * Registers the POST /api/uploads/init route that initializes image uploads by validating input, generating an object key, and returning a presigned upload URL.
- *
- * Validates request body (subjectId, tool, filename, mime, size), enforces supported image MIME types and maximum upload size, verifies the tool value, computes a storage object key (using a subject/tool prefix and ULID), obtains a presigned upload URL from the storage dependency, and responds with `objectKey`, `uploadUrl`, `expiresAt`, and storage flags. Responds with appropriate HTTP status codes for invalid requests (400), unsupported MIME (400), file too large (413), and successful creation (201).
- *
- * @param router - Express Router to attach the route to
- * @param deps - Route dependencies:
- *  - config: API configuration (includes `maxUploadBytes` and `signedUploadTtlSeconds`)
- *  - storage: ObjectStorageService used to create presigned upload URLs
- *  - now: function that returns the current `Date` for timestamping and prefix computation
- */
-export function registerUploadsRoutes(router: Router, deps: { config: ApiConfig; storage: ObjectStorageService; now: () => Date }): void {
+async function sha256HexStreaming(bytes: Buffer): Promise<string> {
+  const hasher = createHash("sha256");
+  for await (const chunk of Readable.from(bytes)) {
+    hasher.update(chunk as Buffer);
+  }
+  return hasher.digest("hex");
+}
+
+function buffersEqualByteByByte(left: Buffer, right: Buffer): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function registerUploadsRoutes(
+  router: Router,
+  deps: { config: ApiConfig; storage: ObjectStorageService; jobRepo: JobRepository; now: () => Date }
+): void {
   router.post("/api/uploads/init", asyncHandler(async (req, res) => {
     const parsed = uploadInitSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -109,6 +126,100 @@ export function registerUploadsRoutes(router: Router, deps: { config: ApiConfig;
       expiresAt,
       tempStorageOnly: true,
       imageStoredInDatabase: false
+    });
+  }));
+
+  router.post("/api/uploads/complete", asyncHandler(async (req, res) => {
+    const parsed = uploadCompleteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "INVALID_UPLOAD_COMPLETE_REQUEST", details: parsed.error.flatten() });
+      return;
+    }
+
+    const payload = parsed.data;
+    const safeSubjectId = toSafeSubjectId(payload.subjectId);
+    if (!payload.objectKey.startsWith(`tmp/${safeSubjectId}/input/`)) {
+      res.status(400).json({ error: "INVALID_OBJECT_KEY", message: "Object key does not match subject upload prefix." });
+      return;
+    }
+
+    const head = await deps.storage.headObject(payload.objectKey);
+    if (!head.exists) {
+      res.status(404).json({ error: "INPUT_OBJECT_NOT_FOUND", message: "Input object key is missing or expired." });
+      return;
+    }
+
+    const object = await deps.storage.getObjectBuffer(payload.objectKey);
+    if (object.bytes.length > deps.config.maxUploadBytes) {
+      res.status(413).json({
+        error: "FILE_TOO_LARGE",
+        message: `Maximum upload size is ${deps.config.maxUploadBytes} bytes.`
+      });
+      return;
+    }
+
+    const sha256 = await sha256HexStreaming(object.bytes);
+    if (payload.sha256 && payload.sha256.toLowerCase() !== sha256) {
+      res.status(400).json({ error: "SHA256_MISMATCH", message: "Provided sha256 does not match uploaded bytes." });
+      return;
+    }
+
+    const candidates = await deps.jobRepo.listDedupByHash(sha256);
+
+    let canonicalObjectKey = payload.objectKey;
+    let deduplicated = false;
+
+    for (const candidate of candidates) {
+      if (candidate.objectKey === payload.objectKey || candidate.sizeBytes !== object.bytes.length) {
+        continue;
+      }
+
+      try {
+        const existing = await deps.storage.getObjectBuffer(candidate.objectKey);
+        if (buffersEqualByteByByte(existing.bytes, object.bytes)) {
+          canonicalObjectKey = candidate.objectKey;
+          deduplicated = true;
+          break;
+        }
+      } catch {
+        // Ignore missing/expired candidate objects; dedup index can contain stale keys.
+      }
+    }
+
+    const nowIso = deps.now().toISOString();
+
+    const completion: UploadCompletionRecord = {
+      objectKey: payload.objectKey,
+      canonicalObjectKey,
+      subjectId: safeSubjectId,
+      sha256,
+      sizeBytes: object.bytes.length,
+      contentType: object.contentType,
+      deduplicated,
+      createdAt: nowIso
+    };
+
+    const dedupRecord: DedupObjectRecord = {
+      sha256,
+      objectKey: canonicalObjectKey,
+      sizeBytes: object.bytes.length,
+      contentType: object.contentType,
+      createdAt: nowIso
+    };
+
+    await deps.jobRepo.finalizeUploadCompletion({ completion, dedupRecord });
+
+    if (deduplicated && canonicalObjectKey !== payload.objectKey) {
+      await deps.storage.deleteObjects([payload.objectKey]);
+    }
+
+    res.status(200).json({
+      objectKey: payload.objectKey,
+      canonicalObjectKey,
+      sha256,
+      sizeBytes: object.bytes.length,
+      contentType: object.contentType,
+      deduplicated
     });
   }));
 }
