@@ -55,6 +55,16 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
     });
     expect([200, 204]).toContain(uploadResponse.status);
 
+    const uploadCompleteResponse = await fetch(`${apiBaseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId,
+        objectKey: uploadInit.objectKey
+      })
+    });
+    expect(uploadCompleteResponse.status).toBe(200);
+
     const createJobResponse = await fetch(`${apiBaseUrl}/api/jobs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
