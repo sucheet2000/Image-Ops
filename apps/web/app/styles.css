@@ -43,3 +43,43 @@ h1 {
 .trust {
   border-left: 6px solid #2563eb;
 }
+
+.consent-banner {
+  border-left: 6px solid #f59e0b;
+}
+
+.consent-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+button {
+  border: 1px solid #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  color: #1d4ed8;
+}
+
+.ad-block h3 {
+  margin-top: 0;
+}
+
+.ad-slot {
+  margin-top: 10px;
+  border: 1px dashed #9ca3af;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.ad-block--disabled {
+  opacity: 0.8;
+}
