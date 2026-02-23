@@ -1,0 +1,93 @@
+openapi: 3.1.0
+info:
+  title: Image Ops MCP Reduced Surface
+  version: 1.0.0
+  description: Reduced API contract exposed to MCP search and execute for V1.
+servers:
+  - url: https://staging-api.image-ops.example
+paths:
+  /api/uploads/init:
+    post:
+      operationId: uploads_init
+      summary: Initialize temporary upload target
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, mime, size, tool]
+              properties:
+                filename: { type: string }
+                mime: { type: string }
+                size: { type: integer, minimum: 1 }
+                tool: { type: string }
+  /api/jobs:
+    post:
+      operationId: jobs_create
+      summary: Create processing job
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tool, inputObjectKey]
+              properties:
+                tool: { type: string }
+                inputObjectKey: { type: string }
+                options: { type: object, additionalProperties: true }
+  /api/jobs/{id}:
+    get:
+      operationId: jobs_get
+      summary: Get processing job status
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+  /api/cleanup:
+    post:
+      operationId: cleanup_create
+      summary: Trigger temporary object cleanup
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: header
+          name: idempotency-key
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [objectKeys]
+              properties:
+                objectKeys:
+                  type: array
+                  items: { type: string }
+  /api/quota:
+    get:
+      operationId: quota_get
+      summary: Get quota status for subject
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: subjectId
+          required: true
+          schema: { type: string }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

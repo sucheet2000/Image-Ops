@@ -27,6 +27,23 @@ app.get("/api/quota/:subjectId", (req, res) => {
   });
 });
 
+app.get("/api/quota", (req, res) => {
+  const subjectId = String(req.query.subjectId || "");
+  if (!subjectId) {
+    res.status(400).json({ error: "SUBJECT_ID_REQUIRED", message: "subjectId query param is required." });
+    return;
+  }
+
+  const window = windows.get(subjectId) || { windowStartAt: new Date().toISOString(), usedCount: 0 };
+  res.json({
+    subjectId,
+    limit: FREE_PLAN_LIMIT,
+    windowHours: FREE_PLAN_WINDOW_HOURS,
+    usedCount: window.usedCount,
+    windowStartAt: window.windowStartAt
+  });
+});
+
 app.post("/api/quota/check", (req, res) => {
   const subjectId = String(req.body.subjectId || "anonymous");
   const requestedImages = Number(req.body.requestedImages || 1);
