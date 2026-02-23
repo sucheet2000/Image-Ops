@@ -8,6 +8,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiConfig } from "../config";
 
+export const TMP_PREFIX = "tmp/";
+
 export type StorageHeadResult = {
   exists: boolean;
   contentType?: string;
@@ -27,6 +29,7 @@ export interface ObjectStorageService {
     maxSizeBytes: number;
   }): Promise<string>;
   createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string>;
+  getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
   deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult>;
   close(): Promise<void>;
@@ -35,7 +38,6 @@ export interface ObjectStorageService {
 export class S3ObjectStorageService implements ObjectStorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
-  private readonly allowedPrefix = "tmp/";
 
   constructor(config: ApiConfig) {
     this.bucket = config.s3Bucket;
@@ -56,10 +58,13 @@ export class S3ObjectStorageService implements ObjectStorageService {
     expiresInSeconds: number;
     maxSizeBytes: number;
   }): Promise<string> {
+    // Presigned PUT URLs cannot enforce content-length-range; validate size server-side during upload completion/job creation.
+    void input.maxSizeBytes;
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.objectKey,
-      ContentType: input.contentType,
+      ContentType: input.contentType
     });
 
     return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
@@ -72,6 +77,24 @@ export class S3ObjectStorageService implements ObjectStorageService {
     });
 
     return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
+  }
+
+  async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
+    const response = await this.client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey
+    }));
+
+    const body = response.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
+    if (!body?.transformToByteArray) {
+      throw new Error("S3 getObject response body is missing bytes.");
+    }
+
+    const bytes = Buffer.from(await body.transformToByteArray());
+    return {
+      bytes,
+      contentType: String(response.ContentType || "application/octet-stream")
+    };
   }
 
   async headObject(objectKey: string): Promise<StorageHeadResult> {
@@ -90,10 +113,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       };
     } catch (error) {
       const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
-      if (
-        (error instanceof Error && error.name === "NotFound") ||
-        statusCode === 404
-      ) {
+      if ((error instanceof Error && error.name === "NotFound") || statusCode === 404) {
         return { exists: false };
       }
       throw error;
@@ -105,7 +125,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       return { deleted: [], notFound: [] };
     }
 
-    const invalid = objectKeys.filter((key) => !key.startsWith(this.allowedPrefix));
+    const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
     if (invalid.length > 0) {
       throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
     }
@@ -134,7 +154,6 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
 export class InMemoryObjectStorageService implements ObjectStorageService {
   private readonly objects = new Map<string, { contentType: string; bytes: Buffer }>();
-  private readonly allowedPrefix = "tmp/";
 
   async createPresignedUploadUrl(input: {
     objectKey: string;
@@ -147,6 +166,18 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
     return `https://memory.storage/download/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}`;
+  }
+
+  async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
+    const object = this.objects.get(objectKey);
+    if (!object) {
+      throw new Error(`Object not found: ${objectKey}`);
+    }
+
+    return {
+      bytes: Buffer.from(object.bytes),
+      contentType: object.contentType
+    };
   }
 
   async headObject(objectKey: string): Promise<StorageHeadResult> {
@@ -163,13 +194,15 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
   }
 
   async deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult> {
+    const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
+    if (invalid.length > 0) {
+      throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+    }
+
     const deleted: string[] = [];
     const notFound: string[] = [];
 
     for (const objectKey of objectKeys) {
-      if (!objectKey.startsWith(this.allowedPrefix)) {
-        throw new Error(`Invalid object key prefix for deletion: ${objectKey}`);
-      }
       if (this.objects.delete(objectKey)) {
         deleted.push(objectKey);
       } else {

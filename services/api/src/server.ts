@@ -75,7 +75,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     res.json({ status: "ok" });
   });
 
-  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, jobRepo: deps.jobRepo, now: deps.now });
   registerAuthRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
   registerBillingRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, billing: deps.billing, now: deps.now });
   registerJobsRoutes(app, {
