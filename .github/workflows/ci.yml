@@ -15,3 +15,67 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run test
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Start integration dependencies
+        run: docker compose -f infra/docker-compose.integration.yml up -d redis minio minio-setup
+      - name: Build API and worker
+        run: |
+          npm run build -w services/api
+          npm run build -w services/worker
+      - name: Start API and worker
+        env:
+          API_PORT: "4000"
+          WEB_ORIGIN: "http://127.0.0.1:3000"
+          REDIS_URL: "redis://127.0.0.1:6379"
+          JOB_QUEUE_NAME: "image-ops-jobs"
+          S3_REGION: "us-east-1"
+          S3_BUCKET: "image-ops-temp"
+          S3_ENDPOINT: "http://127.0.0.1:9000"
+          S3_ACCESS_KEY: "minioadmin"
+          S3_SECRET_KEY: "minioadmin"
+          S3_FORCE_PATH_STYLE: "true"
+          BG_REMOVE_API_URL: "http://127.0.0.1:9999/mock-unused"
+        run: |
+          nohup npm run start -w services/api > /tmp/api.log 2>&1 &
+          echo $! > /tmp/api.pid
+          nohup npm run start -w services/worker > /tmp/worker.log 2>&1 &
+          echo $! > /tmp/worker.pid
+      - name: Wait for API health
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4000/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API did not become healthy in time"
+          exit 1
+      - name: Run integration tests
+        env:
+          RUN_INTEGRATION_TESTS: "1"
+          INTEGRATION_API_BASE_URL: "http://127.0.0.1:4000"
+          INTEGRATION_JOB_TIMEOUT_MS: "45000"
+        run: npm run test:integration:api
+      - name: Dump service logs
+        if: always()
+        run: |
+          echo "===== API LOG ====="
+          cat /tmp/api.log || true
+          echo "===== WORKER LOG ====="
+          cat /tmp/worker.log || true
+      - name: Stop integration services
+        if: always()
+        run: |
+          if [ -f /tmp/worker.pid ]; then kill "$(cat /tmp/worker.pid)" || true; fi
+          if [ -f /tmp/api.pid ]; then kill "$(cat /tmp/api.pid)" || true; fi
+          docker compose -f infra/docker-compose.integration.yml down -v
