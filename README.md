@@ -33,5 +33,9 @@ npm run dev
 - Initial scaffold in place
 - Core quota logic + tests implemented in `packages/core`
 
+## Parallel Development (Git Worktrees)
+- Team worktree workflow: `docs/git-worktree-plan.md`
+- Use isolated branches/worktrees for parallel streams (web, api, worker, seo) to reduce merge conflicts and speed delivery.
+
 ## Privacy Promise (UI copy)
 Your images are processed temporarily and automatically deleted. We do not store your uploaded images in our database after you leave the page.
