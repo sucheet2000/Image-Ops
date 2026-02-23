@@ -1,6 +1,6 @@
 import cors from "cors";
 import express from "express";
-import type { NextFunction, Request, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { loadApiConfig, type ApiConfig } from "./config";
 import { logError, logInfo } from "./lib/log";
 import { registerCleanupRoutes } from "./routes/cleanup";
@@ -17,6 +17,11 @@ export type ApiDependencies = {
   queue: JobQueueService;
   jobRepo: JobRepository;
   now: () => Date;
+};
+
+export type ApiRuntime = {
+  app: Express;
+  deps: ApiDependencies;
 };
 
 const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
@@ -43,7 +48,7 @@ export function errorHandler(error: unknown, _req: Request, res: Response, next:
   res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message: INTERNAL_ERROR_MESSAGE });
 }
 
-export function createApiApp(incomingDeps?: Partial<ApiDependencies>) {
+export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRuntime {
   const config = incomingDeps?.config || loadApiConfig();
   const deps: ApiDependencies = {
     config,
@@ -78,14 +83,17 @@ export function createApiApp(incomingDeps?: Partial<ApiDependencies>) {
   registerQuotaRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
 
   app.use(errorHandler);
-  return app;
+  return { app, deps };
+}
+
+export function createApiApp(incomingDeps?: Partial<ApiDependencies>): Express {
+  return createApiRuntime(incomingDeps).app;
 }
 
 if (require.main === module) {
   const config = loadApiConfig();
-  const queue = new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl });
-  const app = createApiApp({ config, queue });
-  const server = app.listen(config.port, () => {
+  const runtime = createApiRuntime({ config });
+  const server = runtime.app.listen(config.port, () => {
     logInfo("api.started", { port: config.port });
   });
 
@@ -97,12 +105,35 @@ if (require.main === module) {
     shuttingDown = true;
     logInfo("api.stopping", { signal });
 
-    await new Promise<void>((resolve) => {
-      server.close(() => resolve());
-    });
+    let exitCode = 0;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    } catch (error) {
+      exitCode = 1;
+      logError("api.shutdown.server_close_failed", { error: formatErrorForLog(error) });
+    }
 
-    await queue.close();
-    process.exit(0);
+    const dependencyResults = await Promise.allSettled([
+      runtime.deps.queue.close(),
+      runtime.deps.jobRepo.close(),
+      runtime.deps.storage.close()
+    ]);
+    for (const result of dependencyResults) {
+      if (result.status === "rejected") {
+        exitCode = 1;
+        logError("api.shutdown.dependency_close_failed", { error: formatErrorForLog(result.reason) });
+      }
+    }
+
+    process.exit(exitCode);
   };
 
   process.on("SIGINT", () => {
