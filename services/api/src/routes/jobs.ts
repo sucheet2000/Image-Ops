@@ -121,6 +121,14 @@ export function registerJobsRoutes(
       return;
     }
 
+    if ((head.contentLength ?? 0) > deps.config.maxUploadBytes) {
+      res.status(413).json({
+        error: "FILE_TOO_LARGE",
+        message: `Maximum upload size is  bytes.`
+      });
+      return;
+    }
+
     const inputMime = (head.contentType || "image/jpeg").toLowerCase();
     const mergedOptions = mergeToolOptions(tool, payload.options as Record<string, unknown> | undefined);
     const outputFormat = toolOutputFormat(tool, inputMime, mergedOptions);
