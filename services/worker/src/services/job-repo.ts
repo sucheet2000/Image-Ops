@@ -4,6 +4,12 @@ import IORedis from "ioredis";
 const JOB_KEY_PREFIX = "imageops:job:";
 const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
 
+/**
+ * Builds the Redis key for a job identifier.
+ *
+ * @param id - The job's identifier
+ * @returns The Redis key used to store the job (prefix + id)
+ */
 function jobKey(id: string): string {
   return `${JOB_KEY_PREFIX}${id}`;
 }

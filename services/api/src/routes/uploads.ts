@@ -16,6 +16,12 @@ const uploadInitSchema = z.object({
   size: z.number().int().positive()
 });
 
+/**
+ * Selects a default image file extension based on the MIME type string.
+ *
+ * @param mime - The MIME type to examine (for example `"image/png"` or `"image/jpeg"`).
+ * @returns The chosen extension: `"png"` if `mime` contains `"png"`, `"webp"` if it contains `"webp"`, otherwise `"jpg"`.
+ */
 function mimeToDefaultExtension(mime: string): string {
   if (mime.includes("png")) {
     return "png";
@@ -26,6 +32,13 @@ function mimeToDefaultExtension(mime: string): string {
   return "jpg";
 }
 
+/**
+ * Determine the preferred image file extension using the client's filename when valid, otherwise fall back to the MIME type.
+ *
+ * @param filename - Original filename provided by the client; may include an extension.
+ * @param mime - The image MIME type (e.g., "image/png", "image/jpeg").
+ * @returns The selected file extension: `"jpg"`, `"png"`, or `"webp"` (maps `"jpeg"` to `"jpg"`).
+ */
 function selectExtension(filename: string, mime: string): string {
   const normalized = filename.trim();
   if (normalized.includes(".")) {
@@ -38,6 +51,17 @@ function selectExtension(filename: string, mime: string): string {
   return mimeToDefaultExtension(mime);
 }
 
+/**
+ * Registers the POST /api/uploads/init route that initializes image uploads by validating input, generating an object key, and returning a presigned upload URL.
+ *
+ * Validates request body (subjectId, tool, filename, mime, size), enforces supported image MIME types and maximum upload size, verifies the tool value, computes a storage object key (using a subject/tool prefix and ULID), obtains a presigned upload URL from the storage dependency, and responds with `objectKey`, `uploadUrl`, `expiresAt`, and storage flags. Responds with appropriate HTTP status codes for invalid requests (400), unsupported MIME (400), file too large (413), and successful creation (201).
+ *
+ * @param router - Express Router to attach the route to
+ * @param deps - Route dependencies:
+ *  - config: API configuration (includes `maxUploadBytes` and `signedUploadTtlSeconds`)
+ *  - storage: ObjectStorageService used to create presigned upload URLs
+ *  - now: function that returns the current `Date` for timestamping and prefix computation
+ */
 export function registerUploadsRoutes(router: Router, deps: { config: ApiConfig; storage: ObjectStorageService; now: () => Date }): void {
   router.post("/api/uploads/init", asyncHandler(async (req, res) => {
     const parsed = uploadInitSchema.safeParse(req.body);

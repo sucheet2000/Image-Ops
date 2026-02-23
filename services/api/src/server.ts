@@ -80,12 +80,28 @@ type CreateApiAppOptions = {
   state?: ApiState;
 };
 
+/**
+ * Express error-handling middleware that logs the provided error and sends a standardized 500 JSON response.
+ *
+ * @param error - The error object or value caught by Express
+ */
 function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
   const message = error instanceof Error ? error.message : "Internal server error";
   logError("api.error", { message });
   res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message });
 }
 
+/**
+ * Create a fresh ApiState with all collections initialized empty.
+ *
+ * @returns An ApiState whose maps and arrays are initialized to empty containers:
+ * - `windows`: empty Map of subject quota windows
+ * - `tempUploads`: empty Map of temporary upload records
+ * - `jobs`: empty Map of job records
+ * - `queue`: empty array for queued items
+ * - `deletionAudit`: empty array for deletion audit entries
+ * - `cleanupIdempotency`: empty Map for cleanup idempotency records
+ */
 function createInitialState(): ApiState {
   return {
     windows: new Map<string, QuotaWindow>(),
@@ -168,6 +184,12 @@ function cleanupSignature(keys: string[]): string {
   return keys.join("|");
 }
 
+/**
+ * Create and configure an Express application exposing the API endpoints and middleware for the service.
+ *
+ * @param options - Optional overrides for bootstrap behavior (e.g., custom in-memory state or a `now()` time provider).
+ * @returns An Express application instance configured with routes, CORS, JSON parsing, and the service's API endpoints.
+ */
 export function createApiApp(options: CreateApiAppOptions = {}) {
   const now = options.now || (() => new Date());
   const state = options.state || createInitialState();

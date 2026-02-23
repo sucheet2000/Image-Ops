@@ -13,6 +13,22 @@ const cleanupSchema = z.object({
   reason: z.enum(["delivered", "page_exit", "ttl_expiry", "manual"]).default("page_exit")
 });
 
+/**
+ * Register the POST /api/cleanup route that performs idempotent deletion of object keys with auditing.
+ *
+ * The route requires an `idempotency-key` header and validates the request body against the cleanup schema.
+ * If the key was seen before, the handler either rejects with 409 when the payload differs or replays the stored response
+ * (setting `x-idempotent-replay: true`). On a new request, the handler deletes the normalized object keys from storage,
+ * appends deletion audit records for each deleted or not-found key, persists an idempotency record with a TTL, logs the
+ * execution, and responds with HTTP 202 including counts and the idempotency key. Validation failures return 400.
+ *
+ * @param router - Express router on which to register the cleanup route.
+ * @param deps - Dependency bag used by the route:
+ *   - config.cleanupIdempotencyTtlSeconds: TTL for persisted idempotency records.
+ *   - storage: object storage service (used to delete objects).
+ *   - jobRepo: job repository (used to read/set idempotency records and append audits).
+ *   - now: function returning the current Date for timestamping audit and idempotency records.
+ */
 export function registerCleanupRoutes(
   router: Router,
   deps: {
