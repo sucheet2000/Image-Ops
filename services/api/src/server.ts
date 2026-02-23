@@ -10,7 +10,7 @@ import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
-import { HmacBillingService, type BillingService } from "./services/billing";
+import { HmacBillingService, StripeBillingService, type BillingService } from "./services/billing";
 import { GoogleTokenAuthService, type AuthService } from "./services/auth";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
@@ -81,11 +81,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
     queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
     jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
-    billing: incomingDeps?.billing || new HmacBillingService({
-      publicBaseUrl: config.billingPublicBaseUrl,
-      providerSecret: config.billingProviderSecret,
-      webhookSecret: config.billingWebhookSecret
-    }),
+    billing: incomingDeps?.billing || createBillingService(config),
     auth: incomingDeps?.auth || new GoogleTokenAuthService({
       googleClientId: config.googleClientId,
       authTokenSecret: config.authTokenSecret,
