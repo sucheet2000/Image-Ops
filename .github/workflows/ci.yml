@@ -50,6 +50,16 @@ jobs:
           echo $! > /tmp/api.pid
           nohup npm run start -w services/worker > /tmp/worker.log 2>&1 &
           echo $! > /tmp/worker.pid
+      - name: Wait for worker ready
+        run: |
+          for i in $(seq 1 40); do
+            if grep -q '"event":"worker.ready"' /tmp/worker.log; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Worker did not report ready event in time"
+          exit 1
       - name: Wait for API health
         run: |
           for i in $(seq 1 40); do
@@ -64,7 +74,7 @@ jobs:
         env:
           RUN_INTEGRATION_TESTS: "1"
           INTEGRATION_API_BASE_URL: "http://127.0.0.1:4000"
-          INTEGRATION_JOB_TIMEOUT_MS: "45000"
+          INTEGRATION_JOB_TIMEOUT_MS: "30000"
         run: npm run test:integration:api
       - name: Dump service logs
         if: always()

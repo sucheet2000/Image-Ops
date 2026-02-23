@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1";
 const apiBaseUrl = process.env.INTEGRATION_API_BASE_URL || "http://127.0.0.1:4000";
 const jobTimeoutMs = Number(process.env.INTEGRATION_JOB_TIMEOUT_MS || 30000);
+const testTimeoutMs = Number(process.env.INTEGRATION_TEST_TIMEOUT_MS || String(jobTimeoutMs + 20000));
 
 const samplePngBytes = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2p6i8AAAAASUVORK5CYII=",
@@ -193,5 +194,5 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
     expect(createJobFromDeletedInputResponse.status).toBe(404);
     const createJobFromDeletedInputPayload = await readJson<{ error: string }>(createJobFromDeletedInputResponse);
     expect(createJobFromDeletedInputPayload.error).toBe("INPUT_OBJECT_NOT_FOUND");
-  }, 45000);
+  }, testTimeoutMs);
 });

@@ -9,6 +9,7 @@ import { S3WorkerStorageService } from "./services/storage";
 
 const config = loadWorkerConfig();
 const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
+const SHUTDOWN_TIMEOUT_MS = Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS || 10000);
 
 const storage = new S3WorkerStorageService(config);
 const jobRepo = new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
@@ -58,6 +59,24 @@ worker.on("failed", (job, error) => {
 
 let shuttingDown = false;
 
+async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`${operation} timed out after ${SHUTDOWN_TIMEOUT_MS}ms`));
+        }, SHUTDOWN_TIMEOUT_MS);
+      })
+    ]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 async function shutdown(reason: string, exitCode: number, error?: unknown): Promise<void> {
   if (shuttingDown) {
     return;
@@ -79,8 +98,8 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
   }
 
   try {
-    await worker.close();
-    await connection.quit();
+    await withShutdownTimeout(worker.close(), "worker.close");
+    await withShutdownTimeout(connection.quit(), "connection.quit");
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ event: "worker.shutdown.complete", reason }));
   } catch (closeError) {
@@ -92,6 +111,16 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
         message: closeError instanceof Error ? closeError.message : String(closeError)
       })
     );
+    // eslint-disable-next-line no-console
+    console.error(
+      JSON.stringify({
+        event: "worker.shutdown.force_exit",
+        reason,
+        timeoutMs: SHUTDOWN_TIMEOUT_MS
+      })
+    );
+
+    connection.disconnect(false);
     exitCode = 1;
   }
 

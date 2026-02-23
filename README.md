@@ -74,23 +74,32 @@ npm run infra:up:integration
 2. Run API + worker locally against the integration stack (separate terminals):
 ```bash
 # terminal 1 (API)
+API_PORT=4000 \
+WEB_ORIGIN=http://127.0.0.1:3000 \
+JOB_QUEUE_NAME=image-ops-jobs \
+S3_REGION=us-east-1 \
 S3_BUCKET=image-ops-temp \
 S3_ACCESS_KEY=minioadmin \
 S3_SECRET_KEY=minioadmin \
 S3_ENDPOINT=http://127.0.0.1:9000 \
+S3_FORCE_PATH_STYLE=true \
 REDIS_URL=redis://127.0.0.1:6379 \
 npm run dev -w services/api
 ```
 ```bash
 # terminal 2 (worker)
+JOB_QUEUE_NAME=image-ops-jobs \
+S3_REGION=us-east-1 \
 S3_BUCKET=image-ops-temp \
 S3_ACCESS_KEY=minioadmin \
 S3_SECRET_KEY=minioadmin \
 S3_ENDPOINT=http://127.0.0.1:9000 \
+S3_FORCE_PATH_STYLE=true \
 REDIS_URL=redis://127.0.0.1:6379 \
 BG_REMOVE_API_URL=http://127.0.0.1:9999/mock-unused \
 npm run dev -w services/worker
 ```
+These values match CI. You can also rely on defaults from `.env.example` where applicable.
 3. Run integration tests:
 ```bash
 RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run test:integration:api
