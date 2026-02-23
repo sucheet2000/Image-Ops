@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { applyQuota, FREE_PLAN_LIMIT, FREE_PLAN_WINDOW_HOURS, shouldApplyWatermark } from "../src";
+import {
+  applyQuota,
+  cleanupRequestSignature,
+  FREE_PLAN_LIMIT,
+  FREE_PLAN_WINDOW_HOURS,
+  isAdvancedTool,
+  normalizeObjectKeys,
+  shouldApplyWatermark
+} from "../src";
 
 describe("quota", () => {
   it("allows up to limit within active window", () => {
@@ -38,5 +46,23 @@ describe("watermark", () => {
 
   it("skips watermark for paid plans", () => {
     expect(shouldApplyWatermark("pro", true)).toBe(false);
+  });
+
+  it("marks only background-remove as advanced", () => {
+    expect(isAdvancedTool("background-remove")).toBe(true);
+    expect(isAdvancedTool("compress")).toBe(false);
+  });
+});
+
+describe("cleanup helpers", () => {
+  it("builds stable request signatures", () => {
+    const one = cleanupRequestSignature(["b", "a", "a"]);
+    const two = cleanupRequestSignature(["a", "b"]);
+    expect(one).toBe(two);
+  });
+
+  it("normalizes object key arrays", () => {
+    expect(normalizeObjectKeys(["a", " ", "a", "b"])).toEqual(["a", "b"]);
+    expect(normalizeObjectKeys(null)).toEqual([]);
   });
 });

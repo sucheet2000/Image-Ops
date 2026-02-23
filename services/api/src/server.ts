@@ -1,489 +1,72 @@
-import crypto from "node:crypto";
 import cors from "cors";
 import express from "express";
-import { applyQuota, FREE_PLAN_LIMIT, FREE_PLAN_WINDOW_HOURS, type QuotaWindow } from "@image-ops/core";
+import type { NextFunction, Request, Response } from "express";
+import { loadApiConfig, type ApiConfig } from "./config";
+import { logError, logInfo } from "./lib/log";
+import { registerCleanupRoutes } from "./routes/cleanup";
+import { registerJobsRoutes } from "./routes/jobs";
+import { registerQuotaRoutes } from "./routes/quota";
+import { registerUploadsRoutes } from "./routes/uploads";
+import { RedisJobRepository, type JobRepository } from "./services/job-repo";
+import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
+import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
 
-const DEFAULT_MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 10 * 1024 * 1024);
-const DEFAULT_TEMP_TTL_MINUTES = Number(process.env.TEMP_OBJECT_TTL_MINUTES || 30);
-
-const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
-const ALLOWED_JOB_TOOLS = new Set(["resize", "compress", "remove-background", "convert"]);
-
-type JobStatus = "queued" | "running" | "done" | "failed";
-
-type TempUploadRecord = {
-  key: string;
-  token: string;
-  subjectId: string;
-  filename: string;
-  mime: string;
-  size: number;
-  tool: string;
-  createdAt: string;
-  expiresAt: string;
+export type ApiDependencies = {
+  config: ApiConfig;
+  storage: ObjectStorageService;
+  queue: JobQueueService;
+  jobRepo: JobRepository;
+  now: () => Date;
 };
 
-type JobRecord = {
-  id: string;
-  subjectId: string;
-  tool: string;
-  inputObjectKey: string;
-  options: Record<string, unknown>;
-  status: JobStatus;
-  createdAt: string;
-  updatedAt: string;
-  outputObjectKey?: string;
-  errorCode?: string;
-};
-
-type QueueItem = {
-  jobId: string;
-  enqueuedAt: string;
-};
-
-type ApiState = {
-  windows: Map<string, QuotaWindow>;
-  tempUploads: Map<string, TempUploadRecord>;
-  jobs: Map<string, JobRecord>;
-  queue: QueueItem[];
-};
-
-type CreateApiAppOptions = {
-  now?: () => Date;
-  state?: ApiState;
-};
-
-function workerToken(): string {
-  return process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
+function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  const message = error instanceof Error ? error.message : "Internal server error";
+  logError("api.error", { message });
+  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message });
 }
 
-function createInitialState(): ApiState {
-  return {
-    windows: new Map<string, QuotaWindow>(),
-    tempUploads: new Map<string, TempUploadRecord>(),
-    jobs: new Map<string, JobRecord>(),
-    queue: []
+export function createApiApp(incomingDeps?: Partial<ApiDependencies>) {
+  const config = incomingDeps?.config || loadApiConfig();
+  const deps: ApiDependencies = {
+    config,
+    storage: incomingDeps?.storage || new S3ObjectStorageService(config),
+    queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
+    jobRepo: incomingDeps?.jobRepo || new RedisJobRepository({ redisUrl: config.redisUrl }),
+    now: incomingDeps?.now || (() => new Date())
   };
-}
 
-function sanitizeSubjectId(value: string): string {
-  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-  return sanitized || "anonymous";
-}
-
-function fileExtension(filename: string): string {
-  const normalized = filename.trim();
-  if (!normalized.includes(".")) {
-    return "";
-  }
-
-  return normalized.split(".").pop()?.toLowerCase() || "";
-}
-
-function createTempObjectKey(subjectId: string, filename: string, now: Date): string {
-  const ext = fileExtension(filename);
-  const suffix = ext ? `.${ext}` : "";
-  return `tmp/${subjectId}/${now.getTime()}-${crypto.randomUUID()}${suffix}`;
-}
-
-function pruneExpired(state: ApiState, now: Date): number {
-  let removed = 0;
-  for (const [key, record] of state.tempUploads.entries()) {
-    if (now > new Date(record.expiresAt)) {
-      state.tempUploads.delete(key);
-      removed += 1;
-    }
-  }
-
-  return removed;
-}
-
-function currentQuotaWindow(state: ApiState, subjectId: string, now: Date): QuotaWindow {
-  return state.windows.get(subjectId) || { windowStartAt: now.toISOString(), usedCount: 0 };
-}
-
-function requireWorkerAuth(req: express.Request, res: express.Response): boolean {
-  const token = req.header("x-worker-token") || "";
-  if (!token || token !== workerToken()) {
-    res.status(401).json({ error: "UNAUTHORIZED_WORKER", message: "Worker token is missing or invalid." });
-    return false;
-  }
-
-  return true;
-}
-
-export function createApiApp(options: CreateApiAppOptions = {}) {
-  const now = options.now || (() => new Date());
-  const state = options.state || createInitialState();
   const app = express();
-
-  app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:3000" }));
-  app.use(express.json());
+  app.use(cors({ origin: deps.config.webOrigin }));
+  app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => {
-    const purged = pruneExpired(state, now());
-    res.json({ status: "ok", tempUploads: state.tempUploads.size, jobs: state.jobs.size, queueDepth: state.queue.length, purged });
+    res.json({ status: "ok" });
   });
 
-  app.get("/api/quota/:subjectId", (req, res) => {
-    const subjectId = sanitizeSubjectId(String(req.params.subjectId || "anonymous"));
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-    const window = currentQuotaWindow(state, subjectId, currentNow);
-
-    res.json({
-      subjectId,
-      limit: FREE_PLAN_LIMIT,
-      windowHours: FREE_PLAN_WINDOW_HOURS,
-      usedCount: window.usedCount,
-      windowStartAt: window.windowStartAt
-    });
+  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerJobsRoutes(app, {
+    config: deps.config,
+    storage: deps.storage,
+    queue: deps.queue,
+    jobRepo: deps.jobRepo,
+    now: deps.now
   });
-
-  app.get("/api/quota", (req, res) => {
-    const subjectRaw = String(req.query.subjectId || "");
-    if (!subjectRaw) {
-      res.status(400).json({ error: "SUBJECT_ID_REQUIRED", message: "subjectId query param is required." });
-      return;
-    }
-
-    const subjectId = sanitizeSubjectId(subjectRaw);
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-    const window = currentQuotaWindow(state, subjectId, currentNow);
-
-    res.json({
-      subjectId,
-      limit: FREE_PLAN_LIMIT,
-      windowHours: FREE_PLAN_WINDOW_HOURS,
-      usedCount: window.usedCount,
-      windowStartAt: window.windowStartAt
-    });
+  registerCleanupRoutes(app, {
+    config: deps.config,
+    storage: deps.storage,
+    jobRepo: deps.jobRepo,
+    now: deps.now
   });
+  registerQuotaRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
 
-  app.post("/api/quota/check", (req, res) => {
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
-    const requestedImages = Number(req.body.requestedImages || 1);
-    const existing = currentQuotaWindow(state, subjectId, currentNow);
-    const result = applyQuota(existing, requestedImages, currentNow);
-
-    if (!result.allowed) {
-      return res.status(429).json({
-        error: "FREE_PLAN_LIMIT_EXCEEDED",
-        message: `Free plan allows ${FREE_PLAN_LIMIT} images per ${FREE_PLAN_WINDOW_HOURS} hours.`,
-        nextWindowStartAt: result.nextWindowStartAt
-      });
-    }
-
-    state.windows.set(subjectId, result.window);
-    return res.json({ allowed: true, window: result.window });
-  });
-
-  app.post("/api/uploads/init", (req, res) => {
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
-    const filename = String(req.body.filename || "").trim();
-    const mime = String(req.body.mime || "").toLowerCase();
-    const size = Number(req.body.size || 0);
-    const tool = String(req.body.tool || "").trim();
-
-    if (!filename || !mime || !tool || !Number.isFinite(size) || size <= 0) {
-      res.status(400).json({
-        error: "INVALID_UPLOAD_REQUEST",
-        message: "filename, mime, size, and tool are required."
-      });
-      return;
-    }
-
-    if (!ALLOWED_IMAGE_MIME.has(mime)) {
-      res.status(400).json({
-        error: "UNSUPPORTED_MIME",
-        message: "Only supported image formats are allowed."
-      });
-      return;
-    }
-
-    if (size > DEFAULT_MAX_UPLOAD_BYTES) {
-      res.status(413).json({
-        error: "FILE_TOO_LARGE",
-        message: `Max upload size is ${DEFAULT_MAX_UPLOAD_BYTES} bytes.`
-      });
-      return;
-    }
-
-    const existing = currentQuotaWindow(state, subjectId, currentNow);
-    const quota = applyQuota(existing, 1, currentNow);
-
-    if (!quota.allowed) {
-      res.status(429).json({
-        error: "FREE_PLAN_LIMIT_EXCEEDED",
-        message: `Free plan allows ${FREE_PLAN_LIMIT} images per ${FREE_PLAN_WINDOW_HOURS} hours.`,
-        nextWindowStartAt: quota.nextWindowStartAt
-      });
-      return;
-    }
-
-    state.windows.set(subjectId, quota.window);
-
-    const key = createTempObjectKey(subjectId, filename, currentNow);
-    const token = crypto.randomBytes(16).toString("hex");
-    const expiresAt = new Date(currentNow.getTime() + DEFAULT_TEMP_TTL_MINUTES * 60 * 1000).toISOString();
-    const uploadBase = process.env.UPLOAD_BASE_URL || "https://temp-upload.image-ops.local";
-
-    state.tempUploads.set(key, {
-      key,
-      token,
-      subjectId,
-      filename,
-      mime,
-      size,
-      tool,
-      createdAt: currentNow.toISOString(),
-      expiresAt
-    });
-
-    res.status(201).json({
-      objectKey: key,
-      uploadUrl: `${uploadBase}/upload/${encodeURIComponent(key)}?token=${token}`,
-      expiresAt,
-      quota: {
-        subjectId,
-        usedCount: quota.window.usedCount,
-        limit: FREE_PLAN_LIMIT,
-        windowHours: FREE_PLAN_WINDOW_HOURS,
-        windowStartAt: quota.window.windowStartAt
-      },
-      privacy: {
-        imageStoredInDatabase: false,
-        tempStorageOnly: true
-      }
-    });
-  });
-
-  app.post("/api/jobs", (req, res) => {
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
-    const tool = String(req.body.tool || "").trim();
-    const inputObjectKey = String(req.body.inputObjectKey || "").trim();
-    const options = req.body.options && typeof req.body.options === "object" ? req.body.options : {};
-
-    if (!tool || !inputObjectKey) {
-      res.status(400).json({
-        error: "INVALID_JOB_REQUEST",
-        message: "tool and inputObjectKey are required."
-      });
-      return;
-    }
-
-    if (!ALLOWED_JOB_TOOLS.has(tool)) {
-      res.status(400).json({
-        error: "UNSUPPORTED_TOOL",
-        message: "Tool is not supported."
-      });
-      return;
-    }
-
-    const upload = state.tempUploads.get(inputObjectKey);
-    if (!upload) {
-      res.status(404).json({
-        error: "INPUT_OBJECT_NOT_FOUND",
-        message: "Input object key was not found or has expired."
-      });
-      return;
-    }
-
-    if (upload.subjectId !== subjectId) {
-      res.status(403).json({
-        error: "INPUT_OBJECT_FORBIDDEN",
-        message: "Input object does not belong to this subject."
-      });
-      return;
-    }
-
-    const id = `job_${crypto.randomUUID().replace(/-/g, "")}`;
-    const job: JobRecord = {
-      id,
-      subjectId,
-      tool,
-      inputObjectKey,
-      options: options as Record<string, unknown>,
-      status: "queued",
-      createdAt: currentNow.toISOString(),
-      updatedAt: currentNow.toISOString()
-    };
-
-    state.jobs.set(id, job);
-    state.queue.push({ jobId: id, enqueuedAt: currentNow.toISOString() });
-
-    res.status(201).json({
-      id: job.id,
-      status: job.status,
-      tool: job.tool,
-      inputObjectKey: job.inputObjectKey,
-      createdAt: job.createdAt,
-      queuePosition: state.queue.length
-    });
-  });
-
-  app.get("/api/jobs/:id", (req, res) => {
-    const id = String(req.params.id || "").trim();
-    const job = state.jobs.get(id);
-
-    if (!job) {
-      res.status(404).json({
-        error: "JOB_NOT_FOUND",
-        message: "Job does not exist."
-      });
-      return;
-    }
-
-    const queueIndex = state.queue.findIndex((item) => item.jobId === id);
-    const queuePosition = job.status === "queued" && queueIndex >= 0 ? queueIndex + 1 : null;
-
-    res.json({
-      id: job.id,
-      status: job.status,
-      tool: job.tool,
-      inputObjectKey: job.inputObjectKey,
-      outputObjectKey: job.outputObjectKey || null,
-      errorCode: job.errorCode || null,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-      queuePosition
-    });
-  });
-
-  app.post("/api/internal/queue/claim", (req, res) => {
-    if (!requireWorkerAuth(req, res)) {
-      return;
-    }
-
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    while (state.queue.length > 0) {
-      const item = state.queue.shift();
-      if (!item) {
-        break;
-      }
-
-      const job = state.jobs.get(item.jobId);
-      if (!job || job.status !== "queued") {
-        continue;
-      }
-
-      job.status = "running";
-      job.updatedAt = currentNow.toISOString();
-      state.jobs.set(job.id, job);
-
-      res.json({
-        claimed: true,
-        job: {
-          id: job.id,
-          subjectId: job.subjectId,
-          tool: job.tool,
-          inputObjectKey: job.inputObjectKey,
-          options: job.options,
-          status: job.status,
-          createdAt: job.createdAt,
-          updatedAt: job.updatedAt
-        }
-      });
-      return;
-    }
-
-    res.json({ claimed: false });
-  });
-
-  app.post("/api/internal/jobs/:id/complete", (req, res) => {
-    if (!requireWorkerAuth(req, res)) {
-      return;
-    }
-
-    const id = String(req.params.id || "").trim();
-    const job = state.jobs.get(id);
-    if (!job) {
-      res.status(404).json({ error: "JOB_NOT_FOUND", message: "Job does not exist." });
-      return;
-    }
-
-    if (job.status !== "running") {
-      res.status(409).json({ error: "JOB_NOT_RUNNING", message: "Only running jobs can be completed." });
-      return;
-    }
-
-    const success = Boolean(req.body.success);
-    const outputObjectKey = String(req.body.outputObjectKey || "").trim();
-    const errorCode = String(req.body.errorCode || "").trim();
-    const currentNow = now();
-
-    if (success) {
-      if (!outputObjectKey) {
-        res.status(400).json({
-          error: "OUTPUT_KEY_REQUIRED",
-          message: "outputObjectKey is required when marking job success."
-        });
-        return;
-      }
-      job.status = "done";
-      job.outputObjectKey = outputObjectKey;
-      job.errorCode = undefined;
-    } else {
-      if (!errorCode) {
-        res.status(400).json({
-          error: "ERROR_CODE_REQUIRED",
-          message: "errorCode is required when marking job failure."
-        });
-        return;
-      }
-      job.status = "failed";
-      job.outputObjectKey = undefined;
-      job.errorCode = errorCode;
-    }
-
-    job.updatedAt = currentNow.toISOString();
-    state.jobs.set(job.id, job);
-
-    res.json({
-      id: job.id,
-      status: job.status,
-      outputObjectKey: job.outputObjectKey || null,
-      errorCode: job.errorCode || null,
-      updatedAt: job.updatedAt
-    });
-  });
-
-  app.post("/api/cleanup", (req, res) => {
-    const currentNow = now();
-    const expiredPurged = pruneExpired(state, currentNow);
-
-    const keys = Array.isArray(req.body.objectKeys) ? req.body.objectKeys.map((key) => String(key)) : [];
-    let cleaned = 0;
-
-    for (const key of keys) {
-      if (state.tempUploads.delete(key)) {
-        cleaned += 1;
-      }
-    }
-
-    res.status(202).json({ accepted: true, cleaned, expiredPurged });
-  });
-
+  app.use(errorHandler);
   return app;
 }
 
 if (require.main === module) {
-  const port = Number(process.env.API_PORT || 4000);
-  const app = createApiApp();
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Image Ops API listening on http://localhost:${port}`);
+  const config = loadApiConfig();
+  const app = createApiApp({ config });
+  app.listen(config.port, () => {
+    logInfo("api.started", { port: config.port });
   });
 }

@@ -1,61 +1,59 @@
-import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApiApp } from "../src/server";
+import { createFakeServices, createTestConfig } from "./helpers/fakes";
+import { startApiTestServer } from "./helpers/server";
 
-const servers: Array<{ close: () => void }> = [];
+const closers: Array<() => Promise<void>> = [];
 
-afterEach(() => {
-  while (servers.length > 0) {
-    const server = servers.pop();
-    server?.close();
+afterEach(async () => {
+  while (closers.length > 0) {
+    const close = closers.pop();
+    if (close) {
+      await close();
+    }
   }
 });
 
-async function startTestServer() {
-  const app = createApiApp({ now: () => new Date("2026-02-23T00:00:00.000Z") });
-  const server = app.listen(0);
-  servers.push(server);
-  const { port } = server.address() as AddressInfo;
-  return `http://127.0.0.1:${port}`;
-}
-
 describe("POST /api/uploads/init", () => {
-  it("creates a temp upload target and increments quota", async () => {
-    const base = await startTestServer();
+  it("returns object key and signed upload URL", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
 
-    const response = await fetch(`${base}/api/uploads/init`, {
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_1",
-        filename: "listing.jpg",
+        tool: "resize",
+        filename: "sample.jpg",
         mime: "image/jpeg",
-        size: 400000,
-        tool: "compress"
+        size: 200_000
       })
     });
 
     expect(response.status).toBe(201);
     const payload = await response.json();
-
-    expect(payload.objectKey).toContain("tmp/seller_1/");
-    expect(payload.uploadUrl).toContain("token=");
-    expect(payload.quota.usedCount).toBe(1);
-    expect(payload.privacy.imageStoredInDatabase).toBe(false);
+    expect(payload.objectKey).toContain("tmp/seller_1/input/2026/02/23/resize/");
+    expect(payload.uploadUrl).toContain(encodeURIComponent(payload.objectKey));
+    expect(payload.tempStorageOnly).toBe(true);
+    expect(payload.imageStoredInDatabase).toBe(false);
+    expect(new Date(payload.expiresAt).getTime()).toBeGreaterThan(new Date("2026-02-23T00:00:00.000Z").getTime());
   });
 
-  it("rejects unsupported mime types", async () => {
-    const base = await startTestServer();
+  it("rejects unsupported MIME type", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
 
-    const response = await fetch(`${base}/api/uploads/init`, {
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_1",
-        filename: "listing.svg",
-        mime: "image/svg+xml",
-        size: 1200,
-        tool: "compress"
+        tool: "resize",
+        filename: "sample.gif",
+        mime: "image/gif",
+        size: 1_000
       })
     });
 
@@ -64,65 +62,28 @@ describe("POST /api/uploads/init", () => {
     expect(payload.error).toBe("UNSUPPORTED_MIME");
   });
 
-  it("enforces free plan limit of 6 images per 10 hours", async () => {
-    const base = await startTestServer();
+  it("rejects oversized uploads", async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    config.maxUploadBytes = 1024;
 
-    for (let i = 0; i < 6; i += 1) {
-      const ok = await fetch(`${base}/api/uploads/init`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          subjectId: "seller_2",
-          filename: `image-${i}.jpg`,
-          mime: "image/jpeg",
-          size: 300000,
-          tool: "resize"
-        })
-      });
-      expect(ok.status).toBe(201);
-    }
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
 
-    const blocked = await fetch(`${base}/api/uploads/init`, {
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        subjectId: "seller_2",
-        filename: "image-7.jpg",
+        subjectId: "seller_1",
+        tool: "resize",
+        filename: "sample.jpg",
         mime: "image/jpeg",
-        size: 300000,
-        tool: "resize"
+        size: 4096
       })
     });
 
-    expect(blocked.status).toBe(429);
-    const payload = await blocked.json();
-    expect(payload.error).toBe("FREE_PLAN_LIMIT_EXCEEDED");
-  });
-
-  it("cleans up temp upload keys", async () => {
-    const base = await startTestServer();
-
-    const init = await fetch(`${base}/api/uploads/init`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        subjectId: "seller_3",
-        filename: "listing.jpg",
-        mime: "image/jpeg",
-        size: 250000,
-        tool: "compress"
-      })
-    });
-
-    const payload = await init.json();
-    const cleanup = await fetch(`${base}/api/cleanup`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ objectKeys: [payload.objectKey] })
-    });
-
-    expect(cleanup.status).toBe(202);
-    const cleaned = await cleanup.json();
-    expect(cleaned.cleaned).toBe(1);
+    expect(response.status).toBe(413);
+    const payload = await response.json();
+    expect(payload.error).toBe("FILE_TOO_LARGE");
   });
 });
