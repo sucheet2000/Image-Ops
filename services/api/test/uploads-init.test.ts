@@ -86,4 +86,154 @@ describe("POST /api/uploads/init", () => {
     const payload = await response.json();
     expect(payload.error).toBe("FILE_TOO_LARGE");
   });
+
+  it("rejects missing required fields", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_1"
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe("INVALID_UPLOAD_REQUEST");
+  });
+
+  it("rejects invalid size values", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_1",
+        tool: "resize",
+        filename: "sample.jpg",
+        mime: "image/jpeg",
+        size: 0
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe("INVALID_UPLOAD_REQUEST");
+  });
+
+  it("enforces quota limits on upload init", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    for (let i = 0; i < 6; i++) {
+      const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          subjectId: "seller_quota",
+          tool: "compress",
+          filename: `file${i}.jpg`,
+          mime: "image/jpeg",
+          size: 100_000
+        })
+      });
+      expect(response.status).toBe(201);
+    }
+
+    const blocked = await fetch(`${server.baseUrl}/api/uploads/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_quota",
+        tool: "compress",
+        filename: "blocked.jpg",
+        mime: "image/jpeg",
+        size: 100_000
+      })
+    });
+
+    expect(blocked.status).toBe(429);
+    const payload = await blocked.json();
+    expect(payload.error).toBe("FREE_PLAN_LIMIT_EXCEEDED");
+  });
+
+  it("accepts all supported MIME types", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const supportedMimes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"];
+
+    for (const mime of supportedMimes) {
+      const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          subjectId: `seller_mime_${mime}`,
+          tool: "compress",
+          filename: "test.jpg",
+          mime,
+          size: 50_000
+        })
+      });
+
+      expect(response.status).toBe(201);
+    }
+  });
+
+  it("creates unique object keys for concurrent uploads", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const promises = Array.from({ length: 5 }, (_, i) =>
+      fetch(`${server.baseUrl}/api/uploads/init`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          subjectId: "seller_concurrent",
+          tool: "resize",
+          filename: "image.jpg",
+          mime: "image/jpeg",
+          size: 100_000
+        })
+      })
+    );
+
+    const responses = await Promise.all(promises);
+    const payloads = await Promise.all(responses.map((r) => r.json()));
+    const keys = payloads.map((p) => p.objectKey);
+
+    expect(new Set(keys).size).toBe(5);
+  });
+
+  it("includes privacy information in response", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_privacy",
+        tool: "compress",
+        filename: "private.jpg",
+        mime: "image/jpeg",
+        size: 50_000
+      })
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    expect(payload.imageStoredInDatabase).toBe(false);
+    expect(payload.tempStorageOnly).toBe(true);
+  });
 });
