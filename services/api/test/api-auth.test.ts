@@ -75,7 +75,7 @@ describe("API token enforcement", () => {
       })
     });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(409);
 
     await server.close();
   });

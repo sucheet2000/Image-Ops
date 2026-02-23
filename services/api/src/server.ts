@@ -110,7 +110,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     app.use("/api/billing/checkout", requireApiAuth(deps.auth));
   }
 
-  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, jobRepo: deps.jobRepo, now: deps.now });
   registerAuthRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, auth: deps.auth, now: deps.now });
   registerBillingRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, billing: deps.billing, now: deps.now });
   registerJobsRoutes(app, {
