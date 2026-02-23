@@ -21,9 +21,19 @@ describe("GET /api/quota/:subjectId", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig(), now });
     closers.push(server.close);
 
-    services.storage.setObject("tmp/seller_1/input/a.jpg", "image/jpeg");
+    services.storage.setObject("tmp/seller_1/input/a.jpg", "image/jpeg", Buffer.from("quota-seller-1"));
 
-    await fetch(`${server.baseUrl}/api/jobs`, {
+    const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_1",
+        objectKey: "tmp/seller_1/input/a.jpg"
+      })
+    });
+    expect(complete.status).toBe(200);
+
+    const createJob = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -33,6 +43,7 @@ describe("GET /api/quota/:subjectId", () => {
         inputObjectKey: "tmp/seller_1/input/a.jpg"
       })
     });
+    expect(createJob.status).toBe(201);
 
     const quota = await fetch(`${server.baseUrl}/api/quota/seller_1`);
     expect(quota.status).toBe(200);
