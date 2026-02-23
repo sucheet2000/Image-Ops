@@ -22,6 +22,8 @@ export function createTestConfig(): ApiConfig {
     tempObjectTtlMinutes: 30,
     cleanupIdempotencyTtlSeconds: 3600,
     queueName: "image-ops-jobs",
+    jobRepoDriver: "redis",
+    postgresUrl: undefined,
     redisUrl: "redis://localhost:6379",
     s3Region: "us-east-1",
     s3Bucket: "image-ops-temp",

@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const JOB_REPO_DRIVERS = ["redis", "postgres"] as const;
+export type JobRepoDriver = (typeof JOB_REPO_DRIVERS)[number];
+
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
@@ -9,6 +12,8 @@ const envSchema = z.object({
   TEMP_OBJECT_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   CLEANUP_IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(24 * 60 * 60),
   JOB_QUEUE_NAME: z.string().default("image-ops-jobs"),
+  JOB_REPO_DRIVER: z.enum(JOB_REPO_DRIVERS).default("redis"),
+  POSTGRES_URL: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
@@ -19,6 +24,14 @@ const envSchema = z.object({
     .string()
     .default("true")
     .transform((value) => value.toLowerCase() === "true")
+}).superRefine((value, ctx) => {
+  if (value.JOB_REPO_DRIVER === "postgres" && !value.POSTGRES_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["POSTGRES_URL"],
+      message: "POSTGRES_URL is required when JOB_REPO_DRIVER=postgres"
+    });
+  }
 });
 
 export type ApiConfig = {
@@ -30,6 +43,8 @@ export type ApiConfig = {
   tempObjectTtlMinutes: number;
   cleanupIdempotencyTtlSeconds: number;
   queueName: string;
+  jobRepoDriver: JobRepoDriver;
+  postgresUrl?: string;
   redisUrl: string;
   s3Region: string;
   s3Bucket: string;
@@ -57,6 +72,8 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     tempObjectTtlMinutes: parsed.TEMP_OBJECT_TTL_MINUTES,
     cleanupIdempotencyTtlSeconds: parsed.CLEANUP_IDEMPOTENCY_TTL_SECONDS,
     queueName: parsed.JOB_QUEUE_NAME,
+    jobRepoDriver: parsed.JOB_REPO_DRIVER,
+    postgresUrl: parsed.POSTGRES_URL,
     redisUrl: parsed.REDIS_URL,
     s3Region: parsed.S3_REGION,
     s3Bucket: parsed.S3_BUCKET,

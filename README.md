@@ -40,6 +40,7 @@ Required variables are listed in `/Users/sucheetboppana/Documents/New project/.e
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
+- Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
 - Worker/background remove: `WORKER_CONCURRENCY`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`
 
@@ -67,7 +68,7 @@ npm run test -w packages/core
 
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
-- Relational metadata schema exists in `infra/sql/001_initial_schema.sql`; V1 runtime metadata repository currently uses Redis abstractions.
+- Relational metadata schema exists in `infra/sql/001_initial_schema.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
 - Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
 
