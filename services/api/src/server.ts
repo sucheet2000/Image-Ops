@@ -9,7 +9,7 @@ import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
-import { HmacBillingService, type BillingService } from "./services/billing";
+import { HmacBillingService, StripeBillingService, type BillingService } from "./services/billing";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
 import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
@@ -42,6 +42,25 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
   return { value: error };
 }
 
+function createBillingService(config: ApiConfig): BillingService {
+  if (config.billingProvider === "stripe") {
+    return new StripeBillingService({
+      secretKey: config.stripeSecretKey || "",
+      webhookSecret: config.stripeWebhookSecret || "",
+      priceIdByPlan: {
+        pro: config.stripePriceIdPro,
+        team: config.stripePriceIdTeam
+      }
+    });
+  }
+
+  return new HmacBillingService({
+    publicBaseUrl: config.billingPublicBaseUrl,
+    providerSecret: config.billingProviderSecret,
+    webhookSecret: config.billingWebhookSecret
+  });
+}
+
 export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) {
     next(error);
@@ -59,16 +78,13 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
     queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
     jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
-    billing: incomingDeps?.billing || new HmacBillingService({
-      publicBaseUrl: config.billingPublicBaseUrl,
-      providerSecret: config.billingProviderSecret,
-      webhookSecret: config.billingWebhookSecret
-    }),
+    billing: incomingDeps?.billing || createBillingService(config),
     now: incomingDeps?.now || (() => new Date())
   };
 
   const app = express();
   app.use(cors({ origin: deps.config.webOrigin }));
+  app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => {

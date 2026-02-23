@@ -3,6 +3,9 @@ import { z } from "zod";
 export const JOB_REPO_DRIVERS = ["redis", "postgres"] as const;
 export type JobRepoDriver = (typeof JOB_REPO_DRIVERS)[number];
 
+export const BILLING_PROVIDERS = ["hmac", "stripe"] as const;
+export type BillingProvider = (typeof BILLING_PROVIDERS)[number];
+
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
@@ -16,9 +19,14 @@ const envSchema = z.object({
   JOB_REPO_DRIVER: z.enum(JOB_REPO_DRIVERS).default("redis"),
   POSTGRES_URL: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
+  BILLING_PROVIDER: z.enum(BILLING_PROVIDERS).default("hmac"),
   BILLING_PUBLIC_BASE_URL: z.string().url().default("http://localhost:3000"),
   BILLING_PROVIDER_SECRET: z.string().min(1, "BILLING_PROVIDER_SECRET is required").default("dev-provider-secret"),
   BILLING_WEBHOOK_SECRET: z.string().min(1, "BILLING_WEBHOOK_SECRET is required").default("dev-webhook-secret"),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ID_PRO: z.string().default("price_pro"),
+  STRIPE_PRICE_ID_TEAM: z.string().default("price_team"),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
   S3_ENDPOINT: z.string().optional(),
@@ -36,6 +44,23 @@ const envSchema = z.object({
       message: "POSTGRES_URL is required when JOB_REPO_DRIVER=postgres"
     });
   }
+
+  if (value.BILLING_PROVIDER === "stripe") {
+    if (!value.STRIPE_SECRET_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STRIPE_SECRET_KEY"],
+        message: "STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe"
+      });
+    }
+    if (!value.STRIPE_WEBHOOK_SECRET) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STRIPE_WEBHOOK_SECRET"],
+        message: "STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe"
+      });
+    }
+  }
 });
 
 export type ApiConfig = {
@@ -51,9 +76,14 @@ export type ApiConfig = {
   jobRepoDriver: JobRepoDriver;
   postgresUrl?: string;
   redisUrl: string;
+  billingProvider: BillingProvider;
   billingPublicBaseUrl: string;
   billingProviderSecret: string;
   billingWebhookSecret: string;
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
+  stripePriceIdPro: string;
+  stripePriceIdTeam: string;
   s3Region: string;
   s3Bucket: string;
   s3Endpoint?: string;
@@ -84,9 +114,14 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     jobRepoDriver: parsed.JOB_REPO_DRIVER,
     postgresUrl: parsed.POSTGRES_URL,
     redisUrl: parsed.REDIS_URL,
+    billingProvider: parsed.BILLING_PROVIDER,
     billingPublicBaseUrl: parsed.BILLING_PUBLIC_BASE_URL,
     billingProviderSecret: parsed.BILLING_PROVIDER_SECRET,
     billingWebhookSecret: parsed.BILLING_WEBHOOK_SECRET,
+    stripeSecretKey: parsed.STRIPE_SECRET_KEY,
+    stripeWebhookSecret: parsed.STRIPE_WEBHOOK_SECRET,
+    stripePriceIdPro: parsed.STRIPE_PRICE_ID_PRO,
+    stripePriceIdTeam: parsed.STRIPE_PRICE_ID_TEAM,
     s3Region: parsed.S3_REGION,
     s3Bucket: parsed.S3_BUCKET,
     s3Endpoint: parsed.S3_ENDPOINT,

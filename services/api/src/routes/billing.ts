@@ -15,14 +15,6 @@ const checkoutSchema = z.object({
   cancelUrl: z.string().url()
 });
 
-const webhookSchema = z.object({
-  eventId: z.string().min(1),
-  checkoutSessionId: z.string().min(1),
-  subjectId: z.string().min(1),
-  plan: z.enum(["pro", "team"]),
-  status: z.enum(["paid", "canceled", "expired"])
-});
-
 export function registerBillingRoutes(
   router: Router,
   deps: {
@@ -99,19 +91,20 @@ export function registerBillingRoutes(
       return;
     }
 
-    const payloadText = JSON.stringify(req.body || {});
+    const payloadText = Buffer.isBuffer(req.body)
+      ? req.body.toString("utf8")
+      : JSON.stringify(req.body || {});
+
     if (!deps.billing.verifyWebhookSignature(payloadText, signature)) {
       res.status(401).json({ error: "INVALID_BILLING_SIGNATURE", message: "Webhook signature is invalid." });
       return;
     }
 
-    const parsed = webhookSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: "INVALID_BILLING_WEBHOOK", details: parsed.error.flatten() });
+    const eventInput = deps.billing.parseWebhookPayload(payloadText);
+    if (!eventInput) {
+      res.status(200).json({ accepted: false, ignored: true });
       return;
     }
-
-    const eventInput = parsed.data;
 
     const existingEvent = await deps.jobRepo.getBillingWebhookEvent(eventInput.eventId);
     if (existingEvent) {
