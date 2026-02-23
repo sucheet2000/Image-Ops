@@ -60,7 +60,6 @@ export class S3ObjectStorageService implements ObjectStorageService {
       Bucket: this.bucket,
       Key: input.objectKey,
       ContentType: input.contentType,
-      ContentLength: input.maxSizeBytes
     });
 
     return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
