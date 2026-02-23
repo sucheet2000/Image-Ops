@@ -41,11 +41,39 @@ type QueueItem = {
   enqueuedAt: string;
 };
 
+type DeletionReason = "page_exit" | "ttl_expiry" | "manual";
+type DeletionResult = "success" | "not_found";
+
+type DeletionAuditRecord = {
+  id: string;
+  objectKey: string;
+  reason: DeletionReason;
+  result: DeletionResult;
+  deletedAt: string;
+};
+
+type CleanupResponse = {
+  accepted: true;
+  cleaned: number;
+  notFound: number;
+  expiredPurged: number;
+  idempotencyKey: string;
+};
+
+type IdempotencyRecord = {
+  requestSignature: string;
+  status: number;
+  response: CleanupResponse;
+  createdAt: string;
+};
+
 type ApiState = {
   windows: Map<string, QuotaWindow>;
   tempUploads: Map<string, TempUploadRecord>;
   jobs: Map<string, JobRecord>;
   queue: QueueItem[];
+  deletionAudit: DeletionAuditRecord[];
+  cleanupIdempotency: Map<string, IdempotencyRecord>;
 };
 
 type CreateApiAppOptions = {
@@ -62,7 +90,9 @@ function createInitialState(): ApiState {
     windows: new Map<string, QuotaWindow>(),
     tempUploads: new Map<string, TempUploadRecord>(),
     jobs: new Map<string, JobRecord>(),
-    queue: []
+    queue: [],
+    deletionAudit: [],
+    cleanupIdempotency: new Map<string, IdempotencyRecord>()
   };
 }
 
@@ -86,12 +116,29 @@ function createTempObjectKey(subjectId: string, filename: string, now: Date): st
   return `tmp/${subjectId}/${now.getTime()}-${crypto.randomUUID()}${suffix}`;
 }
 
+function addDeletionAudit(
+  state: ApiState,
+  objectKey: string,
+  reason: DeletionReason,
+  result: DeletionResult,
+  at: Date
+): void {
+  state.deletionAudit.push({
+    id: `del_${crypto.randomUUID().replace(/-/g, "")}`,
+    objectKey,
+    reason,
+    result,
+    deletedAt: at.toISOString()
+  });
+}
+
 function pruneExpired(state: ApiState, now: Date): number {
   let removed = 0;
   for (const [key, record] of state.tempUploads.entries()) {
     if (now > new Date(record.expiresAt)) {
       state.tempUploads.delete(key);
       removed += 1;
+      addDeletionAudit(state, key, "ttl_expiry", "success", now);
     }
   }
 
@@ -112,6 +159,26 @@ function requireWorkerAuth(req: express.Request, res: express.Response): boolean
   return true;
 }
 
+function normalizeObjectKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique = new Set<string>();
+  for (const item of value) {
+    const key = String(item || "").trim();
+    if (key) {
+      unique.add(key);
+    }
+  }
+
+  return [...unique].sort((a, b) => a.localeCompare(b));
+}
+
+function cleanupSignature(keys: string[]): string {
+  return keys.join("|");
+}
+
 export function createApiApp(options: CreateApiAppOptions = {}) {
   const now = options.now || (() => new Date());
   const state = options.state || createInitialState();
@@ -122,7 +189,14 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
 
   app.get("/health", (_req, res) => {
     const purged = pruneExpired(state, now());
-    res.json({ status: "ok", tempUploads: state.tempUploads.size, jobs: state.jobs.size, queueDepth: state.queue.length, purged });
+    res.json({
+      status: "ok",
+      tempUploads: state.tempUploads.size,
+      jobs: state.jobs.size,
+      queueDepth: state.queue.length,
+      deletionAuditCount: state.deletionAudit.length,
+      purged
+    });
   });
 
   app.get("/api/quota/:subjectId", (req, res) => {
@@ -460,20 +534,94 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
     });
   });
 
+  app.post("/api/internal/temp/sweep", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const currentNow = now();
+    const swept = pruneExpired(state, currentNow);
+    res.json({
+      swept,
+      deletionAuditCount: state.deletionAudit.length,
+      at: currentNow.toISOString()
+    });
+  });
+
+  app.get("/api/internal/deletion-audit", (req, res) => {
+    if (!requireWorkerAuth(req, res)) {
+      return;
+    }
+
+    const limitRaw = Number(req.query.limit || 20);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 20;
+    const items = state.deletionAudit.slice(-limit);
+
+    res.json({
+      count: state.deletionAudit.length,
+      items
+    });
+  });
+
   app.post("/api/cleanup", (req, res) => {
+    const idempotencyKey = String(req.header("idempotency-key") || "").trim();
+    if (!idempotencyKey) {
+      res.status(400).json({
+        error: "IDEMPOTENCY_KEY_REQUIRED",
+        message: "idempotency-key header is required."
+      });
+      return;
+    }
+
+    const keys = normalizeObjectKeys(req.body.objectKeys);
+    const signature = cleanupSignature(keys);
+
+    const existing = state.cleanupIdempotency.get(idempotencyKey);
+    if (existing) {
+      if (existing.requestSignature !== signature) {
+        res.status(409).json({
+          error: "IDEMPOTENCY_KEY_CONFLICT",
+          message: "idempotency-key has already been used with different objectKeys."
+        });
+        return;
+      }
+
+      res.setHeader("x-idempotent-replay", "true");
+      res.status(existing.status).json(existing.response);
+      return;
+    }
+
     const currentNow = now();
     const expiredPurged = pruneExpired(state, currentNow);
-
-    const keys = Array.isArray(req.body.objectKeys) ? req.body.objectKeys.map((key) => String(key)) : [];
     let cleaned = 0;
+    let notFound = 0;
 
     for (const key of keys) {
       if (state.tempUploads.delete(key)) {
         cleaned += 1;
+        addDeletionAudit(state, key, "page_exit", "success", currentNow);
+      } else {
+        notFound += 1;
+        addDeletionAudit(state, key, "page_exit", "not_found", currentNow);
       }
     }
 
-    res.status(202).json({ accepted: true, cleaned, expiredPurged });
+    const response: CleanupResponse = {
+      accepted: true,
+      cleaned,
+      notFound,
+      expiredPurged,
+      idempotencyKey
+    };
+
+    state.cleanupIdempotency.set(idempotencyKey, {
+      requestSignature: signature,
+      status: 202,
+      response,
+      createdAt: currentNow.toISOString()
+    });
+
+    res.status(202).json(response);
   });
 
   return app;
