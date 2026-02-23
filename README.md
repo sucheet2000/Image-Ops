@@ -8,7 +8,7 @@ SEO-first image utility platform for marketplace sellers (Etsy/Amazon/Shopify), 
 
 ## Monorepo Structure
 - `apps/web`: Next.js frontend
-- `services/api`: API service (`uploads/init`, `jobs`, `jobs/:id`, `cleanup`, `quota`)
+- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `webhooks/billing`)
 - `services/mcp-gateway`: constrained MCP gateway (`search` + `execute`)
 - `services/worker`: BullMQ consumer and sharp-based image processing pipeline
 - `packages/core`: shared domain logic (quota rules, tool/job contracts, watermark policy)
@@ -39,6 +39,7 @@ Required variables are listed in `.env.example`.
 
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
+- Billing: `BILLING_PUBLIC_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
@@ -84,6 +85,9 @@ S3_SECRET_KEY=minioadmin \
 S3_ENDPOINT=http://127.0.0.1:9000 \
 S3_FORCE_PATH_STYLE=true \
 REDIS_URL=redis://127.0.0.1:6379 \
+BILLING_PUBLIC_BASE_URL=http://127.0.0.1:3000 \
+BILLING_PROVIDER_SECRET=dev-provider-secret \
+BILLING_WEBHOOK_SECRET=dev-webhook-secret \
 npm run dev -w services/api
 ```
 ```bash

@@ -1,9 +1,13 @@
 import type {
+  BillingCheckoutSession,
+  BillingCheckoutStatus,
+  BillingWebhookEvent,
   CleanupIdempotencyRecord,
   DeletionAuditRecord,
   ImageJobRecord,
   JobStatus,
-  QuotaWindow
+  QuotaWindow,
+  SubjectProfile
 } from "@image-ops/core";
 import type { ApiConfig } from "../config";
 import IORedis from "ioredis";
@@ -11,14 +15,24 @@ import { Pool } from "pg";
 
 const JOB_KEY_PREFIX = "imageops:job:";
 const QUOTA_KEY_PREFIX = "imageops:quota:";
+const SUBJECT_PROFILE_KEY_PREFIX = "imageops:subject-profile:";
+const BILLING_CHECKOUT_KEY_PREFIX = "imageops:billing-checkout:";
+const BILLING_EVENT_KEY_PREFIX = "imageops:billing-event:";
 const CLEANUP_IDEMPOTENCY_PREFIX = "imageops:cleanup-idempotency:";
 const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
+const BILLING_EVENT_LIST_KEY = "imageops:billing-events";
+
 const POSTGRES_KV_TABLE = "imageops_metadata_kv";
 const POSTGRES_AUDIT_TABLE = "imageops_deletion_audit";
+const POSTGRES_BILLING_EVENT_TABLE = "imageops_billing_events";
 
 export interface JobRepository {
   getQuotaWindow(subjectId: string): Promise<QuotaWindow | null>;
   setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void>;
+
+  getSubjectProfile(subjectId: string): Promise<SubjectProfile | null>;
+  upsertSubjectProfile(profile: SubjectProfile): Promise<void>;
+
   createJob(job: ImageJobRecord): Promise<void>;
   getJob(id: string): Promise<ImageJobRecord | null>;
   updateJobStatus(input: {
@@ -30,39 +44,44 @@ export interface JobRepository {
     errorMessage?: string;
     updatedAt: string;
   }): Promise<void>;
+
+  createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void>;
+  getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null>;
+  updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void>;
+
+  getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null>;
+  appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void>;
+  listBillingWebhookEvents(limit: number): Promise<BillingWebhookEvent[]>;
+
   getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null>;
   setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void>;
+
   appendDeletionAudit(record: DeletionAuditRecord): Promise<void>;
   listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]>;
+
   close(): Promise<void>;
 }
 
-/**
- * Builds the namespaced Redis key for a job record.
- *
- * @param id - The job's unique identifier
- * @returns The Redis key for the job (JOB_KEY_PREFIX + `id`)
- */
 function jobKey(id: string): string {
   return `${JOB_KEY_PREFIX}${id}`;
 }
 
-/**
- * Builds the Redis key used to store a subject's quota window.
- *
- * @param subjectId - The subject identifier to include in the key
- * @returns The namespaced Redis key for the subject's quota (e.g. `imageops:quota:<subjectId>`)
- */
 function quotaKey(subjectId: string): string {
   return `${QUOTA_KEY_PREFIX}${subjectId}`;
 }
 
-/**
- * Build the Redis key used to store a cleanup idempotency record for the given identifier.
- *
- * @param key - The idempotency identifier to namespace
- * @returns The Redis key string (prefixed for cleanup idempotency)
- */
+function subjectProfileKey(subjectId: string): string {
+  return `${SUBJECT_PROFILE_KEY_PREFIX}${subjectId}`;
+}
+
+function billingCheckoutKey(id: string): string {
+  return `${BILLING_CHECKOUT_KEY_PREFIX}${id}`;
+}
+
+function billingEventKey(providerEventId: string): string {
+  return `${BILLING_EVENT_KEY_PREFIX}${providerEventId}`;
+}
+
 function idempotencyKey(key: string): string {
   return `${CLEANUP_IDEMPOTENCY_PREFIX}${key}`;
 }
@@ -85,6 +104,18 @@ export class RedisJobRepository implements JobRepository {
 
   async setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void> {
     await this.redis.set(quotaKey(subjectId), JSON.stringify(window));
+  }
+
+  async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
+    const raw = await this.redis.get(subjectProfileKey(subjectId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as SubjectProfile;
+  }
+
+  async upsertSubjectProfile(profile: SubjectProfile): Promise<void> {
+    await this.redis.set(subjectProfileKey(profile.subjectId), JSON.stringify(profile));
   }
 
   async createJob(job: ImageJobRecord): Promise<void> {
@@ -116,14 +147,76 @@ export class RedisJobRepository implements JobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      outputObjectKey: input.outputObjectKey,
-      outputMime: input.outputMime,
-      errorCode: input.errorCode,
-      errorMessage: input.errorMessage,
       updatedAt: input.updatedAt
     };
 
+    if (input.outputObjectKey !== undefined) {
+      updated.outputObjectKey = input.outputObjectKey;
+    }
+    if (input.outputMime !== undefined) {
+      updated.outputMime = input.outputMime;
+    }
+    if (input.errorCode !== undefined) {
+      updated.errorCode = input.errorCode;
+    }
+    if (input.errorMessage !== undefined) {
+      updated.errorMessage = input.errorMessage;
+    }
+
     await this.redis.set(jobKey(input.id), JSON.stringify(updated));
+  }
+
+  async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
+    await this.redis.set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds);
+  }
+
+  async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
+    const raw = await this.redis.get(billingCheckoutKey(id));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as BillingCheckoutSession;
+  }
+
+  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+    const existing = await this.getBillingCheckoutSession(id);
+    if (!existing) {
+      return;
+    }
+
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    await this.redis.set(
+      billingCheckoutKey(id),
+      JSON.stringify({
+        ...existing,
+        status,
+        updatedAt
+      }),
+      "EX",
+      ttlSeconds
+    );
+  }
+
+  async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
+    const raw = await this.redis.get(billingEventKey(providerEventId));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as BillingWebhookEvent;
+  }
+
+  async appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void> {
+    const inserted = await this.redis.set(billingEventKey(event.providerEventId), JSON.stringify(event), "NX");
+    if (inserted === null) {
+      return;
+    }
+
+    await this.redis.rpush(BILLING_EVENT_LIST_KEY, JSON.stringify(event));
+  }
+
+  async listBillingWebhookEvents(limit: number): Promise<BillingWebhookEvent[]> {
+    const rows = await this.redis.lrange(BILLING_EVENT_LIST_KEY, Math.max(-limit, -1000), -1);
+    return rows.map((value) => JSON.parse(value) as BillingWebhookEvent);
   }
 
   async getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null> {
@@ -193,8 +286,19 @@ export class PostgresJobRepository implements JobRepository {
       );
     `);
     await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${POSTGRES_BILLING_EVENT_TABLE} (
+        provider_event_id TEXT PRIMARY KEY,
+        payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await this.pool.query(`
       CREATE INDEX IF NOT EXISTS imageops_deletion_audit_created_idx
       ON ${POSTGRES_AUDIT_TABLE} (created_at DESC);
+    `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS imageops_billing_events_created_idx
+      ON ${POSTGRES_BILLING_EVENT_TABLE} (created_at DESC);
     `);
   }
 
@@ -239,6 +343,14 @@ export class PostgresJobRepository implements JobRepository {
     await this.setStoredValue(quotaKey(subjectId), window);
   }
 
+  async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
+    return this.getStoredValue<SubjectProfile>(subjectProfileKey(subjectId));
+  }
+
+  async upsertSubjectProfile(profile: SubjectProfile): Promise<void> {
+    await this.setStoredValue(subjectProfileKey(profile.subjectId), profile);
+  }
+
   async createJob(job: ImageJobRecord): Promise<void> {
     await this.setStoredValue(jobKey(job.id), job);
   }
@@ -264,13 +376,87 @@ export class PostgresJobRepository implements JobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      outputObjectKey: input.outputObjectKey,
-      outputMime: input.outputMime,
-      errorCode: input.errorCode,
-      errorMessage: input.errorMessage,
       updatedAt: input.updatedAt
     };
+
+    if (input.outputObjectKey !== undefined) {
+      updated.outputObjectKey = input.outputObjectKey;
+    }
+    if (input.outputMime !== undefined) {
+      updated.outputMime = input.outputMime;
+    }
+    if (input.errorCode !== undefined) {
+      updated.errorCode = input.errorCode;
+    }
+    if (input.errorMessage !== undefined) {
+      updated.errorMessage = input.errorMessage;
+    }
+
     await this.setStoredValue(jobKey(input.id), updated);
+  }
+
+  async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
+    await this.setStoredValue(billingCheckoutKey(session.id), session, ttlSeconds);
+  }
+
+  async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
+    return this.getStoredValue<BillingCheckoutSession>(billingCheckoutKey(id));
+  }
+
+  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+    const existing = await this.getBillingCheckoutSession(id);
+    if (!existing) {
+      return;
+    }
+
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    await this.setStoredValue(
+      billingCheckoutKey(id),
+      {
+        ...existing,
+        status,
+        updatedAt
+      },
+      ttlSeconds
+    );
+  }
+
+  async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
+    await this.initialize();
+    const result = await this.pool.query<{ payload: BillingWebhookEvent }>(
+      `SELECT payload FROM ${POSTGRES_BILLING_EVENT_TABLE} WHERE provider_event_id = $1`,
+      [providerEventId]
+    );
+    if (result.rowCount === 0) {
+      return null;
+    }
+    return result.rows[0].payload;
+  }
+
+  async appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+        INSERT INTO ${POSTGRES_BILLING_EVENT_TABLE} (provider_event_id, payload)
+        VALUES ($1, $2::jsonb)
+        ON CONFLICT (provider_event_id) DO NOTHING
+      `,
+      [event.providerEventId, JSON.stringify(event)]
+    );
+  }
+
+  async listBillingWebhookEvents(limit: number): Promise<BillingWebhookEvent[]> {
+    await this.initialize();
+    const result = await this.pool.query<{ payload: BillingWebhookEvent }>(
+      `
+        SELECT payload
+        FROM ${POSTGRES_BILLING_EVENT_TABLE}
+        ORDER BY created_at DESC
+        LIMIT $1
+      `,
+      [Math.max(limit, 0)]
+    );
+    return result.rows.map((row) => row.payload).reverse();
   }
 
   async getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null> {
@@ -314,7 +500,10 @@ export class PostgresJobRepository implements JobRepository {
 
 export class InMemoryJobRepository implements JobRepository {
   private readonly quotas = new Map<string, QuotaWindow>();
+  private readonly profiles = new Map<string, SubjectProfile>();
   private readonly jobs = new Map<string, ImageJobRecord>();
+  private readonly checkouts = new Map<string, BillingCheckoutSession>();
+  private readonly billingEvents = new Map<string, BillingWebhookEvent>();
   private readonly idempotency = new Map<string, CleanupIdempotencyRecord>();
   private readonly deletionAudit: DeletionAuditRecord[] = [];
 
@@ -324,6 +513,14 @@ export class InMemoryJobRepository implements JobRepository {
 
   async setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void> {
     this.quotas.set(subjectId, window);
+  }
+
+  async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
+    return this.profiles.get(subjectId) || null;
+  }
+
+  async upsertSubjectProfile(profile: SubjectProfile): Promise<void> {
+    this.profiles.set(profile.subjectId, profile);
   }
 
   async createJob(job: ImageJobRecord): Promise<void> {
@@ -348,15 +545,63 @@ export class InMemoryJobRepository implements JobRepository {
       return;
     }
 
-    this.jobs.set(input.id, {
+    const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      outputObjectKey: input.outputObjectKey,
-      outputMime: input.outputMime,
-      errorCode: input.errorCode,
-      errorMessage: input.errorMessage,
       updatedAt: input.updatedAt
+    };
+
+    if (input.outputObjectKey !== undefined) {
+      updated.outputObjectKey = input.outputObjectKey;
+    }
+    if (input.outputMime !== undefined) {
+      updated.outputMime = input.outputMime;
+    }
+    if (input.errorCode !== undefined) {
+      updated.errorCode = input.errorCode;
+    }
+    if (input.errorMessage !== undefined) {
+      updated.errorMessage = input.errorMessage;
+    }
+
+    this.jobs.set(input.id, updated);
+  }
+
+  async createBillingCheckoutSession(session: BillingCheckoutSession, _ttlSeconds: number): Promise<void> {
+    this.checkouts.set(session.id, session);
+  }
+
+  async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
+    return this.checkouts.get(id) || null;
+  }
+
+  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+    const existing = this.checkouts.get(id);
+    if (!existing) {
+      return;
+    }
+
+    this.checkouts.set(id, {
+      ...existing,
+      status,
+      updatedAt
     });
+  }
+
+  async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
+    return this.billingEvents.get(providerEventId) || null;
+  }
+
+  async appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void> {
+    if (this.billingEvents.has(event.providerEventId)) {
+      return;
+    }
+    this.billingEvents.set(event.providerEventId, event);
+  }
+
+  async listBillingWebhookEvents(limit: number): Promise<BillingWebhookEvent[]> {
+    const items = Array.from(this.billingEvents.values());
+    return items.slice(-limit);
   }
 
   async getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null> {

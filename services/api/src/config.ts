@@ -11,10 +11,14 @@ const envSchema = z.object({
   SIGNED_DOWNLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   TEMP_OBJECT_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   CLEANUP_IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(24 * 60 * 60),
+  BILLING_CHECKOUT_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   JOB_QUEUE_NAME: z.string().default("image-ops-jobs"),
   JOB_REPO_DRIVER: z.enum(JOB_REPO_DRIVERS).default("redis"),
   POSTGRES_URL: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
+  BILLING_PUBLIC_BASE_URL: z.string().url().default("http://localhost:3000"),
+  BILLING_PROVIDER_SECRET: z.string().min(1, "BILLING_PROVIDER_SECRET is required").default("dev-provider-secret"),
+  BILLING_WEBHOOK_SECRET: z.string().min(1, "BILLING_WEBHOOK_SECRET is required").default("dev-webhook-secret"),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
   S3_ENDPOINT: z.string().optional(),
@@ -42,10 +46,14 @@ export type ApiConfig = {
   signedDownloadTtlSeconds: number;
   tempObjectTtlMinutes: number;
   cleanupIdempotencyTtlSeconds: number;
+  billingCheckoutTtlSeconds: number;
   queueName: string;
   jobRepoDriver: JobRepoDriver;
   postgresUrl?: string;
   redisUrl: string;
+  billingPublicBaseUrl: string;
+  billingProviderSecret: string;
+  billingWebhookSecret: string;
   s3Region: string;
   s3Bucket: string;
   s3Endpoint?: string;
@@ -71,10 +79,14 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     signedDownloadTtlSeconds: parsed.SIGNED_DOWNLOAD_TTL_SECONDS,
     tempObjectTtlMinutes: parsed.TEMP_OBJECT_TTL_MINUTES,
     cleanupIdempotencyTtlSeconds: parsed.CLEANUP_IDEMPOTENCY_TTL_SECONDS,
+    billingCheckoutTtlSeconds: parsed.BILLING_CHECKOUT_TTL_SECONDS,
     queueName: parsed.JOB_QUEUE_NAME,
     jobRepoDriver: parsed.JOB_REPO_DRIVER,
     postgresUrl: parsed.POSTGRES_URL,
     redisUrl: parsed.REDIS_URL,
+    billingPublicBaseUrl: parsed.BILLING_PUBLIC_BASE_URL,
+    billingProviderSecret: parsed.BILLING_PROVIDER_SECRET,
+    billingWebhookSecret: parsed.BILLING_WEBHOOK_SECRET,
     s3Region: parsed.S3_REGION,
     s3Bucket: parsed.S3_BUCKET,
     s3Endpoint: parsed.S3_ENDPOINT,

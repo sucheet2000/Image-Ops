@@ -3,10 +3,13 @@ import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { loadApiConfig, type ApiConfig } from "./config";
 import { logError, logInfo } from "./lib/log";
+import { registerAuthRoutes } from "./routes/auth";
+import { registerBillingRoutes } from "./routes/billing";
 import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
+import { HmacBillingService, type BillingService } from "./services/billing";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
 import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
@@ -16,6 +19,7 @@ export type ApiDependencies = {
   storage: ObjectStorageService;
   queue: JobQueueService;
   jobRepo: JobRepository;
+  billing: BillingService;
   now: () => Date;
 };
 
@@ -55,6 +59,11 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
     queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
     jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
+    billing: incomingDeps?.billing || new HmacBillingService({
+      publicBaseUrl: config.billingPublicBaseUrl,
+      providerSecret: config.billingProviderSecret,
+      webhookSecret: config.billingWebhookSecret
+    }),
     now: incomingDeps?.now || (() => new Date())
   };
 
@@ -67,6 +76,8 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   });
 
   registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerAuthRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
+  registerBillingRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, billing: deps.billing, now: deps.now });
   registerJobsRoutes(app, {
     config: deps.config,
     storage: deps.storage,

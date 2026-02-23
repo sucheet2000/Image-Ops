@@ -119,6 +119,42 @@ export type UploadInitResponse = {
   expiresAt: string;
 };
 
+export type SubjectProfile = {
+  subjectId: string;
+  plan: ImagePlan;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const BILLING_CHECKOUT_STATUSES = ["created", "paid", "canceled", "expired"] as const;
+export type BillingCheckoutStatus = (typeof BILLING_CHECKOUT_STATUSES)[number];
+
+export type BillingCheckoutSession = {
+  id: string;
+  subjectId: string;
+  plan: Exclude<ImagePlan, "free">;
+  status: BillingCheckoutStatus;
+  checkoutUrl: string;
+  successUrl: string;
+  cancelUrl: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const BILLING_WEBHOOK_STATUSES = ["paid", "canceled", "expired"] as const;
+export type BillingWebhookStatus = (typeof BILLING_WEBHOOK_STATUSES)[number];
+
+export type BillingWebhookEvent = {
+  id: string;
+  providerEventId: string;
+  checkoutSessionId: string;
+  subjectId: string;
+  plan: Exclude<ImagePlan, "free">;
+  status: BillingWebhookStatus;
+  createdAt: string;
+};
+
 /**
  * Advance a Date by the specified number of hours.
  *
@@ -373,6 +409,16 @@ export function isTool(value: string): value is ImageTool {
  */
 export function isPlan(value: string): value is ImagePlan {
   return (IMAGE_PLANS as readonly string[]).includes(value);
+}
+
+/**
+ * Returns true when the plan is a paid tier.
+ *
+ * @param plan - Image plan value
+ * @returns True for `pro` or `team`, false for `free`
+ */
+export function isPaidPlan(plan: ImagePlan): plan is Exclude<ImagePlan, "free"> {
+  return plan === "pro" || plan === "team";
 }
 
 /**
