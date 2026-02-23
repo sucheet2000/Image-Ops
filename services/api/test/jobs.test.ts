@@ -106,4 +106,36 @@ describe("POST /api/jobs", () => {
     const payload = await blocked.json();
     expect(payload.error).toBe("FREE_PLAN_LIMIT_EXCEEDED");
   });
+
+  it("uses stored subject plan when plan is omitted", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    await services.jobRepo.upsertSubjectProfile({
+      subjectId: "seller_paid",
+      plan: "pro",
+      createdAt: "2026-02-23T00:00:00.000Z",
+      updatedAt: "2026-02-23T00:00:00.000Z"
+    });
+
+    services.storage.setObject("tmp/seller_paid/input/2026/02/23/background-remove/input.png", "image/png");
+
+    const response = await fetch(`${server.baseUrl}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_paid",
+        tool: "background-remove",
+        inputObjectKey: "tmp/seller_paid/input/2026/02/23/background-remove/input.png",
+        options: { outputFormat: "png" }
+      })
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    expect(payload.watermarkRequired).toBe(false);
+
+    expect(services.queue.items[0]?.plan).toBe("pro");
+  });
 });

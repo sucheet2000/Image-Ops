@@ -20,7 +20,12 @@ export type DeleteObjectsResult = {
 };
 
 export interface ObjectStorageService {
-  createPresignedUploadUrl(input: { objectKey: string; contentType: string; expiresInSeconds: number }): Promise<string>;
+  createPresignedUploadUrl(input: {
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+    maxSizeBytes: number;
+  }): Promise<string>;
   createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
   deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult>;
@@ -30,6 +35,7 @@ export interface ObjectStorageService {
 export class S3ObjectStorageService implements ObjectStorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly allowedPrefix = "tmp/";
 
   constructor(config: ApiConfig) {
     this.bucket = config.s3Bucket;
@@ -44,11 +50,16 @@ export class S3ObjectStorageService implements ObjectStorageService {
     });
   }
 
-  async createPresignedUploadUrl(input: { objectKey: string; contentType: string; expiresInSeconds: number }): Promise<string> {
+  async createPresignedUploadUrl(input: {
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+    maxSizeBytes: number;
+  }): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.objectKey,
-      ContentType: input.contentType
+      ContentType: input.contentType,
     });
 
     return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
@@ -78,16 +89,25 @@ export class S3ObjectStorageService implements ObjectStorageService {
         contentLength: response.ContentLength
       };
     } catch (error) {
-      if (error instanceof Error && /not.?found/i.test(error.message)) {
+      const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
+      if (
+        (error instanceof Error && error.name === "NotFound") ||
+        statusCode === 404
+      ) {
         return { exists: false };
       }
-      return { exists: false };
+      throw error;
     }
   }
 
   async deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult> {
     if (objectKeys.length === 0) {
       return { deleted: [], notFound: [] };
+    }
+
+    const invalid = objectKeys.filter((key) => !key.startsWith(this.allowedPrefix));
+    if (invalid.length > 0) {
+      throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
     }
 
     const response = await this.client.send(
@@ -114,9 +134,15 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
 export class InMemoryObjectStorageService implements ObjectStorageService {
   private readonly objects = new Map<string, { contentType: string; bytes: Buffer }>();
+  private readonly allowedPrefix = "tmp/";
 
-  async createPresignedUploadUrl(input: { objectKey: string; contentType: string; expiresInSeconds: number }): Promise<string> {
-    return `https://memory.storage/upload/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}&contentType=${encodeURIComponent(input.contentType)}`;
+  async createPresignedUploadUrl(input: {
+    objectKey: string;
+    contentType: string;
+    expiresInSeconds: number;
+    maxSizeBytes: number;
+  }): Promise<string> {
+    return `https://memory.storage/upload/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}&contentType=${encodeURIComponent(input.contentType)}&maxSizeBytes=${input.maxSizeBytes}`;
   }
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
@@ -141,6 +167,9 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
     const notFound: string[] = [];
 
     for (const objectKey of objectKeys) {
+      if (!objectKey.startsWith(this.allowedPrefix)) {
+        throw new Error(`Invalid object key prefix for deletion: ${objectKey}`);
+      }
       if (this.objects.delete(objectKey)) {
         deleted.push(objectKey);
       } else {

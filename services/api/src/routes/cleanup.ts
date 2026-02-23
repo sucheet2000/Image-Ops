@@ -9,7 +9,7 @@ import type { JobRepository } from "../services/job-repo";
 import type { ObjectStorageService } from "../services/storage";
 
 const cleanupSchema = z.object({
-  objectKeys: z.array(z.string().min(1)).min(1).max(100),
+  objectKeys: z.array(z.string().min(1).refine((value) => value.startsWith("tmp/"), "Object key must start with tmp/")).min(1).max(100),
   reason: z.enum(["delivered", "page_exit", "ttl_expiry", "manual"]).default("page_exit")
 });
 
@@ -51,7 +51,11 @@ export function registerCleanupRoutes(
       return;
     }
 
-    const objectKeys = normalizeObjectKeys(parsed.data.objectKeys);
+    const objectKeys = normalizeObjectKeys(parsed.data.objectKeys).filter((value) => value.startsWith("tmp/"));
+    if (objectKeys.length === 0) {
+      res.status(400).json({ error: "INVALID_CLEANUP_REQUEST", message: "Cleanup keys must be under tmp/ prefix." });
+      return;
+    }
     const signature = cleanupRequestSignature(objectKeys);
 
     const existing = await deps.jobRepo.getCleanupIdempotency(idempotencyKey);
