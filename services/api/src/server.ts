@@ -7,7 +7,7 @@ import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
-import { RedisJobRepository, type JobRepository } from "./services/job-repo";
+import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
 import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
 
@@ -54,7 +54,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     config,
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
     queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
-    jobRepo: incomingDeps?.jobRepo || new RedisJobRepository({ redisUrl: config.redisUrl }),
+    jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
     now: incomingDeps?.now || (() => new Date())
   };
 

@@ -8,8 +8,8 @@ export interface JobQueueService {
 }
 
 export class BullMqJobQueueService implements JobQueueService {
-  private readonly queue: Queue<ImageJobQueuePayload>;
   private readonly connection: IORedis;
+  private readonly queue: Queue<ImageJobQueuePayload>;
   private closePromise: Promise<void> | null = null;
 
   constructor(input: { queueName: string; redisUrl: string }) {
@@ -38,14 +38,12 @@ export class BullMqJobQueueService implements JobQueueService {
     this.closePromise = (async () => {
       try {
         await this.queue.close();
-      } catch {
-        // Continue closing connection even if queue close fails.
-      }
-
-      try {
-        await this.connection.quit();
-      } catch {
-        this.connection.disconnect(false);
+      } finally {
+        try {
+          await this.connection.quit();
+        } catch {
+          this.connection.disconnect(false);
+        }
       }
     })();
 
@@ -60,5 +58,7 @@ export class InMemoryJobQueueService implements JobQueueService {
     this.items.push(payload);
   }
 
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    return Promise.resolve();
+  }
 }
