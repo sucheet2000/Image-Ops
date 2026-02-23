@@ -151,7 +151,6 @@ export class RedisJobRepository implements JobRepository {
     if (this.closePromise) {
       return this.closePromise;
     }
-
     this.closePromise = (async () => {
       try {
         await this.redis.quit();
@@ -159,8 +158,157 @@ export class RedisJobRepository implements JobRepository {
         this.redis.disconnect(false);
       }
     })();
-
     return this.closePromise;
+  }
+}
+
+export class PostgresJobRepository implements JobRepository {
+  private readonly pool: Pool;
+  private initPromise: Promise<void> | null = null;
+
+  constructor(input: { connectionString: string }) {
+    this.pool = new Pool({ connectionString: input.connectionString });
+  }
+
+  private async initialize(): Promise<void> {
+    if (!this.initPromise) {
+      this.initPromise = this.ensureSchema();
+    }
+    await this.initPromise;
+  }
+
+  private async ensureSchema(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${POSTGRES_KV_TABLE} (
+        key TEXT PRIMARY KEY,
+        value JSONB NOT NULL,
+        expires_at TIMESTAMPTZ NULL
+      );
+    `);
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS ${POSTGRES_AUDIT_TABLE} (
+        id TEXT PRIMARY KEY,
+        payload JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS imageops_deletion_audit_created_idx
+      ON ${POSTGRES_AUDIT_TABLE} (created_at DESC);
+    `);
+  }
+
+  private async getStoredValue<T>(key: string): Promise<T | null> {
+    await this.initialize();
+    const result = await this.pool.query<{ value: T; expires_at: Date | null }>(
+      `SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1`,
+      [key]
+    );
+    if (result.rowCount === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    if (row.expires_at && row.expires_at.getTime() <= Date.now()) {
+      await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [key]);
+      return null;
+    }
+
+    return row.value;
+  }
+
+  private async setStoredValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
+    await this.initialize();
+    const expiresAt = ttlSeconds ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
+    await this.pool.query(
+      `
+        INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
+        VALUES ($1, $2::jsonb, $3::timestamptz)
+        ON CONFLICT (key)
+        DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+      `,
+      [key, JSON.stringify(value), expiresAt]
+    );
+  }
+
+  async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
+    return this.getStoredValue<QuotaWindow>(quotaKey(subjectId));
+  }
+
+  async setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void> {
+    await this.setStoredValue(quotaKey(subjectId), window);
+  }
+
+  async createJob(job: ImageJobRecord): Promise<void> {
+    await this.setStoredValue(jobKey(job.id), job);
+  }
+
+  async getJob(id: string): Promise<ImageJobRecord | null> {
+    return this.getStoredValue<ImageJobRecord>(jobKey(id));
+  }
+
+  async updateJobStatus(input: {
+    id: string;
+    status: JobStatus;
+    outputObjectKey?: string;
+    outputMime?: string;
+    errorCode?: string;
+    errorMessage?: string;
+    updatedAt: string;
+  }): Promise<void> {
+    const existing = await this.getJob(input.id);
+    if (!existing) {
+      return;
+    }
+
+    const updated: ImageJobRecord = {
+      ...existing,
+      status: input.status,
+      outputObjectKey: input.outputObjectKey,
+      outputMime: input.outputMime,
+      errorCode: input.errorCode,
+      errorMessage: input.errorMessage,
+      updatedAt: input.updatedAt
+    };
+    await this.setStoredValue(jobKey(input.id), updated);
+  }
+
+  async getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null> {
+    return this.getStoredValue<CleanupIdempotencyRecord>(idempotencyKey(key));
+  }
+
+  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void> {
+    await this.setStoredValue(idempotencyKey(key), record, ttlSeconds);
+  }
+
+  async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
+    await this.initialize();
+    await this.pool.query(
+      `
+        INSERT INTO ${POSTGRES_AUDIT_TABLE} (id, payload)
+        VALUES ($1, $2::jsonb)
+        ON CONFLICT (id) DO NOTHING
+      `,
+      [record.id, JSON.stringify(record)]
+    );
+  }
+
+  async listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]> {
+    await this.initialize();
+    const result = await this.pool.query<{ payload: DeletionAuditRecord }>(
+      `
+        SELECT payload
+        FROM ${POSTGRES_AUDIT_TABLE}
+        ORDER BY created_at DESC
+        LIMIT $1
+      `,
+      [Math.max(limit, 0)]
+    );
+    return result.rows.map((row) => row.payload).reverse();
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
   }
 }
 
@@ -228,4 +376,15 @@ export class InMemoryJobRepository implements JobRepository {
   }
 
   async close(): Promise<void> {}
+}
+
+export function createJobRepository(config: ApiConfig): JobRepository {
+  if (config.jobRepoDriver === "postgres") {
+    if (!config.postgresUrl) {
+      throw new Error("POSTGRES_URL is required when JOB_REPO_DRIVER=postgres");
+    }
+    return new PostgresJobRepository({ connectionString: config.postgresUrl });
+  }
+
+  return new RedisJobRepository({ redisUrl: config.redisUrl });
 }
