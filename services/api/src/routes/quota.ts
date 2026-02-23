@@ -8,6 +8,12 @@ const quotaParamSchema = z.object({
   subjectId: z.string().min(1)
 });
 
+/**
+ * Create a new quota window starting at the provided time with zero usage.
+ *
+ * @param now - The Date used to set the window's start time
+ * @returns A QuotaWindow with `windowStartAt` set to `now.toISOString()` and `usedCount` set to 0
+ */
 function defaultQuota(now: Date): QuotaWindow {
   return {
     windowStartAt: now.toISOString(),
@@ -15,6 +21,14 @@ function defaultQuota(now: Date): QuotaWindow {
   };
 }
 
+/**
+ * Registers the GET /api/quota/:subjectId route that returns the subject's quota window and usage.
+ *
+ * @param router - Express router on which the quota route will be mounted.
+ * @param deps - Dependency bag.
+ * @param deps.jobRepo - Repository used to read and persist quota windows.
+ * @param deps.now - Function returning the current Date; used to compute and roll quota windows.
+ */
 export function registerQuotaRoutes(router: Router, deps: { jobRepo: JobRepository; now: () => Date }): void {
   router.get("/api/quota/:subjectId", asyncHandler(async (req, res) => {
     const parsed = quotaParamSchema.safeParse(req.params);

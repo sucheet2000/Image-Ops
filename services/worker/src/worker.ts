@@ -65,6 +65,15 @@ async function markComplete(jobId: string, success: boolean, outputObjectKey?: s
   }
 }
 
+/**
+ * Processes a claimed job: performs the job work, then marks it complete.
+ *
+ * If `job.options.forceFail` is true, the job is marked failed with error code
+ * `"SIMULATED_WORKER_FAILURE"`. Otherwise the job is marked successful and the
+ * processed output key is recorded.
+ *
+ * @param job - The claimed job to process, including its `id`, `options`, and `inputObjectKey`
+ */
 async function processClaimedJob(job: ClaimedJob): Promise<void> {
   // Processing stub: simulate deterministic work and fail only when requested.
   await sleep(250);

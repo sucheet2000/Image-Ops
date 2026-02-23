@@ -39,10 +39,32 @@ const jobIdParamSchema = z.object({
   id: z.string().min(1)
 });
 
+/**
+ * Create a new quota window starting at the provided time with zero used count.
+ *
+ * @param now - The start time for the quota window
+ * @returns A QuotaWindow with `windowStartAt` set to `now.toISOString()` and `usedCount` set to 0
+ */
 function newQuotaWindow(now: Date): QuotaWindow {
   return { windowStartAt: now.toISOString(), usedCount: 0 };
 }
 
+/**
+ * Registers HTTP routes for creating and querying image processing jobs on the provided Express router.
+ *
+ * Exposes:
+ * - POST /api/jobs: validate request, enforce plan quota, verify input object, determine formats/options,
+ *   create a job record, enqueue work, and respond with job metadata and quota info.
+ * - GET /api/jobs/:id: validate job id, return job details and a presigned download URL when the job is done.
+ *
+ * @param router - Express Router to attach the job routes to
+ * @param deps - Dependency bag used by the routes
+ * @param deps.config - API configuration (used for values like signed download TTL)
+ * @param deps.storage - Object storage service for headObject and presigned URL generation
+ * @param deps.queue - Job queue service used to enqueue work
+ * @param deps.jobRepo - Repository for persisting and retrieving job and quota data
+ * @param deps.now - Function returning the current Date (injected for testability)
+ */
 export function registerJobsRoutes(
   router: Router,
   deps: {

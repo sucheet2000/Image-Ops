@@ -39,6 +39,13 @@ export type ApiConfig = {
   s3ForcePathStyle: boolean;
 };
 
+/**
+ * Load and validate environment variables and return a normalized API configuration.
+ *
+ * @param env - Environment mapping to read values from; defaults to `process.env`.
+ * @returns The validated and normalized `ApiConfig` object.
+ * @throws ZodError If environment validation fails (missing or invalid variables).
+ */
 export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   const parsed = envSchema.parse(env);
   return {
