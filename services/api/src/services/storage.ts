@@ -8,6 +8,8 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { ApiConfig } from "../config";
 
+export const TMP_OBJECT_PREFIX = "tmp/";
+
 export type StorageHeadResult = {
   exists: boolean;
   contentType?: string;
@@ -35,7 +37,6 @@ export interface ObjectStorageService {
 export class S3ObjectStorageService implements ObjectStorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
-  private readonly allowedPrefix = "tmp/";
 
   constructor(config: ApiConfig) {
     this.bucket = config.s3Bucket;
@@ -56,10 +57,14 @@ export class S3ObjectStorageService implements ObjectStorageService {
     expiresInSeconds: number;
     maxSizeBytes: number;
   }): Promise<string> {
+    // maxSizeBytes is intentionally not encoded in S3 presigned PUT signatures:
+    // S3 PUT does not support content-length-range policy enforcement. Size is
+    // enforced server-side on follow-up API validation. In-memory storage still
+    // propagates maxSizeBytes in the mock URL for test visibility.
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.objectKey,
-      ContentType: input.contentType,
+      ContentType: input.contentType
     });
 
     return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
@@ -105,7 +110,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       return { deleted: [], notFound: [] };
     }
 
-    const invalid = objectKeys.filter((key) => !key.startsWith(this.allowedPrefix));
+    const invalid = objectKeys.filter((key) => !key.startsWith(TMP_OBJECT_PREFIX));
     if (invalid.length > 0) {
       throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
     }
@@ -134,7 +139,6 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
 export class InMemoryObjectStorageService implements ObjectStorageService {
   private readonly objects = new Map<string, { contentType: string; bytes: Buffer }>();
-  private readonly allowedPrefix = "tmp/";
 
   async createPresignedUploadUrl(input: {
     objectKey: string;
@@ -163,13 +167,15 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
   }
 
   async deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult> {
+    const invalid = objectKeys.filter((key) => !key.startsWith(TMP_OBJECT_PREFIX));
+    if (invalid.length > 0) {
+      throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+    }
+
     const deleted: string[] = [];
     const notFound: string[] = [];
 
     for (const objectKey of objectKeys) {
-      if (!objectKey.startsWith(this.allowedPrefix)) {
-        throw new Error(`Invalid object key prefix for deletion: ${objectKey}`);
-      }
       if (this.objects.delete(objectKey)) {
         deleted.push(objectKey);
       } else {
