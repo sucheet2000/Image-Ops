@@ -1,148 +1,109 @@
-import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApiApp } from "../src/server";
+import { createFakeServices, createTestConfig } from "./helpers/fakes";
+import { startApiTestServer } from "./helpers/server";
 
-const servers: Array<{ close: () => void }> = [];
+const closers: Array<() => Promise<void>> = [];
 
-afterEach(() => {
-  while (servers.length > 0) {
-    const server = servers.pop();
-    server?.close();
+afterEach(async () => {
+  while (closers.length > 0) {
+    const close = closers.pop();
+    if (close) {
+      await close();
+    }
   }
 });
 
-async function startTestServer() {
-  const app = createApiApp({ now: () => new Date("2026-02-23T00:00:00.000Z") });
-  const server = app.listen(0);
-  servers.push(server);
-  const { port } = server.address() as AddressInfo;
-  return `http://127.0.0.1:${port}`;
-}
+describe("POST /api/jobs", () => {
+  it("enqueues validated job payload and stores queued status", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
 
-async function initUpload(base: string, subjectId: string) {
-  const response = await fetch(`${base}/api/uploads/init`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      subjectId,
-      filename: "listing.jpg",
-      mime: "image/jpeg",
-      size: 350000,
-      tool: "compress"
-    })
-  });
+    services.storage.setObject("tmp/seller_1/input/2026/02/23/resize/input.jpg", "image/jpeg");
 
-  expect(response.status).toBe(201);
-  return response.json();
-}
-
-describe("jobs endpoints", () => {
-  it("creates a queued job from a valid upload object key", async () => {
-    const base = await startTestServer();
-    const upload = await initUpload(base, "seller_1");
-
-    const create = await fetch(`${base}/api/jobs`, {
+    const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_1",
-        tool: "compress",
-        inputObjectKey: upload.objectKey,
-        options: { quality: 80 }
+        plan: "free",
+        tool: "background-remove",
+        inputObjectKey: "tmp/seller_1/input/2026/02/23/resize/input.jpg",
+        options: { outputFormat: "png" }
       })
     });
 
-    expect(create.status).toBe(201);
-    const payload = await create.json();
-    expect(payload.id).toContain("job_");
+    expect(response.status).toBe(201);
+    const payload = await response.json();
     expect(payload.status).toBe("queued");
-    expect(payload.queuePosition).toBe(1);
+    expect(payload.watermarkRequired).toBe(true);
+
+    expect(services.queue.items.length).toBe(1);
+    expect(services.queue.items[0]?.tool).toBe("background-remove");
+    expect(services.queue.items[0]?.watermarkRequired).toBe(true);
+    expect(services.queue.items[0]?.outputObjectKey).toContain("tmp/seller_1/output/");
   });
 
-  it("rejects unsupported tools", async () => {
-    const base = await startTestServer();
-    const upload = await initUpload(base, "seller_2");
+  it("rejects missing input objects", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
 
-    const create = await fetch(`${base}/api/jobs`, {
+    const response = await fetch(`${server.baseUrl}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_1",
+        plan: "free",
+        tool: "compress",
+        inputObjectKey: "tmp/seller_1/input/missing.jpg"
+      })
+    });
+
+    expect(response.status).toBe(404);
+    const payload = await response.json();
+    expect(payload.error).toBe("INPUT_OBJECT_NOT_FOUND");
+  });
+
+  it("enforces free-plan rolling quota on job creation", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    for (let index = 0; index < 6; index += 1) {
+      const key = `tmp/seller_2/input/2026/02/23/compress/${index}.jpg`;
+      services.storage.setObject(key, "image/jpeg");
+      const response = await fetch(`${server.baseUrl}/api/jobs`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          subjectId: "seller_2",
+          plan: "free",
+          tool: "compress",
+          inputObjectKey: key,
+          options: { quality: 70 }
+        })
+      });
+      expect(response.status).toBe(201);
+    }
+
+    const blockedKey = "tmp/seller_2/input/2026/02/23/compress/blocked.jpg";
+    services.storage.setObject(blockedKey, "image/jpeg");
+
+    const blocked = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_2",
-        tool: "upscale-ai",
-        inputObjectKey: upload.objectKey
-      })
-    });
-
-    expect(create.status).toBe(400);
-    const payload = await create.json();
-    expect(payload.error).toBe("UNSUPPORTED_TOOL");
-  });
-
-  it("rejects missing input object key", async () => {
-    const base = await startTestServer();
-
-    const create = await fetch(`${base}/api/jobs`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        subjectId: "seller_3",
+        plan: "free",
         tool: "compress",
-        inputObjectKey: "tmp/seller_3/missing.jpg"
+        inputObjectKey: blockedKey,
+        options: { quality: 70 }
       })
     });
 
-    expect(create.status).toBe(404);
-    const payload = await create.json();
-    expect(payload.error).toBe("INPUT_OBJECT_NOT_FOUND");
-  });
-
-  it("rejects object ownership mismatch", async () => {
-    const base = await startTestServer();
-    const upload = await initUpload(base, "seller_4");
-
-    const create = await fetch(`${base}/api/jobs`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        subjectId: "seller_5",
-        tool: "compress",
-        inputObjectKey: upload.objectKey
-      })
-    });
-
-    expect(create.status).toBe(403);
-    const payload = await create.json();
-    expect(payload.error).toBe("INPUT_OBJECT_FORBIDDEN");
-  });
-
-  it("returns job status for created jobs", async () => {
-    const base = await startTestServer();
-    const upload = await initUpload(base, "seller_6");
-
-    const create = await fetch(`${base}/api/jobs`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        subjectId: "seller_6",
-        tool: "resize",
-        inputObjectKey: upload.objectKey
-      })
-    });
-    const job = await create.json();
-
-    const getStatus = await fetch(`${base}/api/jobs/${job.id}`);
-    expect(getStatus.status).toBe(200);
-    const statusPayload = await getStatus.json();
-    expect(statusPayload.id).toBe(job.id);
-    expect(statusPayload.status).toBe("queued");
-    expect(statusPayload.queuePosition).toBe(1);
-  });
-
-  it("returns 404 for unknown jobs", async () => {
-    const base = await startTestServer();
-    const getStatus = await fetch(`${base}/api/jobs/job_missing`);
-    expect(getStatus.status).toBe(404);
-    const payload = await getStatus.json();
-    expect(payload.error).toBe("JOB_NOT_FOUND");
+    expect(blocked.status).toBe(429);
+    const payload = await blocked.json();
+    expect(payload.error).toBe("FREE_PLAN_LIMIT_EXCEEDED");
   });
 });

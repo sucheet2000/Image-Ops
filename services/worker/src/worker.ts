@@ -74,6 +74,7 @@ async function processClaimedJob(job: ClaimedJob): Promise<void> {
     await markComplete(job.id, false, undefined, "SIMULATED_WORKER_FAILURE");
     return;
   }
+);
 
   await markComplete(job.id, true, outputKeyFor(job));
 }
@@ -109,17 +110,18 @@ async function pollLoop(): Promise<void> {
         continue;
       }
 
-      // eslint-disable-next-line no-console
-      console.log(`Claimed job ${job.id} (${job.tool})`);
-      await processClaimedJob(job);
-      // eslint-disable-next-line no-console
-      console.log(`Completed job ${job.id}`);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error("Worker loop error", error);
-      await sleep(POLL_MS);
-    }
-  }
-}
+worker.on("completed", (job) => {
+  // eslint-disable-next-line no-console
+  console.log(JSON.stringify({ event: "worker.completed", jobId: job.id }));
+});
 
-void pollLoop();
+worker.on("failed", (job, error) => {
+  // eslint-disable-next-line no-console
+  console.error(
+    JSON.stringify({
+      event: "worker.failed",
+      jobId: job?.id,
+      message: error.message
+    })
+  );
+});

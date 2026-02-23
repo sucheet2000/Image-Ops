@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import cors from "cors";
 import express from "express";
 import { applyQuota, FREE_PLAN_LIMIT, FREE_PLAN_WINDOW_HOURS, type QuotaWindow } from "@image-ops/core";
@@ -81,8 +80,10 @@ type CreateApiAppOptions = {
   state?: ApiState;
 };
 
-function workerToken(): string {
-  return process.env.WORKER_INTERNAL_TOKEN || "dev-worker-token";
+function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
+  const message = error instanceof Error ? error.message : "Internal server error";
+  logError("api.error", { message });
+  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message });
 }
 
 function createInitialState(): ApiState {
@@ -94,18 +95,6 @@ function createInitialState(): ApiState {
     deletionAudit: [],
     cleanupIdempotency: new Map<string, IdempotencyRecord>()
   };
-}
-
-function sanitizeSubjectId(value: string): string {
-  const sanitized = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-  return sanitized || "anonymous";
-}
-
-function fileExtension(filename: string): string {
-  const normalized = filename.trim();
-  if (!normalized.includes(".")) {
-    return "";
-  }
 
   return normalized.split(".").pop()?.toLowerCase() || "";
 }
@@ -183,9 +172,8 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
   const now = options.now || (() => new Date());
   const state = options.state || createInitialState();
   const app = express();
-
-  app.use(cors({ origin: process.env.WEB_ORIGIN || "http://localhost:3000" }));
-  app.use(express.json());
+  app.use(cors({ origin: deps.config.webOrigin }));
+  app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (_req, res) => {
     const purged = pruneExpired(state, now());
@@ -339,71 +327,13 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
     });
   });
 
-  app.post("/api/jobs", (req, res) => {
-    const currentNow = now();
-    pruneExpired(state, currentNow);
-
-    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
-    const tool = String(req.body.tool || "").trim();
-    const inputObjectKey = String(req.body.inputObjectKey || "").trim();
-    const options = req.body.options && typeof req.body.options === "object" ? req.body.options : {};
-
-    if (!tool || !inputObjectKey) {
-      res.status(400).json({
-        error: "INVALID_JOB_REQUEST",
-        message: "tool and inputObjectKey are required."
-      });
-      return;
-    }
-
-    if (!ALLOWED_JOB_TOOLS.has(tool)) {
-      res.status(400).json({
-        error: "UNSUPPORTED_TOOL",
-        message: "Tool is not supported."
-      });
-      return;
-    }
-
-    const upload = state.tempUploads.get(inputObjectKey);
-    if (!upload) {
-      res.status(404).json({
-        error: "INPUT_OBJECT_NOT_FOUND",
-        message: "Input object key was not found or has expired."
-      });
-      return;
-    }
-
-    if (upload.subjectId !== subjectId) {
-      res.status(403).json({
-        error: "INPUT_OBJECT_FORBIDDEN",
-        message: "Input object does not belong to this subject."
-      });
-      return;
-    }
-
-    const id = `job_${crypto.randomUUID().replace(/-/g, "")}`;
-    const job: JobRecord = {
-      id,
-      subjectId,
-      tool,
-      inputObjectKey,
-      options: options as Record<string, unknown>,
-      status: "queued",
-      createdAt: currentNow.toISOString(),
-      updatedAt: currentNow.toISOString()
-    };
-
-    state.jobs.set(id, job);
-    state.queue.push({ jobId: id, enqueuedAt: currentNow.toISOString() });
-
-    res.status(201).json({
-      id: job.id,
-      status: job.status,
-      tool: job.tool,
-      inputObjectKey: job.inputObjectKey,
-      createdAt: job.createdAt,
-      queuePosition: state.queue.length
-    });
+  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, now: deps.now });
+  registerJobsRoutes(app, {
+    config: deps.config,
+    storage: deps.storage,
+    queue: deps.queue,
+    jobRepo: deps.jobRepo,
+    now: deps.now
   });
 
   app.get("/api/jobs/:id", (req, res) => {
@@ -623,15 +553,16 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
 
     res.status(202).json(response);
   });
+  registerQuotaRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
 
+  app.use(errorHandler);
   return app;
 }
 
 if (require.main === module) {
-  const port = Number(process.env.API_PORT || 4000);
-  const app = createApiApp();
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Image Ops API listening on http://localhost:${port}`);
+  const config = loadApiConfig();
+  const app = createApiApp({ config });
+  app.listen(config.port, () => {
+    logInfo("api.started", { port: config.port });
   });
 }
