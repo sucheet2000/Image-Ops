@@ -1,4 +1,6 @@
-import type {
+import {
+  applyQuota,
+  type DedupObjectRecord,
   BillingCheckoutSession,
   BillingCheckoutStatus,
   BillingWebhookEvent,
@@ -7,7 +9,9 @@ import type {
   ImageJobRecord,
   JobStatus,
   QuotaWindow,
-  SubjectProfile
+  SubjectProfile,
+  type UploadCompletionRecord,
+  type QuotaResult
 } from "@image-ops/core";
 import type { ApiConfig } from "../config";
 import IORedis from "ioredis";
@@ -19,6 +23,8 @@ const SUBJECT_PROFILE_KEY_PREFIX = "imageops:subject-profile:";
 const BILLING_CHECKOUT_KEY_PREFIX = "imageops:billing-checkout:";
 const BILLING_EVENT_KEY_PREFIX = "imageops:billing-event:";
 const CLEANUP_IDEMPOTENCY_PREFIX = "imageops:cleanup-idempotency:";
+const UPLOAD_COMPLETION_PREFIX = "imageops:upload-completion:";
+const DEDUP_HASH_PREFIX = "imageops:dedup-hash:";
 const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
 const BILLING_EVENT_LIST_KEY = "imageops:billing-events";
 
@@ -29,6 +35,19 @@ const POSTGRES_BILLING_EVENT_TABLE = "imageops_billing_events";
 export interface JobRepository {
   getQuotaWindow(subjectId: string): Promise<QuotaWindow | null>;
   setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void>;
+  reserveQuotaAndCreateJob(input: {
+    subjectId: string;
+    requestedImages: number;
+    now: Date;
+    job: ImageJobRecord;
+  }): Promise<QuotaResult>;
+
+  getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null>;
+  finalizeUploadCompletion(input: {
+    completion: UploadCompletionRecord;
+    dedupRecord: DedupObjectRecord;
+  }): Promise<void>;
+  listDedupByHash(sha256: string): Promise<DedupObjectRecord[]>;
 
   getSubjectProfile(subjectId: string): Promise<SubjectProfile | null>;
   upsertSubjectProfile(profile: SubjectProfile): Promise<void>;
@@ -86,6 +105,14 @@ function idempotencyKey(key: string): string {
   return `${CLEANUP_IDEMPOTENCY_PREFIX}${key}`;
 }
 
+function uploadCompletionKey(objectKey: string): string {
+  return `${UPLOAD_COMPLETION_PREFIX}${objectKey}`;
+}
+
+function dedupHashKey(sha256: string): string {
+  return `${DEDUP_HASH_PREFIX}${sha256}`;
+}
+
 export class RedisJobRepository implements JobRepository {
   private readonly redis: IORedis;
   private closePromise: Promise<void> | null = null;
@@ -104,6 +131,63 @@ export class RedisJobRepository implements JobRepository {
 
   async setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void> {
     await this.redis.set(quotaKey(subjectId), JSON.stringify(window));
+  }
+
+  async reserveQuotaAndCreateJob(input: {
+    subjectId: string;
+    requestedImages: number;
+    now: Date;
+    job: ImageJobRecord;
+  }): Promise<QuotaResult> {
+    const existing = (await this.getQuotaWindow(input.subjectId)) || {
+      windowStartAt: input.now.toISOString(),
+      usedCount: 0
+    };
+    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+    if (!quotaResult.allowed) {
+      return quotaResult;
+    }
+
+    await this.redis.multi()
+      .set(quotaKey(input.subjectId), JSON.stringify(quotaResult.window))
+      .set(jobKey(input.job.id), JSON.stringify(input.job))
+      .exec();
+
+    return quotaResult;
+  }
+
+  async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
+    const raw = await this.redis.get(uploadCompletionKey(objectKey));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as UploadCompletionRecord;
+  }
+
+  async finalizeUploadCompletion(input: {
+    completion: UploadCompletionRecord;
+    dedupRecord: DedupObjectRecord;
+  }): Promise<void> {
+    const dedupKey = dedupHashKey(input.dedupRecord.sha256);
+    const existingRaw = await this.redis.get(dedupKey);
+    const existing = existingRaw ? (JSON.parse(existingRaw) as DedupObjectRecord[]) : [];
+
+    if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
+      existing.push(input.dedupRecord);
+    }
+
+    await this.redis.multi()
+      .set(uploadCompletionKey(input.completion.objectKey), JSON.stringify(input.completion))
+      .set(dedupKey, JSON.stringify(existing))
+      .exec();
+  }
+
+  async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
+    const raw = await this.redis.get(dedupHashKey(sha256));
+    if (!raw) {
+      return [];
+    }
+    return JSON.parse(raw) as DedupObjectRecord[];
   }
 
   async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
@@ -343,6 +427,117 @@ export class PostgresJobRepository implements JobRepository {
     await this.setStoredValue(quotaKey(subjectId), window);
   }
 
+  async reserveQuotaAndCreateJob(input: {
+    subjectId: string;
+    requestedImages: number;
+    now: Date;
+    job: ImageJobRecord;
+  }): Promise<QuotaResult> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const quotaResultRow = await client.query<{ value: QuotaWindow; expires_at: Date | null }>(
+        `SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1 FOR UPDATE`,
+        [quotaKey(input.subjectId)]
+      );
+
+      const existing = (quotaResultRow.rowCount ?? 0) > 0
+        ? (quotaResultRow.rows[0].value as QuotaWindow)
+        : { windowStartAt: input.now.toISOString(), usedCount: 0 };
+
+      const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+      if (!quotaResult.allowed) {
+        await client.query("ROLLBACK");
+        return quotaResult;
+      }
+
+      await client.query(
+        `
+          INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
+          VALUES ($1, $2::jsonb, NULL)
+          ON CONFLICT (key)
+          DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+        `,
+        [quotaKey(input.subjectId), JSON.stringify(quotaResult.window)]
+      );
+      await client.query(
+        `
+          INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
+          VALUES ($1, $2::jsonb, NULL)
+          ON CONFLICT (key)
+          DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+        `,
+        [jobKey(input.job.id), JSON.stringify(input.job)]
+      );
+
+      await client.query("COMMIT");
+      return quotaResult;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
+    return this.getStoredValue<UploadCompletionRecord>(uploadCompletionKey(objectKey));
+  }
+
+  async finalizeUploadCompletion(input: {
+    completion: UploadCompletionRecord;
+    dedupRecord: DedupObjectRecord;
+  }): Promise<void> {
+    await this.initialize();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const dedupResult = await client.query<{ value: DedupObjectRecord[]; expires_at: Date | null }>(
+        `SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1 FOR UPDATE`,
+        [dedupHashKey(input.dedupRecord.sha256)]
+      );
+      const existing = (dedupResult.rowCount ?? 0) > 0
+        ? (dedupResult.rows[0].value as DedupObjectRecord[])
+        : [];
+      if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
+        existing.push(input.dedupRecord);
+      }
+
+      await client.query(
+        `
+          INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
+          VALUES ($1, $2::jsonb, NULL)
+          ON CONFLICT (key)
+          DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+        `,
+        [uploadCompletionKey(input.completion.objectKey), JSON.stringify(input.completion)]
+      );
+      await client.query(
+        `
+          INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
+          VALUES ($1, $2::jsonb, NULL)
+          ON CONFLICT (key)
+          DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at
+        `,
+        [dedupHashKey(input.dedupRecord.sha256), JSON.stringify(existing)]
+      );
+
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
+    return (await this.getStoredValue<DedupObjectRecord[]>(dedupHashKey(sha256))) || [];
+  }
+
   async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
     return this.getStoredValue<SubjectProfile>(subjectProfileKey(subjectId));
   }
@@ -500,6 +695,8 @@ export class PostgresJobRepository implements JobRepository {
 
 export class InMemoryJobRepository implements JobRepository {
   private readonly quotas = new Map<string, QuotaWindow>();
+  private readonly uploadCompletions = new Map<string, UploadCompletionRecord>();
+  private readonly dedupByHash = new Map<string, DedupObjectRecord[]>();
   private readonly profiles = new Map<string, SubjectProfile>();
   private readonly jobs = new Map<string, ImageJobRecord>();
   private readonly checkouts = new Map<string, BillingCheckoutSession>();
@@ -513,6 +710,46 @@ export class InMemoryJobRepository implements JobRepository {
 
   async setQuotaWindow(subjectId: string, window: QuotaWindow): Promise<void> {
     this.quotas.set(subjectId, window);
+  }
+
+  async reserveQuotaAndCreateJob(input: {
+    subjectId: string;
+    requestedImages: number;
+    now: Date;
+    job: ImageJobRecord;
+  }): Promise<QuotaResult> {
+    const existing = this.quotas.get(input.subjectId) || {
+      windowStartAt: input.now.toISOString(),
+      usedCount: 0
+    };
+    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+    if (!quotaResult.allowed) {
+      return quotaResult;
+    }
+
+    this.quotas.set(input.subjectId, quotaResult.window);
+    this.jobs.set(input.job.id, input.job);
+    return quotaResult;
+  }
+
+  async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
+    return this.uploadCompletions.get(objectKey) || null;
+  }
+
+  async finalizeUploadCompletion(input: {
+    completion: UploadCompletionRecord;
+    dedupRecord: DedupObjectRecord;
+  }): Promise<void> {
+    this.uploadCompletions.set(input.completion.objectKey, input.completion);
+    const existing = this.dedupByHash.get(input.dedupRecord.sha256) || [];
+    if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
+      existing.push(input.dedupRecord);
+    }
+    this.dedupByHash.set(input.dedupRecord.sha256, existing);
+  }
+
+  async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
+    return [...(this.dedupByHash.get(sha256) || [])];
   }
 
   async getSubjectProfile(subjectId: string): Promise<SubjectProfile | null> {
