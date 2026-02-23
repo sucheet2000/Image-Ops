@@ -92,12 +92,13 @@ export function registerUploadsRoutes(router: Router, deps: { config: ApiConfig;
     const tool = payload.tool as ImageTool;
     const prefix = inferUploadObjectKeyPrefix(safeSubjectId, tool, deps.now());
     const extension = selectExtension(payload.filename, mime);
-    const objectKey = `${prefix}/${ulid()}.${extension}`;
+    const objectKey = `${prefix}/${ulid(deps.now().getTime())}.${extension}`;
 
     const uploadUrl = await deps.storage.createPresignedUploadUrl({
       objectKey,
       contentType: mime,
-      expiresInSeconds: deps.config.signedUploadTtlSeconds
+      expiresInSeconds: deps.config.signedUploadTtlSeconds,
+      maxSizeBytes: deps.config.maxUploadBytes
     });
 
     const expiresAt = new Date(deps.now().getTime() + deps.config.signedUploadTtlSeconds * 1000).toISOString();

@@ -90,7 +90,8 @@ export function registerJobsRoutes(
 
     const now = deps.now();
     const subjectId = toSafeSubjectId(payload.subjectId);
-    const plan = (payload.plan || "free") as ImagePlan;
+    const profile = await deps.jobRepo.getSubjectProfile(subjectId);
+    const plan = (payload.plan || profile?.plan || "free") as ImagePlan;
     const tool = payload.tool as ImageTool;
 
     const quotaWindow = (await deps.jobRepo.getQuotaWindow(subjectId)) || newQuotaWindow(now);
@@ -105,13 +106,13 @@ export function registerJobsRoutes(
       return;
     }
 
-    await deps.jobRepo.setQuotaWindow(subjectId, quotaResult.window);
-
     const head = await deps.storage.headObject(payload.inputObjectKey);
     if (!head.exists) {
       res.status(404).json({ error: "INPUT_OBJECT_NOT_FOUND", message: "Input object key is missing or expired." });
       return;
     }
+
+    await deps.jobRepo.setQuotaWindow(subjectId, quotaResult.window);
 
     const inputMime = (head.contentType || "image/jpeg").toLowerCase();
     const mergedOptions = mergeToolOptions(tool, payload.options as Record<string, unknown> | undefined);
