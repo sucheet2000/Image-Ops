@@ -7,6 +7,9 @@ const DEFAULT_MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 10 * 102
 const DEFAULT_TEMP_TTL_MINUTES = Number(process.env.TEMP_OBJECT_TTL_MINUTES || 30);
 
 const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+const ALLOWED_JOB_TOOLS = new Set(["resize", "compress", "remove-background", "convert"]);
+
+type JobStatus = "queued" | "running" | "done" | "failed";
 
 type TempUploadRecord = {
   key: string;
@@ -20,9 +23,29 @@ type TempUploadRecord = {
   expiresAt: string;
 };
 
+type JobRecord = {
+  id: string;
+  subjectId: string;
+  tool: string;
+  inputObjectKey: string;
+  options: Record<string, unknown>;
+  status: JobStatus;
+  createdAt: string;
+  updatedAt: string;
+  outputObjectKey?: string;
+  errorCode?: string;
+};
+
+type QueueItem = {
+  jobId: string;
+  enqueuedAt: string;
+};
+
 type ApiState = {
   windows: Map<string, QuotaWindow>;
   tempUploads: Map<string, TempUploadRecord>;
+  jobs: Map<string, JobRecord>;
+  queue: QueueItem[];
 };
 
 type CreateApiAppOptions = {
@@ -33,7 +56,9 @@ type CreateApiAppOptions = {
 function createInitialState(): ApiState {
   return {
     windows: new Map<string, QuotaWindow>(),
-    tempUploads: new Map<string, TempUploadRecord>()
+    tempUploads: new Map<string, TempUploadRecord>(),
+    jobs: new Map<string, JobRecord>(),
+    queue: []
   };
 }
 
@@ -83,7 +108,7 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
 
   app.get("/health", (_req, res) => {
     const purged = pruneExpired(state, now());
-    res.json({ status: "ok", tempUploads: state.tempUploads.size, purged });
+    res.json({ status: "ok", tempUploads: state.tempUploads.size, jobs: state.jobs.size, queueDepth: state.queue.length, purged });
   });
 
   app.get("/api/quota/:subjectId", (req, res) => {
@@ -223,6 +248,101 @@ export function createApiApp(options: CreateApiAppOptions = {}) {
         imageStoredInDatabase: false,
         tempStorageOnly: true
       }
+    });
+  });
+
+  app.post("/api/jobs", (req, res) => {
+    const currentNow = now();
+    pruneExpired(state, currentNow);
+
+    const subjectId = sanitizeSubjectId(String(req.body.subjectId || "anonymous"));
+    const tool = String(req.body.tool || "").trim();
+    const inputObjectKey = String(req.body.inputObjectKey || "").trim();
+    const options = req.body.options && typeof req.body.options === "object" ? req.body.options : {};
+
+    if (!tool || !inputObjectKey) {
+      res.status(400).json({
+        error: "INVALID_JOB_REQUEST",
+        message: "tool and inputObjectKey are required."
+      });
+      return;
+    }
+
+    if (!ALLOWED_JOB_TOOLS.has(tool)) {
+      res.status(400).json({
+        error: "UNSUPPORTED_TOOL",
+        message: "Tool is not supported."
+      });
+      return;
+    }
+
+    const upload = state.tempUploads.get(inputObjectKey);
+    if (!upload) {
+      res.status(404).json({
+        error: "INPUT_OBJECT_NOT_FOUND",
+        message: "Input object key was not found or has expired."
+      });
+      return;
+    }
+
+    if (upload.subjectId !== subjectId) {
+      res.status(403).json({
+        error: "INPUT_OBJECT_FORBIDDEN",
+        message: "Input object does not belong to this subject."
+      });
+      return;
+    }
+
+    const id = `job_${crypto.randomUUID().replace(/-/g, "")}`;
+    const job: JobRecord = {
+      id,
+      subjectId,
+      tool,
+      inputObjectKey,
+      options: options as Record<string, unknown>,
+      status: "queued",
+      createdAt: currentNow.toISOString(),
+      updatedAt: currentNow.toISOString()
+    };
+
+    state.jobs.set(id, job);
+    state.queue.push({ jobId: id, enqueuedAt: currentNow.toISOString() });
+
+    res.status(201).json({
+      id: job.id,
+      status: job.status,
+      tool: job.tool,
+      inputObjectKey: job.inputObjectKey,
+      createdAt: job.createdAt,
+      queuePosition: state.queue.length
+    });
+  });
+
+  app.get("/api/jobs/:id", (req, res) => {
+    const id = String(req.params.id || "").trim();
+    const job = state.jobs.get(id);
+
+    if (!job) {
+      res.status(404).json({
+        error: "JOB_NOT_FOUND",
+        message: "Job does not exist."
+      });
+      return;
+    }
+
+    const queueIndex = state.queue.findIndex((item) => item.jobId === id);
+    const queuePosition = job.status === "queued" && queueIndex >= 0 ? queueIndex + 1 : null;
+
+    res.json({
+      id: job.id,
+      status: job.status,
+      tool: job.tool,
+      inputObjectKey: job.inputObjectKey,
+      outputObjectKey: job.outputObjectKey || null,
+      errorCode: job.errorCode || null,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      queuePosition
     });
   });
 
