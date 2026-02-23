@@ -19,10 +19,28 @@ export type ApiDependencies = {
   now: () => Date;
 };
 
-function errorHandler(error: unknown, _req: Request, res: Response, _next: NextFunction): void {
-  const message = error instanceof Error ? error.message : "Internal server error";
-  logError("api.error", { message });
-  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message });
+const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
+
+function formatErrorForLog(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    };
+  }
+
+  return { value: error };
+}
+
+export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+
+  logError("api.error", { error: formatErrorForLog(error) });
+  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message: INTERNAL_ERROR_MESSAGE });
 }
 
 export function createApiApp(incomingDeps?: Partial<ApiDependencies>) {
