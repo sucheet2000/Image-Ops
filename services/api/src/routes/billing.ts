@@ -15,6 +15,16 @@ const checkoutSchema = z.object({
   cancelUrl: z.string().url()
 });
 
+const reconcileSchema = z.object({
+  limit: z.number().int().positive().max(1000).default(200)
+});
+
+const PLAN_RANK: Record<SubjectProfile["plan"], number> = {
+  free: 0,
+  pro: 1,
+  team: 2
+};
+
 export function registerBillingRoutes(
   router: Router,
   deps: {
@@ -161,5 +171,46 @@ export function registerBillingRoutes(
     });
 
     res.status(200).json({ accepted: true, replay: false });
+  }));
+
+  router.post("/api/billing/reconcile", asyncHandler(async (req, res) => {
+    const parsed = reconcileSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "INVALID_BILLING_RECONCILE_REQUEST", details: parsed.error.flatten() });
+      return;
+    }
+
+    const nowIso = deps.now().toISOString();
+    const sessions = await deps.jobRepo.listBillingCheckoutSessions(parsed.data.limit);
+
+    let corrected = 0;
+    let paidSessions = 0;
+
+    for (const session of sessions) {
+      if (session.status !== "paid" || !isPaidPlan(session.plan)) {
+        continue;
+      }
+      paidSessions += 1;
+
+      const profile = await deps.jobRepo.getSubjectProfile(session.subjectId);
+      if (profile && PLAN_RANK[profile.plan] >= PLAN_RANK[session.plan]) {
+        continue;
+      }
+
+      const nextProfile: SubjectProfile = {
+        subjectId: session.subjectId,
+        plan: session.plan,
+        createdAt: profile?.createdAt || nowIso,
+        updatedAt: nowIso
+      };
+      await deps.jobRepo.upsertSubjectProfile(nextProfile);
+      corrected += 1;
+    }
+
+    res.status(200).json({
+      scanned: sessions.length,
+      paidSessions,
+      corrected
+    });
   }));
 }

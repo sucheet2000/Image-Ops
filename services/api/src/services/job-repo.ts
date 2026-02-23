@@ -72,6 +72,7 @@ export interface JobRepository {
 
   createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void>;
   getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null>;
+  listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]>;
   updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void>;
 
   getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null>;
@@ -306,6 +307,21 @@ export class RedisJobRepository implements JobRepository {
       return null;
     }
     return JSON.parse(raw) as BillingCheckoutSession;
+  }
+
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    const keys = await this.redis.keys(`${BILLING_CHECKOUT_KEY_PREFIX}*`);
+    if (keys.length === 0 || limit <= 0) {
+      return [];
+    }
+
+    const rows = await this.redis.mget(...keys);
+    const sessions = rows
+      .filter((value): value is string => Boolean(value))
+      .map((value) => JSON.parse(value) as BillingCheckoutSession)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+    return sessions.slice(-limit);
   }
 
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
@@ -675,6 +691,31 @@ export class PostgresJobRepository implements JobRepository {
     return this.getStoredValue<BillingCheckoutSession>(billingCheckoutKey(id));
   }
 
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    await this.initialize();
+    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+      `
+        SELECT value, expires_at
+        FROM ${POSTGRES_KV_TABLE}
+        WHERE key LIKE $1
+        ORDER BY key DESC
+      `,
+      [`${BILLING_CHECKOUT_KEY_PREFIX}%`]
+    );
+
+    if (limit <= 0) {
+      return [];
+    }
+
+    const nowMs = Date.now();
+    const sessions = result.rows
+      .filter((row) => !row.expires_at || row.expires_at.getTime() > nowMs)
+      .map((row) => row.value)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+    return sessions.slice(-limit);
+  }
+
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
@@ -908,6 +949,14 @@ export class InMemoryJobRepository implements JobRepository {
 
   async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
     return this.checkouts.get(id) || null;
+  }
+
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+    const rows = Array.from(this.checkouts.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    return rows.slice(-limit);
   }
 
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {

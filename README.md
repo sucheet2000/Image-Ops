@@ -8,7 +8,7 @@ SEO-first image utility platform for marketplace sellers (Etsy/Amazon/Shopify), 
 
 ## Monorepo Structure
 - `apps/web`: Next.js frontend
-- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `webhooks/billing`)
+- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `billing/reconcile`, `webhooks/billing`)
 - `services/mcp-gateway`: constrained MCP gateway (`search` + `execute`)
 - `services/worker`: BullMQ consumer and sharp-based image processing pipeline
 - `packages/core`: shared domain logic (quota rules, tool/job contracts, watermark policy)
@@ -51,6 +51,10 @@ Key runtime groups:
 - `POST /api/auth/refresh` rotates refresh sessions (single-use refresh token semantics) and returns a new bearer token.
 - `POST /api/auth/logout` revokes the current refresh session and clears the cookie.
 - Web clients should use bearer headers for protected APIs and rely on refresh cookies for silent token renewal.
+
+## Billing Reconciliation
+- `POST /api/billing/reconcile` scans paid checkout sessions and repairs downgraded/missing subject plans.
+- Use this endpoint as a drift-recovery control when webhook delivery is delayed or partially failed.
 
 ## Local Infrastructure
 Minimum local dependencies:
