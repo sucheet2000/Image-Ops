@@ -6,6 +6,13 @@ export type JobRepoDriver = (typeof JOB_REPO_DRIVERS)[number];
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.string().default("http://localhost:3000"),
+  API_AUTH_REQUIRED: z
+    .string()
+    .default("false")
+    .transform((value) => value === "1" || value.toLowerCase() === "true"),
+  GOOGLE_CLIENT_ID: z.string().default("google-client-id"),
+  AUTH_TOKEN_SECRET: z.string().min(1).default("dev-auth-token-secret"),
+  AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   SIGNED_UPLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SIGNED_DOWNLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
@@ -41,6 +48,10 @@ const envSchema = z.object({
 export type ApiConfig = {
   port: number;
   webOrigin: string;
+  apiAuthRequired: boolean;
+  googleClientId: string;
+  authTokenSecret: string;
+  authTokenTtlSeconds: number;
   maxUploadBytes: number;
   signedUploadTtlSeconds: number;
   signedDownloadTtlSeconds: number;
@@ -74,6 +85,10 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   return {
     port: parsed.API_PORT,
     webOrigin: parsed.WEB_ORIGIN,
+    apiAuthRequired: parsed.API_AUTH_REQUIRED,
+    googleClientId: parsed.GOOGLE_CLIENT_ID,
+    authTokenSecret: parsed.AUTH_TOKEN_SECRET,
+    authTokenTtlSeconds: parsed.AUTH_TOKEN_TTL_SECONDS,
     maxUploadBytes: parsed.MAX_UPLOAD_BYTES,
     signedUploadTtlSeconds: parsed.SIGNED_UPLOAD_TTL_SECONDS,
     signedDownloadTtlSeconds: parsed.SIGNED_DOWNLOAD_TTL_SECONDS,
