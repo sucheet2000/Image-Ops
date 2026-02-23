@@ -23,7 +23,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 describe.skipIf(!shouldRun)("integration workflow", () => {
-  it("processes upload -> job -> status -> cleanup against real services", async () => {
+  it("processes upload -> job -> status -> cleanup with idempotency and deletion checks", async () => {
     const subjectId = `integration_${nowTag()}_${Math.floor(Math.random() * 1000)}`;
 
     const uploadInitResponse = await fetch(`${apiBaseUrl}/api/uploads/init`, {
@@ -115,20 +115,83 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
     const outputBytes = Buffer.from(await downloadResponse.arrayBuffer());
     expect(outputBytes.length).toBeGreaterThan(0);
 
+    const cleanupIdempotencyKey = randomUUID();
+    const cleanupBody = {
+      objectKeys: [uploadInit.objectKey, outputObjectKey],
+      reason: "manual"
+    };
+
     const cleanupResponse = await fetch(`${apiBaseUrl}/api/cleanup`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": randomUUID()
+        "idempotency-key": cleanupIdempotencyKey
+      },
+      body: JSON.stringify(cleanupBody)
+    });
+    expect(cleanupResponse.status).toBe(202);
+    const cleanupPayload = await readJson<{
+      accepted: boolean;
+      cleaned: number;
+      notFound: number;
+      idempotencyKey: string;
+    }>(cleanupResponse);
+    expect(cleanupPayload.accepted).toBe(true);
+    expect(cleanupPayload.cleaned + cleanupPayload.notFound).toBe(2);
+    expect(cleanupPayload.idempotencyKey).toBe(cleanupIdempotencyKey);
+
+    const cleanupReplayResponse = await fetch(`${apiBaseUrl}/api/cleanup`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": cleanupIdempotencyKey
+      },
+      body: JSON.stringify(cleanupBody)
+    });
+    expect(cleanupReplayResponse.status).toBe(202);
+    expect(cleanupReplayResponse.headers.get("x-idempotent-replay")).toBe("true");
+    const cleanupReplayPayload = await readJson<{
+      accepted: boolean;
+      cleaned: number;
+      notFound: number;
+      idempotencyKey: string;
+    }>(cleanupReplayResponse);
+    expect(cleanupReplayPayload).toEqual(cleanupPayload);
+
+    const cleanupConflictResponse = await fetch(`${apiBaseUrl}/api/cleanup`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": cleanupIdempotencyKey
       },
       body: JSON.stringify({
-        objectKeys: [uploadInit.objectKey, outputObjectKey],
+        objectKeys: [uploadInit.objectKey],
         reason: "manual"
       })
     });
-    expect(cleanupResponse.status).toBe(202);
-    const cleanupPayload = await readJson<{ accepted: boolean; cleaned: number; notFound: number }>(cleanupResponse);
-    expect(cleanupPayload.accepted).toBe(true);
-    expect(cleanupPayload.cleaned + cleanupPayload.notFound).toBe(2);
+    expect(cleanupConflictResponse.status).toBe(409);
+    const cleanupConflictPayload = await readJson<{ error: string }>(cleanupConflictResponse);
+    expect(cleanupConflictPayload.error).toBe("IDEMPOTENCY_KEY_CONFLICT");
+
+    const deletedOutputResponse = await fetch(downloadUrl);
+    expect(deletedOutputResponse.status).toBe(404);
+
+    const createJobFromDeletedInputResponse = await fetch(`${apiBaseUrl}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId,
+        plan: "free",
+        tool: "resize",
+        inputObjectKey: uploadInit.objectKey,
+        options: {
+          width: 1,
+          height: 1
+        }
+      })
+    });
+    expect(createJobFromDeletedInputResponse.status).toBe(404);
+    const createJobFromDeletedInputPayload = await readJson<{ error: string }>(createJobFromDeletedInputResponse);
+    expect(createJobFromDeletedInputPayload.error).toBe("INPUT_OBJECT_NOT_FOUND");
   }, 45000);
 });
