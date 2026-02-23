@@ -8,7 +8,7 @@ SEO-first image utility platform for marketplace sellers (Etsy/Amazon/Shopify), 
 
 ## Monorepo Structure
 - `apps/web`: Next.js frontend
-- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `webhooks/billing`)
+- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `billing/reconcile`, `webhooks/billing`)
 - `services/mcp-gateway`: constrained MCP gateway (`search` + `execute`)
 - `services/worker`: BullMQ consumer and sharp-based image processing pipeline
 - `packages/core`: shared domain logic (quota rules, tool/job contracts, watermark policy)
@@ -39,11 +39,22 @@ Required variables are listed in `.env.example`.
 
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
-- Billing: `BILLING_PUBLIC_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`
+- Auth: `API_AUTH_REQUIRED`, `GOOGLE_CLIENT_ID`, `AUTH_TOKEN_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TTL_SECONDS`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_SECURE`, `AUTH_REFRESH_COOKIE_SAMESITE`, `AUTH_REFRESH_COOKIE_DOMAIN`, `AUTH_REFRESH_COOKIE_PATH`
+- Billing: `BILLING_PROVIDER`, `BILLING_PUBLIC_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_TEAM`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
 - Worker/background remove: `WORKER_CONCURRENCY`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+
+## Auth Session Strategy
+- `POST /api/auth/google` issues a short-lived bearer access token plus an HttpOnly refresh cookie.
+- `POST /api/auth/refresh` rotates refresh sessions (single-use refresh token semantics) and returns a new bearer token.
+- `POST /api/auth/logout` revokes the current refresh session and clears the cookie.
+- Web clients should use bearer headers for protected APIs and rely on refresh cookies for silent token renewal.
+
+## Billing Reconciliation
+- `POST /api/billing/reconcile` scans paid checkout sessions and repairs downgraded/missing subject plans.
+- Use this endpoint as a drift-recovery control when webhook delivery is delayed or partially failed.
 
 ## Local Infrastructure
 Minimum local dependencies:

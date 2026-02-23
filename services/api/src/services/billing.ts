@@ -113,19 +113,25 @@ export class HmacBillingService implements BillingService {
 export class StripeBillingService implements BillingService {
   private readonly secretKey: string;
   private readonly webhookSecret: string;
+  private readonly webhookToleranceSeconds: number;
   private readonly priceIdByPlan: Record<"pro" | "team", string>;
   private readonly fetchImpl: typeof fetch;
+  private readonly nowProvider: () => number;
 
   constructor(input: {
     secretKey: string;
     webhookSecret: string;
+    webhookToleranceSeconds?: number;
     priceIdByPlan: Record<"pro" | "team", string>;
     fetchImpl?: typeof fetch;
+    nowProvider?: () => number;
   }) {
     this.secretKey = input.secretKey;
     this.webhookSecret = input.webhookSecret;
+    this.webhookToleranceSeconds = input.webhookToleranceSeconds ?? 300;
     this.priceIdByPlan = input.priceIdByPlan;
     this.fetchImpl = input.fetchImpl || fetch;
+    this.nowProvider = input.nowProvider || (() => Date.now());
   }
 
   async createCheckoutSession(input: BillingCheckoutInput): Promise<BillingCheckoutOutput> {
@@ -172,7 +178,7 @@ export class StripeBillingService implements BillingService {
   }
 
   signWebhookPayload(payload: string): string {
-    const timestamp = Math.floor(Date.now() / 1000);
+    const timestamp = Math.floor(this.nowProvider() / 1000);
     const signed = createHmac("sha256", this.webhookSecret)
       .update(`${timestamp}.${payload}`)
       .digest("hex");
@@ -190,6 +196,11 @@ export class StripeBillingService implements BillingService {
 
     const timestamp = timestampPart.slice(2);
     if (!/^\d+$/.test(timestamp)) {
+      return false;
+    }
+    const timestampSeconds = Number.parseInt(timestamp, 10);
+    const nowSeconds = Math.floor(this.nowProvider() / 1000);
+    if (Math.abs(nowSeconds - timestampSeconds) > this.webhookToleranceSeconds) {
       return false;
     }
 

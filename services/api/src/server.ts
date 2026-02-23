@@ -50,6 +50,7 @@ function createBillingService(config: ApiConfig): BillingService {
     return new StripeBillingService({
       secretKey: config.stripeSecretKey || "",
       webhookSecret: config.stripeWebhookSecret || "",
+      webhookToleranceSeconds: config.stripeWebhookToleranceSeconds,
       priceIdByPlan: {
         pro: config.stripePriceIdPro,
         team: config.stripePriceIdTeam
@@ -91,7 +92,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   };
 
   const app = express();
-  app.use(cors({ origin: deps.config.webOrigin }));
+  app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 
@@ -104,6 +105,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     app.use("/api/cleanup", requireApiAuth(deps.auth));
     app.use("/api/quota", requireApiAuth(deps.auth));
     app.use("/api/billing/checkout", requireApiAuth(deps.auth));
+    app.use("/api/billing/reconcile", requireApiAuth(deps.auth));
   }
 
   registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, jobRepo: deps.jobRepo, now: deps.now });

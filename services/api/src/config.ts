@@ -16,6 +16,15 @@ const envSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().default("google-client-id"),
   AUTH_TOKEN_SECRET: z.string().min(1).default("dev-auth-token-secret"),
   AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60),
+  AUTH_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(14 * 24 * 60 * 60),
+  AUTH_REFRESH_COOKIE_NAME: z.string().min(1).default("image_ops_refresh_token"),
+  AUTH_REFRESH_COOKIE_SECURE: z
+    .string()
+    .default("false")
+    .transform((value) => value.toLowerCase() === "true"),
+  AUTH_REFRESH_COOKIE_SAMESITE: z.enum(["lax", "strict", "none"]).default("lax"),
+  AUTH_REFRESH_COOKIE_DOMAIN: z.string().optional(),
+  AUTH_REFRESH_COOKIE_PATH: z.string().min(1).default("/api/auth"),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   SIGNED_UPLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SIGNED_DOWNLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
@@ -32,6 +41,7 @@ const envSchema = z.object({
   BILLING_WEBHOOK_SECRET: z.string().min(1, "BILLING_WEBHOOK_SECRET is required").default("dev-webhook-secret"),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().positive().default(300),
   STRIPE_PRICE_ID_PRO: z.string().default("price_pro"),
   STRIPE_PRICE_ID_TEAM: z.string().default("price_team"),
   S3_REGION: z.string().default("us-east-1"),
@@ -68,6 +78,14 @@ const envSchema = z.object({
       });
     }
   }
+
+  if (value.AUTH_REFRESH_COOKIE_SAMESITE === "none" && !value.AUTH_REFRESH_COOKIE_SECURE) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["AUTH_REFRESH_COOKIE_SECURE"],
+      message: "AUTH_REFRESH_COOKIE_SECURE must be true when AUTH_REFRESH_COOKIE_SAMESITE=none"
+    });
+  }
 });
 
 export type ApiConfig = {
@@ -77,6 +95,12 @@ export type ApiConfig = {
   googleClientId: string;
   authTokenSecret: string;
   authTokenTtlSeconds: number;
+  authRefreshTtlSeconds: number;
+  authRefreshCookieName: string;
+  authRefreshCookieSecure: boolean;
+  authRefreshCookieSameSite: "lax" | "strict" | "none";
+  authRefreshCookieDomain?: string;
+  authRefreshCookiePath: string;
   maxUploadBytes: number;
   signedUploadTtlSeconds: number;
   signedDownloadTtlSeconds: number;
@@ -93,6 +117,7 @@ export type ApiConfig = {
   billingWebhookSecret: string;
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
+  stripeWebhookToleranceSeconds: number;
   stripePriceIdPro: string;
   stripePriceIdTeam: string;
   s3Region: string;
@@ -119,6 +144,12 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     googleClientId: parsed.GOOGLE_CLIENT_ID,
     authTokenSecret: parsed.AUTH_TOKEN_SECRET,
     authTokenTtlSeconds: parsed.AUTH_TOKEN_TTL_SECONDS,
+    authRefreshTtlSeconds: parsed.AUTH_REFRESH_TTL_SECONDS,
+    authRefreshCookieName: parsed.AUTH_REFRESH_COOKIE_NAME,
+    authRefreshCookieSecure: parsed.AUTH_REFRESH_COOKIE_SECURE,
+    authRefreshCookieSameSite: parsed.AUTH_REFRESH_COOKIE_SAMESITE,
+    authRefreshCookieDomain: parsed.AUTH_REFRESH_COOKIE_DOMAIN,
+    authRefreshCookiePath: parsed.AUTH_REFRESH_COOKIE_PATH,
     maxUploadBytes: parsed.MAX_UPLOAD_BYTES,
     signedUploadTtlSeconds: parsed.SIGNED_UPLOAD_TTL_SECONDS,
     signedDownloadTtlSeconds: parsed.SIGNED_DOWNLOAD_TTL_SECONDS,
@@ -135,6 +166,7 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     billingWebhookSecret: parsed.BILLING_WEBHOOK_SECRET,
     stripeSecretKey: parsed.STRIPE_SECRET_KEY,
     stripeWebhookSecret: parsed.STRIPE_WEBHOOK_SECRET,
+    stripeWebhookToleranceSeconds: parsed.STRIPE_WEBHOOK_TOLERANCE_SECONDS,
     stripePriceIdPro: parsed.STRIPE_PRICE_ID_PRO,
     stripePriceIdTeam: parsed.STRIPE_PRICE_ID_TEAM,
     s3Region: parsed.S3_REGION,

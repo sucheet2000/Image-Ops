@@ -102,4 +102,40 @@ describe("StripeBillingService", () => {
 
     expect(parsed).toBeNull();
   });
+
+  it("rejects signatures outside replay tolerance window", () => {
+    const issuedAtMs = Date.parse("2026-02-23T00:00:00.000Z");
+    const payload = JSON.stringify({
+      id: "evt_old",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_live_2",
+          metadata: {
+            subjectId: "seller_3",
+            plan: "pro"
+          }
+        }
+      }
+    });
+
+    const signer = new StripeBillingService({
+      secretKey: "sk_test_key",
+      webhookSecret: "whsec_test",
+      webhookToleranceSeconds: 300,
+      priceIdByPlan: { pro: "price_pro", team: "price_team" },
+      nowProvider: () => issuedAtMs
+    });
+
+    const verifier = new StripeBillingService({
+      secretKey: "sk_test_key",
+      webhookSecret: "whsec_test",
+      webhookToleranceSeconds: 300,
+      priceIdByPlan: { pro: "price_pro", team: "price_team" },
+      nowProvider: () => issuedAtMs + 10 * 60 * 1000
+    });
+
+    const signature = signer.signWebhookPayload(payload);
+    expect(verifier.verifyWebhookSignature(payload, signature)).toBe(false);
+  });
 });
