@@ -9,6 +9,13 @@ export interface BackgroundRemoveProvider {
   removeBackground(input: { bytes: Buffer; contentType: string }): Promise<BackgroundRemoveResult>;
 }
 
+export class NonRetryableProviderError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NonRetryableProviderError";
+  }
+}
+
 const responseSchema = z.object({
   contentType: z.string().min(1)
 });
@@ -20,6 +27,9 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
       apiKey?: string;
       timeoutMs: number;
       maxRetries: number;
+      backoffBaseMs?: number;
+      backoffMaxMs?: number;
+      onRetry?: (payload: { attempt: number; maxRetries: number; reason: string }) => void;
     }
   ) {}
 
@@ -41,6 +51,9 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
         });
 
         if (!response.ok) {
+          if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            throw new NonRetryableProviderError(`Background remove provider rejected request with status ${response.status}`);
+          }
           throw new Error(`Background remove provider returned status ${response.status}`);
         }
 
@@ -53,12 +66,23 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
           contentType: checked.contentType
         };
       } catch (error) {
+        if (error instanceof NonRetryableProviderError) {
+          throw error;
+        }
+
         lastError = error;
         if (attempt > this.config.maxRetries) {
           break;
         }
 
-        const delay = Math.min(250 * 2 ** (attempt - 1), 1000);
+        const baseDelay = this.config.backoffBaseMs ?? 250;
+        const maxDelay = this.config.backoffMaxMs ?? 1000;
+        const delay = Math.min(baseDelay * 2 ** (attempt - 1), maxDelay);
+        this.config.onRetry?.({
+          attempt,
+          maxRetries: this.config.maxRetries,
+          reason: error instanceof Error ? error.message : String(error)
+        });
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

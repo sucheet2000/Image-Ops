@@ -10,7 +10,7 @@ export interface JobQueueService {
 export class BullMqJobQueueService implements JobQueueService {
   private readonly connection: IORedis;
   private readonly queue: Queue<ImageJobQueuePayload>;
-  private closed = false;
+  private closePromise: Promise<void> | null = null;
 
   constructor(input: { queueName: string; redisUrl: string }) {
     this.connection = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
@@ -31,17 +31,23 @@ export class BullMqJobQueueService implements JobQueueService {
   }
 
   async close(): Promise<void> {
-    if (this.closed) {
-      return;
+    if (this.closePromise) {
+      return this.closePromise;
     }
 
-    this.closed = true;
+    this.closePromise = (async () => {
+      try {
+        await this.queue.close();
+      } finally {
+        try {
+          await this.connection.quit();
+        } catch {
+          this.connection.disconnect(false);
+        }
+      }
+    })();
 
-    try {
-      await this.queue.close();
-    } finally {
-      await this.connection.quit();
-    }
+    return this.closePromise;
   }
 }
 

@@ -17,7 +17,9 @@ const envSchema = z.object({
   BG_REMOVE_API_URL: z.string().min(1),
   BG_REMOVE_API_KEY: z.string().optional(),
   BG_REMOVE_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
-  BG_REMOVE_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2)
+  BG_REMOVE_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
+  BG_REMOVE_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(250),
+  BG_REMOVE_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(1000)
 });
 
 export type WorkerConfig = {
@@ -35,6 +37,8 @@ export type WorkerConfig = {
   bgRemoveApiKey?: string;
   bgRemoveTimeoutMs: number;
   bgRemoveMaxRetries: number;
+  bgRemoveBackoffBaseMs: number;
+  bgRemoveBackoffMaxMs: number;
 };
 
 /**
@@ -60,6 +64,8 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     bgRemoveApiUrl: parsed.BG_REMOVE_API_URL,
     bgRemoveApiKey: parsed.BG_REMOVE_API_KEY,
     bgRemoveTimeoutMs: parsed.BG_REMOVE_TIMEOUT_MS,
-    bgRemoveMaxRetries: parsed.BG_REMOVE_MAX_RETRIES
+    bgRemoveMaxRetries: parsed.BG_REMOVE_MAX_RETRIES,
+    bgRemoveBackoffBaseMs: parsed.BG_REMOVE_BACKOFF_BASE_MS,
+    bgRemoveBackoffMaxMs: parsed.BG_REMOVE_BACKOFF_MAX_MS
   };
 }
