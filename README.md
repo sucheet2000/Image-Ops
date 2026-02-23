@@ -132,7 +132,7 @@ CI note:
 
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
-- Relational metadata schema exists in `infra/sql/001_initial_schema.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
+- Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
 - Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
 
