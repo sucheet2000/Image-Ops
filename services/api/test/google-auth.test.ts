@@ -22,21 +22,22 @@ describe("POST /api/auth/google", () => {
 
     const app = createApiApp({ config, ...services, auth: authStub, now: () => new Date("2026-02-23T00:00:00.000Z") });
     const server = await startApiTestServer({ app });
+    try {
+      const response = await fetch(`${server.baseUrl}/api/auth/google`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idToken: "google-id-token" })
+      });
 
-    const response = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-id-token" })
-    });
-
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.token).toBe("signed-api-token");
-    expect(payload.expiresIn).toBe(7200);
-    expect(payload.profile.subjectId).toBe("google_google-subject-1");
-    expect(payload.profile.plan).toBe("free");
-    expect(response.headers.get("set-cookie")).toContain(`${config.authRefreshCookieName}=`);
-
-    await server.close();
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      expect(payload.token).toBe("signed-api-token");
+      expect(payload.expiresIn).toBe(7200);
+      expect(payload.profile.subjectId).toBe("google_google-subject-1");
+      expect(payload.profile.plan).toBe("free");
+      expect(response.headers.get("set-cookie")).toContain(`${config.authRefreshCookieName}=`);
+    } finally {
+      await server.close();
+    }
   });
 });

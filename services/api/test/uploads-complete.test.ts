@@ -15,15 +15,19 @@ afterEach(async () => {
   }
 });
 
+async function startServerWithCleanup(services = createFakeServices()) {
+  const server = await startApiTestServer({ ...services, config: createTestConfig() });
+  closers.push(server.close);
+  return { services, server };
+}
+
 function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
 describe("POST /api/uploads/complete", () => {
   it("completes upload and returns canonical metadata", async () => {
-    const services = createFakeServices();
-    const server = await startApiTestServer({ ...services, config: createTestConfig() });
-    closers.push(server.close);
+    const { services, server } = await startServerWithCleanup();
 
     const objectKey = "tmp/seller_1/input/2026/02/23/resize/source.jpg";
     const bytes = fakePngBytes("dedup-source");
@@ -50,9 +54,7 @@ describe("POST /api/uploads/complete", () => {
   });
 
   it("rejects completion when provided sha256 does not match uploaded bytes", async () => {
-    const services = createFakeServices();
-    const server = await startApiTestServer({ ...services, config: createTestConfig() });
-    closers.push(server.close);
+    const { services, server } = await startServerWithCleanup();
 
     const objectKey = "tmp/seller_1/input/2026/02/23/resize/source-mismatch.jpg";
     const bytes = fakePngBytes("actual-bytes");
@@ -77,9 +79,7 @@ describe("POST /api/uploads/complete", () => {
   });
 
   it("deduplicates identical uploads to canonical object key", async () => {
-    const services = createFakeServices();
-    const server = await startApiTestServer({ ...services, config: createTestConfig() });
-    closers.push(server.close);
+    const { services, server } = await startServerWithCleanup();
 
     const canonicalKey = "tmp/seller_2/input/2026/02/23/compress/original.jpg";
     const duplicateKey = "tmp/seller_2/input/2026/02/23/compress/duplicate.jpg";
@@ -98,6 +98,7 @@ describe("POST /api/uploads/complete", () => {
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      // Intentionally omits sha256 to exercise server-side digest computation.
       body: JSON.stringify({ subjectId: "seller_2", objectKey: duplicateKey })
     });
     expect(second.status).toBe(200);
@@ -111,9 +112,7 @@ describe("POST /api/uploads/complete", () => {
   });
 
   it("does not deduplicate across different subjects even with identical bytes", async () => {
-    const services = createFakeServices();
-    const server = await startApiTestServer({ ...services, config: createTestConfig() });
-    closers.push(server.close);
+    const { services, server } = await startServerWithCleanup();
 
     const subjectAKey = "tmp/seller_a/input/2026/02/23/resize/source-a.jpg";
     const subjectBKey = "tmp/seller_b/input/2026/02/23/resize/source-b.jpg";
@@ -145,9 +144,7 @@ describe("POST /api/uploads/complete", () => {
   });
 
   it("falls back to byte-compare when hash index candidate differs", async () => {
-    const services = createFakeServices();
-    const server = await startApiTestServer({ ...services, config: createTestConfig() });
-    closers.push(server.close);
+    const { services, server } = await startServerWithCleanup();
 
     const sourceKey = "tmp/seller_3/input/2026/02/23/resize/source.jpg";
     const fakeCandidateKey = "tmp/seller_3/input/2026/02/23/resize/fake-candidate.jpg";

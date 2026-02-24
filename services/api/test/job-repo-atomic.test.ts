@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ImageJobRecord } from "@image-ops/core";
+import { FREE_PLAN_LIMIT, type ImageJobRecord } from "@image-ops/core";
 import { InMemoryJobRepository } from "../src/services/job-repo";
 
 function buildJob(id: string, subjectId: string): ImageJobRecord {
@@ -11,7 +11,6 @@ function buildJob(id: string, subjectId: string): ImageJobRecord {
     isAdvanced: false,
     watermarkRequired: false,
     inputObjectKey: `tmp/${subjectId}/input/2026/02/23/compress/${id}.jpg`,
-    outputObjectKey: `tmp/${subjectId}/output/2026/02/23/compress/${id}.jpg`,
     inputMime: "image/jpeg",
     outputMime: "image/jpeg",
     options: { quality: 80 },
@@ -42,7 +41,7 @@ describe("JobRepository atomic quota+job", () => {
   it("does not create job when quota is exceeded", async () => {
     const repo = new InMemoryJobRepository();
 
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < FREE_PLAN_LIMIT; index += 1) {
       const allowed = await repo.reserveQuotaAndCreateJob({
         subjectId: "seller_2",
         requestedImages: 1,
@@ -63,6 +62,6 @@ describe("JobRepository atomic quota+job", () => {
     expect(await repo.getJob("job_blocked")).toBeNull();
 
     const quota = await repo.getQuotaWindow("seller_2");
-    expect(quota?.usedCount).toBe(6);
+    expect(quota?.usedCount).toBe(FREE_PLAN_LIMIT);
   });
 });

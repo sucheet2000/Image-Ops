@@ -103,6 +103,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
   }
 
   const narrative = narrativeByTool[tool.slug] || narrativeByTool.resize;
+  const whenToUse = tool.whenToUse || "Use this tool when you need predictable, marketplace-safe outputs.";
   const baseUrl = getBaseUrl();
 
   const softwareSchema = {
@@ -170,6 +171,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
         <div className="section-inner">
           <span className="section-label reveal-el" data-delay="0">Feature List</span>
           <h2 className="reveal-el" data-delay="100">What this tool delivers.</h2>
+          <p className="section-lead reveal-el" data-delay="160">{whenToUse}</p>
           <ol className="editorial-list reveal-el" data-delay="220">
             {narrative.numberedFeatures.map((feature, index) => (
               <li key={feature}>

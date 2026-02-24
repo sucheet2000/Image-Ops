@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiBaseUrl, setApiToken } from "../lib/api-client";
 
 type GoogleCredentialResponse = {
@@ -35,6 +35,15 @@ declare global {
 export function GoogleAuthPanel() {
   const [message, setMessage] = useState("Sign in with Google to start secure API sessions.");
   const clientId = useMemo(() => process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "", []);
+  const buttonRef = useRef<HTMLDivElement | null>(null);
+
+  function setToken(token: string): void {
+    setApiToken(token);
+
+    const isLocalHost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    const securePart = isLocalHost ? "" : "; Secure";
+    document.cookie = `image_ops_api_token=${encodeURIComponent(token)}; path=/; max-age=3600; SameSite=Lax${securePart}`;
+  }
 
   useEffect(() => {
     if (!clientId) {
@@ -42,12 +51,13 @@ export function GoogleAuthPanel() {
       return;
     }
 
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
+    let script: HTMLScriptElement | null = null;
+    let cancelled = false;
 
-    script.onload = () => {
+    const initializeGoogle = () => {
+      if (cancelled) {
+        return;
+      }
       const googleId = window.google?.accounts?.id;
       if (!googleId) {
         setMessage("Google SDK failed to initialize.");
@@ -76,7 +86,7 @@ export function GoogleAuthPanel() {
             }
 
             const payload = (await authResponse.json()) as AuthPayload;
-            setApiToken(payload.token);
+            setToken(payload.token);
             setMessage(`Signed in as ${payload.profile.subjectId} (${payload.profile.plan}).`);
           } catch (error) {
             setMessage(`Auth request failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -84,9 +94,8 @@ export function GoogleAuthPanel() {
         }
       });
 
-      const button = document.getElementById("google-signin-button");
-      if (button) {
-        googleId.renderButton(button, {
+      if (buttonRef.current) {
+        googleId.renderButton(buttonRef.current, {
           theme: "outline",
           size: "large",
           text: "continue_with"
@@ -96,18 +105,46 @@ export function GoogleAuthPanel() {
       googleId.prompt();
     };
 
-    document.body.appendChild(script);
+    if (window.google?.accounts?.id) {
+      initializeGoogle();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const existing = document.getElementById("google-identity-sdk");
+    if (existing instanceof HTMLScriptElement) {
+      script = existing;
+      existing.addEventListener("load", initializeGoogle, { once: true });
+    } else {
+      script = document.createElement("script");
+      script.id = "google-identity-sdk";
+      script.dataset.imageOpsManaged = "true";
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.addEventListener("load", initializeGoogle, { once: true });
+      script.addEventListener("error", () => {
+        if (!cancelled) {
+          setMessage("Failed to load Google SDK.");
+        }
+      }, { once: true });
+      document.body.appendChild(script);
+    }
 
     return () => {
-      document.body.removeChild(script);
+      cancelled = true;
+      if (script && document.body.contains(script) && script.dataset.imageOpsManaged === "true") {
+        document.body.removeChild(script);
+      }
     };
   }, [clientId]);
 
   return (
-    <section className="editorial-card reveal-el" data-delay="180">
+      <section className="editorial-card reveal-el" data-delay="180">
       <span className="section-label">Google Login</span>
       <h2 style={{ marginTop: "0.65rem" }}>Secure sign-in</h2>
-      <div id="google-signin-button" style={{ marginTop: "0.9rem", minHeight: 44 }} />
+      <div ref={buttonRef} style={{ marginTop: "0.9rem", minHeight: 44 }} />
       <p style={{ marginTop: "0.85rem", color: "var(--muted)" }}>{message}</p>
     </section>
   );
