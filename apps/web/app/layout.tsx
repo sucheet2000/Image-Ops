@@ -2,6 +2,8 @@ import "./styles.css";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Josefin_Sans, Playfair_Display } from "next/font/google";
+import MagneticCursor from "../components/cursor/MagneticCursor";
+import SmoothScrollProvider from "../components/layout/SmoothScrollProvider";
 import { EditorialChrome } from "./components/editorial-chrome";
 import { getBaseUrl } from "./lib/seo-data";
 
@@ -47,20 +49,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${displayFont.variable} ${bodyFont.variable} ${uiFont.variable}`}>
-        <EditorialChrome />
-        <main className="site-main">{children}</main>
-        <footer className="editorial-footer">
-          <div className="section-inner">
-            <span className="site-logo">ImageOps</span>
-            <div className="footer-links">
-              <Link href="/tools">Tools</Link>
-              <Link href="/upload">Upload</Link>
-              <Link href="/dashboard">Dashboard</Link>
-              <Link href="/billing">Billing</Link>
-              <Link href="/guides/prepare-amazon-main-images">Guides</Link>
+        <SmoothScrollProvider>
+          <EditorialChrome />
+          <main className="site-main">{children}</main>
+          <footer className="editorial-footer">
+            <div className="section-inner">
+              <span className="site-logo">ImageOps</span>
+              <div className="footer-links">
+                <Link href="/tools">Tools</Link>
+                <Link href="/upload">Upload</Link>
+                <Link href="/dashboard">Dashboard</Link>
+                <Link href="/billing">Billing</Link>
+                <Link href="/guides/prepare-amazon-main-images">Guides</Link>
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+          <MagneticCursor />
+        </SmoothScrollProvider>
       </body>
     </html>
   );

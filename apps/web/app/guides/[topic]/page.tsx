@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import FadeReveal from "../../../components/animation/FadeReveal";
+import WipeText from "../../../components/animation/WipeText";
 import { JsonLd } from "../../components/json-ld";
 import { findGuide, getBaseUrl, GUIDE_PAGES } from "../../lib/seo-data";
 
@@ -73,33 +75,43 @@ export default async function GuidePage({ params }: GuidePageProps) {
     <>
       <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "62vh" }}>
         <div className="section-inner">
-          <span className="section-label reveal-el" data-delay="0">Guide</span>
-          <h1 className="reveal-el" data-delay="100">{guide.title}</h1>
-          <p className="section-lead reveal-el" data-delay="180">{guide.summary}</p>
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Guide
+          </FadeReveal>
+          <WipeText as="h1" triggerOnMount>
+            {guide.title}
+          </WipeText>
+          <FadeReveal delay={180}>
+            <p className="section-lead">{guide.summary}</p>
+          </FadeReveal>
         </div>
       </section>
 
       <section className="editorial-page-grid">
         <div className="editorial-page-copy">
-          <span className="section-label reveal-el" data-delay="0">Step Sequence</span>
-          <h2 className="reveal-el" data-delay="100">Follow this order.</h2>
-          <ol className="editorial-list reveal-el" data-delay="180" style={{ marginTop: "1rem" }}>
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Step Sequence
+          </FadeReveal>
+          <WipeText as="h2">Follow this order.</WipeText>
+          <ol className="editorial-list" style={{ marginTop: "1rem" }}>
             {guide.steps.map((step, index) => (
-              <li key={step}>
+              <FadeReveal key={step} as="li" delay={180 + index * 80} y={10}>
                 <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
                 <span>{step}</span>
-              </li>
+              </FadeReveal>
             ))}
           </ol>
         </div>
 
         <aside className="editorial-page-side">
-          <span className="section-label reveal-el" data-delay="0">Related Tools</span>
-          <ul className="editorial-page-list reveal-el" data-delay="100">
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Related Tools
+          </FadeReveal>
+          <ul className="editorial-page-list">
             {guide.relatedTools.map((tool) => (
-              <li key={tool}>
+              <FadeReveal key={tool} as="li" delay={100}>
                 <Link href={`/tools/${tool}`}>{tool}</Link>
-              </li>
+              </FadeReveal>
             ))}
           </ul>
           <div className="editorial-card" style={{ marginTop: "1rem" }}>
@@ -120,11 +132,13 @@ export default async function GuidePage({ params }: GuidePageProps) {
       <section className="full-bleed-section" style={{ background: "var(--parchment)" }}>
         <div className="section-inner editorial-card-row">
           {guide.faq.map((item, index) => (
-            <article key={item.question} className="editorial-card reveal-el" data-delay={String(index * 80)}>
+            <FadeReveal key={item.question} delay={index * 80}>
+              <article className="editorial-card">
               <span className="section-label">FAQ</span>
               <h3 style={{ marginTop: "0.6rem" }}>{item.question}</h3>
               <p style={{ marginTop: "0.45rem", color: "var(--muted)" }}>{item.answer}</p>
-            </article>
+              </article>
+            </FadeReveal>
           ))}
         </div>
       </section>

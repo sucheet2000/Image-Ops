@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import FadeReveal from "../../../components/animation/FadeReveal";
+import ScrambleNumber from "../../../components/animation/ScrambleNumber";
+import WipeText from "../../../components/animation/WipeText";
 import { JsonLd } from "../../components/json-ld";
 import { ToolWorkbench } from "../../components/tool-workbench";
 import { findTool, getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from "../../lib/seo-data";
@@ -135,15 +138,19 @@ export default async function ToolPage({ params }: ToolPageProps) {
     <>
       <section className="full-bleed-section editorial-page-hero">
         <div className="section-inner">
-          <span className="section-label reveal-el" data-delay="0">Tool / {tool.slug}</span>
-          <h1 className="reveal-el" data-delay="100">
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Tool / {tool.slug}
+          </FadeReveal>
+          <WipeText as="h1" triggerOnMount>
             {tool.name.split(" ").map((word, index) => (
               <span key={word + index} style={index === tool.name.split(" ").length - 1 ? { fontStyle: "italic" } : undefined}>
                 {word}{" "}
               </span>
             ))}
-          </h1>
-          <p className="section-lead reveal-el" data-delay="200">{tool.summary}</p>
+          </WipeText>
+          <FadeReveal delay={200}>
+            <p className="section-lead">{tool.summary}</p>
+          </FadeReveal>
         </div>
       </section>
 
@@ -151,33 +158,46 @@ export default async function ToolPage({ params }: ToolPageProps) {
         <div className="editorial-media">
           <div className="editorial-media-inner" data-parallax-speed="0.12" />
           <span className="vertical-tag">Before / After</span>
-          <article className="stat-card reveal-el" data-delay="120">
-            <span className="stat-label">Average Processing Time</span>
-            <p className="stat-value">
-              3.2<span className="unit">S</span>
-            </p>
-            <p className="stat-caption">Per image in standard mode</p>
-          </article>
+          <FadeReveal delay={120} y={20}>
+            <article className="stat-card">
+              <span className="stat-label">Average Processing Time</span>
+              <p className="stat-value">
+                <ScrambleNumber value={3.2} decimals={1} />
+                <span className="unit">S</span>
+              </p>
+              <p className="stat-caption">Per image in standard mode</p>
+            </article>
+          </FadeReveal>
         </div>
         <div className="editorial-text">
-          <span className="section-label reveal-el" data-delay="0">{narrative.beforeTitle}</span>
-          <h2 className="reveal-el" data-delay="100">{narrative.afterTitle}</h2>
-          <p className="section-lead reveal-el" data-delay="180">{narrative.beforeCopy}</p>
-          <p className="section-lead reveal-el" data-delay="250">{narrative.afterCopy}</p>
+          <FadeReveal as="span" className="section-label" delay={0}>
+            {narrative.beforeTitle}
+          </FadeReveal>
+          <WipeText as="h2">{narrative.afterTitle}</WipeText>
+          <FadeReveal delay={180}>
+            <p className="section-lead">{narrative.beforeCopy}</p>
+          </FadeReveal>
+          <FadeReveal delay={250}>
+            <p className="section-lead">{narrative.afterCopy}</p>
+          </FadeReveal>
         </div>
       </section>
 
       <section className="full-bleed-section" style={{ background: "var(--cream)" }}>
         <div className="section-inner">
-          <span className="section-label reveal-el" data-delay="0">Feature List</span>
-          <h2 className="reveal-el" data-delay="100">What this tool delivers.</h2>
-          <p className="section-lead reveal-el" data-delay="160">{whenToUse}</p>
-          <ol className="editorial-list reveal-el" data-delay="220">
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Feature List
+          </FadeReveal>
+          <WipeText as="h2">What this tool delivers.</WipeText>
+          <FadeReveal delay={160}>
+            <p className="section-lead">{whenToUse}</p>
+          </FadeReveal>
+          <ol className="editorial-list">
             {narrative.numberedFeatures.map((feature, index) => (
-              <li key={feature}>
+              <FadeReveal key={feature} as="li" delay={220 + index * 80} y={10}>
                 <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
                 <span>{feature}</span>
-              </li>
+              </FadeReveal>
             ))}
           </ol>
         </div>
@@ -188,11 +208,13 @@ export default async function ToolPage({ params }: ToolPageProps) {
       <section className="full-bleed-section" style={{ background: "var(--parchment)" }}>
         <div className="section-inner editorial-card-row">
           {tool.faq.map((item, index) => (
-            <article key={item.question} className="editorial-card reveal-el" data-delay={String(index * 80)}>
+            <FadeReveal key={item.question} delay={index * 80}>
+              <article className="editorial-card">
               <span className="section-label">FAQ</span>
               <h3 style={{ marginTop: "0.5rem" }}>{item.question}</h3>
               <p style={{ marginTop: "0.45rem", color: "var(--muted)" }}>{item.answer}</p>
-            </article>
+              </article>
+            </FadeReveal>
           ))}
         </div>
       </section>
@@ -201,15 +223,23 @@ export default async function ToolPage({ params }: ToolPageProps) {
         <div className="section-inner" style={{ display: "grid", gap: "1rem", alignItems: "center", gridTemplateColumns: "1fr auto" }}>
           <div>
             <span className="section-label" style={{ color: "var(--white)" }}>Continue Workflow</span>
-            <h2 style={{ color: "var(--white)" }}>Need a full sequence? Build your image run now.</h2>
+            <div style={{ color: "var(--white)" }}>
+              <WipeText as="h2" wipeColor="rgba(255,255,255,0.3)">
+                Need a full sequence? Build your image run now.
+              </WipeText>
+            </div>
           </div>
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-            <Link href="/upload" className="editorial-button primary">
-              Open Upload Studio
-            </Link>
-            <Link href="/tools" className="editorial-button ghost" style={{ borderColor: "rgba(250,250,247,0.35)", color: "var(--white)" }}>
-              All Tools
-            </Link>
+            <FadeReveal delay={120}>
+              <Link href="/upload" className="editorial-button primary btn-primary">
+                <span>Open Upload Studio</span>
+              </Link>
+            </FadeReveal>
+            <FadeReveal delay={200}>
+              <Link href="/tools" className="editorial-button ghost btn-cream" style={{ borderColor: "rgba(250,250,247,0.35)", color: "var(--white)" }}>
+                <span>All Tools</span>
+              </Link>
+            </FadeReveal>
           </div>
         </div>
       </section>
@@ -219,13 +249,15 @@ export default async function ToolPage({ params }: ToolPageProps) {
           <span className="section-label">Related Use Cases</span>
           <div className="editorial-card-row" style={{ marginTop: "1rem" }}>
             {relatedUseCases.map((item, index) => (
-              <article key={item.slug} className="editorial-card reveal-el" data-delay={String(index * 80)}>
+              <FadeReveal key={item.slug} delay={index * 80}>
+                <article className="editorial-card">
                 <h3>{item.title}</h3>
                 <p style={{ marginTop: "0.5rem", color: "var(--muted)" }}>{item.summary}</p>
                 <Link href={`/use-cases/${item.slug}`} className="ui-link" style={{ marginTop: "0.9rem" }}>
                   Open Use Case →
                 </Link>
-              </article>
+                </article>
+              </FadeReveal>
             ))}
           </div>
         </div>
