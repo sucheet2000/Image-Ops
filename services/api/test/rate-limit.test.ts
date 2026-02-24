@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { InMemoryAuthService } from "../src/services/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -11,6 +12,12 @@ describe("api write rate limiting", () => {
       apiWriteRateLimitWindowMs: 60_000
     };
     const server = await startApiTestServer({ ...services, config });
+    const auth = new InMemoryAuthService(config.authTokenSecret);
+    const token = auth.issueApiToken({
+      sub: "seller_rl",
+      plan: "free",
+      now: new Date("2026-02-23T00:00:00.000Z")
+    });
 
     try {
       const requestBody = {
@@ -23,21 +30,30 @@ describe("api write rate limiting", () => {
 
       const first = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`
+        },
         body: JSON.stringify(requestBody)
       });
       expect(first.status).toBe(201);
 
       const second = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`
+        },
         body: JSON.stringify(requestBody)
       });
       expect(second.status).toBe(201);
 
       const third = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`
+        },
         body: JSON.stringify(requestBody)
       });
       expect(third.status).toBe(429);

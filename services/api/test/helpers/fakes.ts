@@ -17,7 +17,6 @@ export function createTestConfig(): ApiConfig {
     nodeEnv: "test",
     port: 4000,
     webOrigin: "http://localhost:3000",
-    apiAuthRequired: false,
     googleClientId: "test-google-client",
     authTokenSecret: "test-auth-token-secret",
     authTokenTtlSeconds: 3600,
