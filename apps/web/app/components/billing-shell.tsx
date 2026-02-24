@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "../lib/api-client";
+import { apiFetch, getApiBaseUrl } from "../lib/api-client";
 import { getViewerSession, type ViewerSession } from "../lib/session";
 
 type CheckoutPlan = "pro" | "team";
@@ -19,10 +19,6 @@ type BillingReconcileResponse = {
   paidSessions: number;
   corrected: number;
 };
-
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
-}
 
 async function readErrorMessage(response: Response): Promise<string> {
   try {

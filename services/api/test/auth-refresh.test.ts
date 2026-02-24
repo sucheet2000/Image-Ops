@@ -2,36 +2,23 @@ import { afterEach, describe, expect, it } from "vitest";
 import { InMemoryAuthService } from "../src/services/auth";
 import { createApiApp } from "../src/server";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
+import { startApiTestServer } from "./helpers/server";
 
 function cookieValue(setCookieHeader: string | null, cookieName: string): string | null {
   if (!setCookieHeader) {
     return null;
   }
   const firstPart = setCookieHeader.split(";")[0] || "";
-  const [name, value] = firstPart.split("=");
+  const idx = firstPart.indexOf("=");
+  if (idx === -1) {
+    return null;
+  }
+  const name = firstPart.slice(0, idx);
+  const value = firstPart.slice(idx + 1);
   if (!name || name !== cookieName || !value) {
     return null;
   }
   return decodeURIComponent(value);
-}
-
-async function startServer(app: ReturnType<typeof createApiApp>): Promise<{ baseUrl: string; close: () => Promise<void> }> {
-  const server = app.listen(0);
-  const address = server.address();
-  const port = typeof address === "object" && address ? address.port : 0;
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    close: async () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) {
-            reject(error);
-            return;
-          }
-          resolve();
-        });
-      })
-  };
 }
 
 const closers: Array<() => Promise<void>> = [];
@@ -53,7 +40,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const response = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -77,7 +64,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -101,6 +88,11 @@ describe("auth refresh session hardening", () => {
     expect(refreshed.status).toBe(200);
     const refreshedPayload = await refreshed.json();
     expect(refreshedPayload.tokenType).toBe("Bearer");
+    expect(refreshedPayload.plan).toBe("free");
+    expect(refreshedPayload.profile.subjectId).toBeTruthy();
+    expect(refreshedPayload.profile.plan).toBe("free");
+    expect(refreshedPayload.profile.createdAt).toBeTruthy();
+    expect(refreshedPayload.profile.updatedAt).toBeTruthy();
 
     const secondRefreshToken = cookieValue(refreshed.headers.get("set-cookie"), cookieName);
     expect(secondRefreshToken).toBeTruthy();
@@ -114,6 +106,41 @@ describe("auth refresh session hardening", () => {
     expect(replay.status).toBe(401);
   });
 
+  it("revokes the active refresh session when token secret does not match", async () => {
+    const config = createTestConfig();
+    const services = createFakeServices();
+    const auth = new InMemoryAuthService(config.authTokenSecret);
+
+    const app = createApiApp({ config, ...services, auth, now: () => new Date("2026-02-23T00:00:00.000Z") });
+    const server = await startApiTestServer({ app });
+    closers.push(server.close);
+
+    const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: "google-token-mismatch" })
+    });
+    expect(signIn.status).toBe(200);
+
+    const cookieName = config.authRefreshCookieName;
+    const refreshToken = cookieValue(signIn.headers.get("set-cookie"), cookieName);
+    expect(refreshToken).toBeTruthy();
+
+    const tamperedToken = `${refreshToken?.slice(0, -1)}x`;
+
+    const tamperedRefresh = await fetch(`${server.baseUrl}/api/auth/refresh`, {
+      method: "POST",
+      headers: { cookie: `${cookieName}=${encodeURIComponent(tamperedToken)}` }
+    });
+    expect(tamperedRefresh.status).toBe(401);
+
+    const legitAfterTamper = await fetch(`${server.baseUrl}/api/auth/refresh`, {
+      method: "POST",
+      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || "")}` }
+    });
+    expect(legitAfterTamper.status).toBe(401);
+  });
+
   it("revokes refresh session on logout", async () => {
     const config = createTestConfig();
     const services = createFakeServices();
@@ -121,7 +148,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
@@ -160,7 +187,7 @@ describe("auth refresh session hardening", () => {
 
     let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
-    const server = await startServer(app);
+    const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {

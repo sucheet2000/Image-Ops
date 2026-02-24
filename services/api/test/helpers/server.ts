@@ -1,4 +1,5 @@
 import type { AddressInfo } from "node:net";
+import type { Express } from "express";
 import type { ApiConfig } from "../../src/config";
 import { createApiApp } from "../../src/server";
 import type { InMemoryJobRepository } from "../../src/services/job-repo";
@@ -12,23 +13,29 @@ export type TestServices = {
   jobRepo: InMemoryJobRepository;
 };
 
+type StartServerInput =
+  | (TestServices & { now?: () => Date })
+  | { app: Express };
+
 /**
  * Starts the API application on an ephemeral port for use in tests.
  *
  * @param input - Test dependencies required to construct the API plus an optional `now` function to override the current time; when `now` is omitted it defaults to 2026-02-23T00:00:00.000Z
  * @returns An object containing `baseUrl` (the server URL, e.g. `http://127.0.0.1:<port>`) and `close` (a function that closes the server and completes once the server has shut down)
  */
-export async function startApiTestServer(input: TestServices & { now?: () => Date }): Promise<{
+export async function startApiTestServer(input: StartServerInput): Promise<{
   baseUrl: string;
   close: () => Promise<void>;
 }> {
-  const app = createApiApp({
-    config: input.config,
-    storage: input.storage,
-    queue: input.queue,
-    jobRepo: input.jobRepo,
-    now: input.now || (() => new Date("2026-02-23T00:00:00.000Z"))
-  });
+  const app = "app" in input
+    ? input.app
+    : createApiApp({
+        config: input.config,
+        storage: input.storage,
+        queue: input.queue,
+        jobRepo: input.jobRepo,
+        now: input.now || (() => new Date("2026-02-23T00:00:00.000Z"))
+      });
 
   const server = app.listen(0);
   const address = server.address() as AddressInfo;

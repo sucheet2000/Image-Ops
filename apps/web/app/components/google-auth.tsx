@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { setApiToken } from "../lib/api-client";
+import { getApiBaseUrl, setApiToken } from "../lib/api-client";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -32,10 +32,6 @@ declare global {
       };
     };
   }
-}
-
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 }
 
 export function GoogleAuthPanel() {

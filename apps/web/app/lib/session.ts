@@ -1,12 +1,11 @@
+import { PLAN_KEY, TOKEN_KEY } from "./storage-keys";
+
 export type ViewerPlan = "free" | "pro" | "team";
 export type ViewerSession = {
   subjectId: string | null;
   plan: ViewerPlan;
   isAuthenticated: boolean;
 };
-
-const TOKEN_KEY = "image_ops_api_token";
-const PLAN_KEY = "image_ops_subject_plan";
 
 function parseBase64Url(input: string): string | null {
   try {
