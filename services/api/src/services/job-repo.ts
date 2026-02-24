@@ -124,6 +124,14 @@ function authRefreshSessionKey(id: string): string {
   return `${AUTH_REFRESH_SESSION_PREFIX}${id}`;
 }
 
+function timestampMsOrNow(input: string): number {
+  const parsed = Date.parse(input);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return Date.now();
+}
+
 export class RedisJobRepository implements JobRepository {
   private readonly redis: IORedis;
   private readonly now: () => Date;
@@ -421,6 +429,7 @@ export class PostgresJobRepository implements JobRepository {
   }
 
   private async ensureSchema(): Promise<void> {
+    // Keep runtime bootstrap as a safety net for environments that have not applied SQL migrations yet.
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${POSTGRES_KV_TABLE} (
         key TEXT PRIMARY KEY,
