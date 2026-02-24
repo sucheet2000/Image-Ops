@@ -83,3 +83,18 @@ button.ghost {
 .ad-block--disabled {
   opacity: 0.8;
 }
+
+.billing-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.billing-note {
+  margin-top: 10px;
+  color: #374151;
+}
+
+.billing-status {
+  border-left: 6px solid #0f766e;
+}
