@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { JsonLd } from "../../components/json-ld";
 import { findGuide, getBaseUrl, GUIDE_PAGES } from "../../lib/seo-data";
 
 type GuidePageProps = {
@@ -111,8 +112,8 @@ export default async function GuidePage({ params }: GuidePageProps) {
         ))}
       </section>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
+      <JsonLd data={howToSchema} />
+      <JsonLd data={faqSchema} />
     </main>
   );
 }

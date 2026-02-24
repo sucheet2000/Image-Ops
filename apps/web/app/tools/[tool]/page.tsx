@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { JsonLd } from "../../components/json-ld";
 import { findTool, getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from "../../lib/seo-data";
 
 type ToolPageProps = {
@@ -105,8 +106,8 @@ export default async function ToolPage({ params }: ToolPageProps) {
         </ul>
       </section>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
+      <JsonLd data={softwareSchema} />
+      <JsonLd data={faqSchema} />
     </main>
   );
 }

@@ -109,6 +109,9 @@ Image publishing and deployment workflows:
   - manual staging rollout using `infra/docker-compose.release.yml`
   - requires staging SSH + GHCR pull secrets
   - waits for `/ready` and runs `npm run smoke:staging`
+- `.github/workflows/release-preflight.yml`
+  - manual smoke contract against a target API URL
+  - reads optional bearer token from repository/environment secret `API_BEARER_TOKEN`
 
 Required staging secrets for `deploy-staging.yml`:
 - `STAGING_SSH_HOST`
@@ -119,6 +122,9 @@ Required staging secrets for `deploy-staging.yml`:
 - `GHCR_DEPLOY_TOKEN`
 - `STAGING_API_BASE_URL`
 - `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
+
+Required secret for `release-preflight.yml` (optional when target API does not enforce auth):
+- `API_BEARER_TOKEN`
 
 ## Test Commands
 From the project root:

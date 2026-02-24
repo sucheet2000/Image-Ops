@@ -11,6 +11,8 @@ export type UseCasePage = {
   title: string;
   summary: string;
   recommendedTools: string[];
+  relatedGuides: { title: string; href: string }[];
+  relatedComparisons: { title: string; href: string }[];
 };
 
 export type AudienceIntentPage = {
@@ -112,19 +114,49 @@ export const USE_CASE_PAGES: UseCasePage[] = [
     slug: "amazon-listings",
     title: "Amazon Listing Images",
     summary: "Prepare compliant primary and gallery images for Amazon product pages.",
-    recommendedTools: ["resize", "compress", "background-remove"]
+    recommendedTools: ["resize", "compress", "background-remove"],
+    relatedGuides: [
+      { title: "Prepare Amazon Main Images", href: "/guides/prepare-amazon-main-images" },
+      { title: "Optimize Etsy Thumbnails", href: "/guides/optimize-etsy-thumbnails" },
+      { title: "Batch Convert Marketplace Images", href: "/guides/batch-convert-marketplace-images" }
+    ],
+    relatedComparisons: [
+      { title: "JPG vs PNG", href: "/compare/jpg-vs-png" },
+      { title: "PNG vs WEBP", href: "/compare/png-vs-webp" },
+      { title: "JPEG vs WEBP", href: "/compare/jpeg-vs-webp" }
+    ]
   },
   {
     slug: "etsy-shop-assets",
     title: "Etsy Shop Assets",
     summary: "Create lightweight storefront visuals and product thumbnails for Etsy.",
-    recommendedTools: ["resize", "compress", "convert"]
+    recommendedTools: ["resize", "compress", "convert"],
+    relatedGuides: [
+      { title: "Prepare Amazon Main Images", href: "/guides/prepare-amazon-main-images" },
+      { title: "Optimize Etsy Thumbnails", href: "/guides/optimize-etsy-thumbnails" },
+      { title: "Batch Convert Marketplace Images", href: "/guides/batch-convert-marketplace-images" }
+    ],
+    relatedComparisons: [
+      { title: "JPG vs PNG", href: "/compare/jpg-vs-png" },
+      { title: "PNG vs WEBP", href: "/compare/png-vs-webp" },
+      { title: "JPEG vs WEBP", href: "/compare/jpeg-vs-webp" }
+    ]
   },
   {
     slug: "social-ad-creatives",
     title: "Social Ad Creatives",
     summary: "Ship ad-ready images with optimized size and transparent backgrounds.",
-    recommendedTools: ["background-remove", "compress", "convert"]
+    recommendedTools: ["background-remove", "compress", "convert"],
+    relatedGuides: [
+      { title: "Prepare Amazon Main Images", href: "/guides/prepare-amazon-main-images" },
+      { title: "Optimize Etsy Thumbnails", href: "/guides/optimize-etsy-thumbnails" },
+      { title: "Batch Convert Marketplace Images", href: "/guides/batch-convert-marketplace-images" }
+    ],
+    relatedComparisons: [
+      { title: "JPG vs PNG", href: "/compare/jpg-vs-png" },
+      { title: "PNG vs WEBP", href: "/compare/png-vs-webp" },
+      { title: "JPEG vs WEBP", href: "/compare/jpeg-vs-webp" }
+    ]
   }
 ];
 

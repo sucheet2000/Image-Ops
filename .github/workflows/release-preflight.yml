@@ -7,10 +7,6 @@ on:
         description: "Target API base URL (for example: https://api-staging.example.com)"
         required: true
         type: string
-      api_bearer_token:
-        description: "Optional bearer token when target enforces API auth"
-        required: false
-        type: string
 
 concurrency:
   group: release-preflight-${{ inputs.target_api_base_url }}
@@ -26,8 +22,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - run: npm install
       - name: Run staging smoke contract against target API
         env:
           STAGING_API_BASE_URL: ${{ inputs.target_api_base_url }}
-          API_BEARER_TOKEN: ${{ inputs.api_bearer_token }}
+          API_BEARER_TOKEN: ${{ secrets.API_BEARER_TOKEN }}
         run: npm run smoke:staging

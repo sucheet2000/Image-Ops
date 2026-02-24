@@ -41,6 +41,8 @@ jobs:
           context: .
           file: apps/web/Dockerfile
           push: true
+          cache-from: type=gha,scope=image-ops-web
+          cache-to: type=gha,scope=image-ops-web,mode=max
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-web:${{ steps.meta.outputs.sha_tag }}
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-web:${{ steps.meta.outputs.latest_tag }}
@@ -51,6 +53,8 @@ jobs:
           context: .
           file: services/api/Dockerfile
           push: true
+          cache-from: type=gha,scope=image-ops-api
+          cache-to: type=gha,scope=image-ops-api,mode=max
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-api:${{ steps.meta.outputs.sha_tag }}
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-api:${{ steps.meta.outputs.latest_tag }}
@@ -61,6 +65,8 @@ jobs:
           context: .
           file: services/worker/Dockerfile
           push: true
+          cache-from: type=gha,scope=image-ops-worker
+          cache-to: type=gha,scope=image-ops-worker,mode=max
           tags: |
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-worker:${{ steps.meta.outputs.sha_tag }}
             ghcr.io/${{ steps.meta.outputs.owner }}/image-ops-worker:${{ steps.meta.outputs.latest_tag }}
