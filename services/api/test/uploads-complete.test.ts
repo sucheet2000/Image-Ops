@@ -48,6 +48,33 @@ describe("POST /api/uploads/complete", () => {
     expect(completion?.sha256).toBe(payload.sha256);
   });
 
+  it("rejects completion when provided sha256 does not match uploaded bytes", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const objectKey = "tmp/seller_1/input/2026/02/23/resize/source-mismatch.jpg";
+    const bytes = Buffer.from("actual-bytes");
+    services.storage.setObject(objectKey, "image/jpeg", bytes);
+
+    const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_1",
+        objectKey,
+        sha256: "a".repeat(64)
+      })
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe("SHA256_MISMATCH");
+
+    const completion = await services.jobRepo.getUploadCompletion(objectKey);
+    expect(completion).toBeNull();
+  });
+
   it("deduplicates identical uploads to canonical object key", async () => {
     const services = createFakeServices();
     const server = await startApiTestServer({ ...services, config: createTestConfig() });
@@ -80,6 +107,40 @@ describe("POST /api/uploads/complete", () => {
 
     const deletedHead = await services.storage.headObject(duplicateKey);
     expect(deletedHead.exists).toBe(false);
+  });
+
+  it("does not deduplicate across different subjects even with identical bytes", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const subjectAKey = "tmp/seller_a/input/2026/02/23/resize/source-a.jpg";
+    const subjectBKey = "tmp/seller_b/input/2026/02/23/resize/source-b.jpg";
+    const bytes = Buffer.from("same-cross-subject-content");
+
+    services.storage.setObject(subjectAKey, "image/jpeg", bytes);
+    services.storage.setObject(subjectBKey, "image/jpeg", bytes);
+
+    const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subjectId: "seller_a", objectKey: subjectAKey })
+    });
+    expect(first.status).toBe(200);
+
+    const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ subjectId: "seller_b", objectKey: subjectBKey })
+    });
+    expect(second.status).toBe(200);
+
+    const payload = await second.json();
+    expect(payload.deduplicated).toBe(false);
+    expect(payload.canonicalObjectKey).toBe(subjectBKey);
+
+    const secondHead = await services.storage.headObject(subjectBKey);
+    expect(secondHead.exists).toBe(true);
   });
 
   it("falls back to byte-compare when hash index candidate differs", async () => {
