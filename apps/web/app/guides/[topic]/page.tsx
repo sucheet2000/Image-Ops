@@ -55,6 +55,7 @@ export default async function GuidePage({ params }: GuidePageProps) {
       name: step
     }))
   };
+
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -69,51 +70,67 @@ export default async function GuidePage({ params }: GuidePageProps) {
   };
 
   return (
-    <main className="container">
-      <h1>{guide.title}</h1>
-      <p className="subhead">{guide.summary}</p>
+    <>
+      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "62vh" }}>
+        <div className="section-inner">
+          <span className="section-label reveal-el" data-delay="0">Guide</span>
+          <h1 className="reveal-el" data-delay="100">{guide.title}</h1>
+          <p className="section-lead reveal-el" data-delay="180">{guide.summary}</p>
+        </div>
+      </section>
 
-      <section className="card">
-        <h2>Steps</h2>
-        <ol>
-          {guide.steps.map((step) => (
-            <li key={step}>{step}</li>
+      <section className="editorial-page-grid">
+        <div className="editorial-page-copy">
+          <span className="section-label reveal-el" data-delay="0">Step Sequence</span>
+          <h2 className="reveal-el" data-delay="100">Follow this order.</h2>
+          <ol className="editorial-list reveal-el" data-delay="180" style={{ marginTop: "1rem" }}>
+            {guide.steps.map((step, index) => (
+              <li key={step}>
+                <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <aside className="editorial-page-side">
+          <span className="section-label reveal-el" data-delay="0">Related Tools</span>
+          <ul className="editorial-page-list reveal-el" data-delay="100">
+            {guide.relatedTools.map((tool) => (
+              <li key={tool}>
+                <Link href={`/tools/${tool}`}>{tool}</Link>
+              </li>
+            ))}
+          </ul>
+          <div className="editorial-card" style={{ marginTop: "1rem" }}>
+            <p className="section-label">More Reading</p>
+            <p style={{ marginTop: "0.5rem" }}>
+              <Link href="/compare/jpg-vs-png">Compare: JPG vs PNG</Link>
+            </p>
+            <p>
+              <Link href="/for/amazon/main-image-compliance">Workflow: Amazon Main Image Compliance</Link>
+            </p>
+            <p>
+              <Link href="/use-cases/amazon-listings">Use case: Amazon Listings</Link>
+            </p>
+          </div>
+        </aside>
+      </section>
+
+      <section className="full-bleed-section" style={{ background: "var(--parchment)" }}>
+        <div className="section-inner editorial-card-row">
+          {guide.faq.map((item, index) => (
+            <article key={item.question} className="editorial-card reveal-el" data-delay={String(index * 80)}>
+              <span className="section-label">FAQ</span>
+              <h3 style={{ marginTop: "0.6rem" }}>{item.question}</h3>
+              <p style={{ marginTop: "0.45rem", color: "var(--muted)" }}>{item.answer}</p>
+            </article>
           ))}
-        </ol>
-      </section>
-
-      <section className="card">
-        <h2>Related Tools</h2>
-        <ul>
-          {guide.relatedTools.map((tool) => (
-            <li key={tool}>
-              <Link href={`/tools/${tool}`}>{tool}</Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="card">
-        <h2>More Reading</h2>
-        <ul>
-          <li><Link href="/compare/jpg-vs-png">Compare: JPG vs PNG</Link></li>
-          <li><Link href="/for/amazon/main-image-compliance">Workflow: Amazon Main Image Compliance</Link></li>
-          <li><Link href="/use-cases/amazon-listings">Use case: Amazon Listings</Link></li>
-        </ul>
-      </section>
-
-      <section className="card">
-        <h2>FAQ</h2>
-        {guide.faq.map((item) => (
-          <article key={item.question}>
-            <h3>{item.question}</h3>
-            <p>{item.answer}</p>
-          </article>
-        ))}
+        </div>
       </section>
 
       <JsonLd data={howToSchema} />
       <JsonLd data={faqSchema} />
-    </main>
+    </>
   );
 }

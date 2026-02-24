@@ -1,4 +1,4 @@
-import { PLAN_KEY, TOKEN_KEY } from "./storage-keys";
+import { PLAN_KEY, SUBJECT_KEY, TOKEN_KEY } from "./storage-keys";
 
 export type ViewerPlan = "free" | "pro" | "team";
 export type ViewerSession = {
@@ -48,6 +48,22 @@ function safeStorageGet(storage: Storage, key: string): string | null {
   }
 }
 
+function safeStorageSet(storage: Storage, key: string, value: string): void {
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures in restrictive/private browsing modes.
+  }
+}
+
+function readStoredSubjectId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const value = safeStorageGet(localStorage, SUBJECT_KEY);
+  return value && value.length > 0 ? value : null;
+}
+
 function readApiToken(): string | null {
   return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
 }
@@ -57,17 +73,18 @@ export function getViewerSession(): ViewerSession {
     return { subjectId: null, plan: "free", isAuthenticated: false };
   }
 
+  const subjectId = readStoredSubjectId();
   const explicitPlan = safeStorageGet(localStorage, PLAN_KEY);
   const token = readApiToken();
   if (!token) {
     const plan = explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team" ? explicitPlan : "free";
-    return { subjectId: null, plan, isAuthenticated: false };
+    return { subjectId, plan, isAuthenticated: false };
   }
 
   const claims = parseClaimsFromToken(token);
   const plan = claims?.plan || (explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team" ? explicitPlan : "free");
   return {
-    subjectId: claims?.sub || null,
+    subjectId: claims?.sub || subjectId,
     plan,
     isAuthenticated: Boolean(claims?.sub)
   };
@@ -75,4 +92,22 @@ export function getViewerSession(): ViewerSession {
 
 export function getViewerPlan(): ViewerPlan {
   return getViewerSession().plan;
+}
+
+export function setViewerPlan(plan: ViewerPlan): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  safeStorageSet(localStorage, PLAN_KEY, plan);
+}
+
+export function setViewerSubjectId(subjectId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const trimmed = subjectId.trim();
+  if (!trimmed) {
+    return;
+  }
+  safeStorageSet(localStorage, SUBJECT_KEY, trimmed);
 }

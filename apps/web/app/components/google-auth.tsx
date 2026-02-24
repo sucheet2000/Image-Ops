@@ -9,8 +9,6 @@ type GoogleCredentialResponse = {
 
 type AuthPayload = {
   token: string;
-  tokenType: string;
-  expiresIn: number;
   profile: {
     subjectId: string;
     plan: string;
@@ -106,10 +104,11 @@ export function GoogleAuthPanel() {
   }, [clientId]);
 
   return (
-    <section className="card">
-      <h2>Google Login</h2>
-      <div id="google-signin-button" style={{ minHeight: 44 }} />
-      <p>{message}</p>
+    <section className="editorial-card reveal-el" data-delay="180">
+      <span className="section-label">Google Login</span>
+      <h2 style={{ marginTop: "0.65rem" }}>Secure sign-in</h2>
+      <div id="google-signin-button" style={{ marginTop: "0.9rem", minHeight: 44 }} />
+      <p style={{ marginTop: "0.85rem", color: "var(--muted)" }}>{message}</p>
     </section>
   );
 }

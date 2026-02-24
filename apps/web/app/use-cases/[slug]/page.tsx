@@ -59,42 +59,61 @@ export default async function UseCasePage({ params }: UseCasePageProps) {
   };
 
   return (
-    <main className="container">
-      <h1>{useCase.title}</h1>
-      <p className="subhead">{useCase.summary}</p>
-      <section className="card">
-        <h2>Recommended Tool Sequence</h2>
-        <ol>
-          {useCase.recommendedTools.map((tool) => (
-            <li key={tool}>{tool}</li>
-          ))}
-        </ol>
+    <>
+      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "58vh" }}>
+        <div className="section-inner">
+          <span className="section-label reveal-el" data-delay="0">Use Case</span>
+          <h1 className="reveal-el" data-delay="100">{useCase.title}</h1>
+          <p className="section-lead reveal-el" data-delay="180">{useCase.summary}</p>
+        </div>
       </section>
-      {useCase.relatedGuides.length > 0 ? (
-        <section className="card">
-          <h2>Related Guides</h2>
-          <ul>
-            {useCase.relatedGuides.map((item) => (
-              <li key={item.href}>
-                <Link href={item.href}>{item.title}</Link>
+
+      <section className="editorial-page-grid">
+        <div className="editorial-page-copy">
+          <span className="section-label reveal-el" data-delay="0">Recommended Sequence</span>
+          <h2 className="reveal-el" data-delay="100">Execute in this order.</h2>
+          <ol className="editorial-list reveal-el" data-delay="200" style={{ marginTop: "1rem" }}>
+            {useCase.recommendedTools.map((tool, index) => (
+              <li key={tool}>
+                <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+                <span>
+                  <Link href={`/tools/${tool}`}>{tool}</Link>
+                </span>
               </li>
             ))}
-          </ul>
-        </section>
-      ) : null}
-      {useCase.relatedComparisons.length > 0 ? (
-        <section className="card">
-          <h2>Format References</h2>
-          <ul>
-            {useCase.relatedComparisons.map((item) => (
-              <li key={item.href}>
-                <Link href={item.href}>{item.title}</Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          </ol>
+        </div>
+
+        <aside className="editorial-page-side">
+          {useCase.relatedGuides.length > 0 ? (
+            <>
+              <span className="section-label reveal-el" data-delay="0">Related Guides</span>
+              <ul className="editorial-page-list reveal-el" data-delay="100">
+                {useCase.relatedGuides.map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href}>{item.title}</Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+
+          {useCase.relatedComparisons.length > 0 ? (
+            <>
+              <span className="section-label reveal-el" data-delay="160" style={{ marginTop: "1.1rem" }}>Format References</span>
+              <ul className="editorial-page-list reveal-el" data-delay="220">
+                {useCase.relatedComparisons.map((item) => (
+                  <li key={item.href}>
+                    <Link href={item.href}>{item.title}</Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </aside>
+      </section>
+
       <JsonLd data={schema} />
-    </main>
+    </>
   );
 }

@@ -537,7 +537,7 @@ export class PostgresJobRepository implements JobRepository {
     `);
     await this.pool.query(`
       CREATE INDEX IF NOT EXISTS imageops_billing_checkout_subject_updated_idx
-      ON ${POSTGRES_KV_TABLE} ((value->>'subjectId'), ((value->>'updatedAt')::timestamptz) DESC)
+      ON ${POSTGRES_KV_TABLE} ((value->>'subjectId'), (value->>'updatedAt') DESC)
       WHERE key LIKE '${BILLING_CHECKOUT_KEY_PREFIX}%';
     `);
   }
