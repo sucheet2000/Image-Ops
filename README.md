@@ -150,6 +150,28 @@ The smoke script validates:
 - job create -> job completion -> download (when token is provided)
 - cleanup idempotency path (when token is provided)
 
+## Release Preflight
+Validate deployment-critical env configuration before rollout:
+```bash
+npm run preflight:staging
+npm run preflight:production
+```
+
+Preflight checks include:
+- auth/session safety (`API_AUTH_REQUIRED`, refresh cookie security)
+- billing provider requirements (Stripe secrets or HMAC secrets)
+- repository/storage requirements (`JOB_REPO_DRIVER`, `POSTGRES_URL`, S3 settings)
+- origin sanity (`WEB_ORIGIN` production safety checks)
+
+## Rollout Sequence
+1. Deploy API + worker using the same version/tag.
+2. Run `npm run preflight:production` in the release environment.
+3. Run `STAGING_API_BASE_URL=<api-url> API_BEARER_TOKEN=<token> npm run smoke:staging`.
+4. Promote traffic gradually (canary first).
+5. If smoke fails, rollback API + worker to previous version/tag immediately.
+
+Detailed checklist: `docs/release-runbook.md`.
+
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
 - Relational metadata schema exists in `infra/sql/001_initial_schema.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.

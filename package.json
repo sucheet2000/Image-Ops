@@ -16,6 +16,8 @@
     "infra:down:integration": "docker compose -f infra/docker-compose.integration.yml down -v",
     "test:integration:api": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration",
     "test:integration:api:workflow": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration/workflow.integration.test.ts",
-    "smoke:staging": "bash scripts/staging-smoke.sh"
+    "smoke:staging": "bash scripts/staging-smoke.sh",
+    "preflight:staging": "RELEASE_ENV=staging bash scripts/release-preflight.sh",
+    "preflight:production": "RELEASE_ENV=production bash scripts/release-preflight.sh"
   }
 }
