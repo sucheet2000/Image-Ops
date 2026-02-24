@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { shouldApplyWatermarkForTool } from "@image-ops/core";
+import { shouldApplyWatermarkForTool } from "@imageops/core";
 
 describe("watermark policy", () => {
   it("applies watermark to advanced tool output on free plan", () => {

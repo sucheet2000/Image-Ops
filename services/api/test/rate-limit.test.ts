@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryAuthService } from "../src/services/auth";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -12,12 +12,6 @@ describe("api write rate limiting", () => {
       apiWriteRateLimitWindowMs: 60_000
     };
     const server = await startApiTestServer({ ...services, config });
-    const auth = new InMemoryAuthService(config.authTokenSecret);
-    const token = auth.issueApiToken({
-      sub: "seller_rl",
-      plan: "free",
-      now: new Date("2026-02-23T00:00:00.000Z")
-    });
 
     try {
       const requestBody = {
@@ -32,7 +26,7 @@ describe("api write rate limiting", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${token}`
+          ...bearerAuthHeaders("seller_rl")
         },
         body: JSON.stringify(requestBody)
       });
@@ -42,7 +36,7 @@ describe("api write rate limiting", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${token}`
+          ...bearerAuthHeaders("seller_rl")
         },
         body: JSON.stringify(requestBody)
       });
@@ -52,7 +46,7 @@ describe("api write rate limiting", () => {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          authorization: `Bearer ${token}`
+          ...bearerAuthHeaders("seller_rl")
         },
         body: JSON.stringify(requestBody)
       });

@@ -3,7 +3,7 @@ import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { AppError, ValidationError } from "@imageops/core";
 import IORedis from "ioredis";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { RedisStore, type RedisReply } from "rate-limit-redis";
 import { loadApiConfig, type ApiConfig } from "./config";
 import { requireApiAuth, type RequestWithAuth } from "./lib/auth-middleware";
@@ -76,15 +76,17 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
   return { value: error };
 }
 
-function runAppCleanup(app: Express): void {
-  const cleanupCallbacks = app.locals.__runtimeCleanup as Array<() => void> | undefined;
+type CleanupCallback = () => void | Promise<void>;
+
+async function runAppCleanup(app: Express): Promise<void> {
+  const cleanupCallbacks = app.locals.__runtimeCleanup as CleanupCallback[] | undefined;
   if (!cleanupCallbacks) {
     return;
   }
 
   for (const cleanup of cleanupCallbacks) {
     try {
-      cleanup();
+      await cleanup();
     } catch (error) {
       logError("api.cleanup.failed", { error: formatErrorForLog(error) });
     }
@@ -189,6 +191,10 @@ export function errorHandler(error: unknown, _req: Request, res: Response, next:
 
 export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRuntime {
   const config = incomingDeps?.config || loadApiConfig();
+  if (config.nodeEnv !== "test") {
+    validateEnv();
+  }
+
   const deps: ApiDependencies = {
     config,
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
@@ -214,8 +220,8 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     ? null
     : new IORedis(deps.config.redisUrl, { maxRetriesPerRequest: null });
   if (rateLimitRedis) {
-    (app.locals.__runtimeCleanup as Array<() => void>).push(() => {
-      rateLimitRedis.disconnect();
+    (app.locals.__runtimeCleanup as CleanupCallback[]).push(async () => {
+      await rateLimitRedis.quit();
     });
   }
   const requestMetrics = new Map<string, { count: number; durationSecondsTotal: number }>();
@@ -268,22 +274,23 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 
-  const createRedisRateLimitStore = (): RedisStore | undefined => {
+  const createRedisRateLimitStore = (prefix: string): RedisStore | undefined => {
     if (!rateLimitRedis) {
       return undefined;
     }
 
     return new RedisStore({
+      prefix,
       sendCommand: (...command: string[]) =>
         rateLimitRedis.call(command[0], ...command.slice(1)) as Promise<RedisReply>
     });
   };
-  const authRateLimitStore = createRedisRateLimitStore();
-  const uploadRateLimitStore = createRedisRateLimitStore();
+  const authRateLimitStore = createRedisRateLimitStore("rl:auth:");
+  const uploadRateLimitStore = createRedisRateLimitStore("rl:upload:");
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 10,
+    limit: 10,
     ...(authRateLimitStore ? { store: authRateLimitStore } : {}),
     handler: (_req, res) => {
       res.status(429).json({
@@ -299,10 +306,10 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
 
   const uploadLimiter = rateLimit({
     windowMs: 10 * 60 * 1000,
-    max: 30,
+    limit: 30,
     keyGenerator: (req) => {
       const subjectId = (req as RequestWithAuth).auth?.sub;
-      return subjectId || req.ip || "unknown";
+      return subjectId || ipKeyGenerator(req.ip || "unknown");
     },
     ...(uploadRateLimitStore ? { store: uploadRateLimitStore } : {}),
     handler: (_req, res) => {
@@ -322,7 +329,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     windowMs: deps.config.apiWriteRateLimitWindowMs,
     keyPrefix: "api-write"
   });
-  (app.locals.__runtimeCleanup as Array<() => void>).push(() => writeRateLimit.close());
+  (app.locals.__runtimeCleanup as CleanupCallback[]).push(() => writeRateLimit.close());
   app.use("/api/uploads/init", writeRateLimit);
   app.use("/api/uploads/complete", writeRateLimit);
   app.use("/api/jobs", writeRateLimit);
@@ -331,7 +338,6 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   app.use("/api/billing/subscription", writeRateLimit);
   app.use("/api/auth/google", authLimiter);
   app.use("/api/auth/refresh", authLimiter);
-  app.use("/api/auth/logout", authLimiter);
 
   app.use((req, res, next) => {
     const startedAtNs = process.hrtime.bigint();
@@ -447,7 +453,6 @@ export function createApiApp(incomingDeps?: Partial<ApiDependencies>): Express {
 }
 
 if (require.main === module) {
-  validateEnv();
   const config = loadApiConfig();
   const runtime = createApiRuntime({ config });
   const server = runtime.app.listen(config.port, () => {

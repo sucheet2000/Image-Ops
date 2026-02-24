@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 import { fakePngBytes } from "./utils/image-helpers";
@@ -35,7 +36,7 @@ describe("POST /api/uploads/complete", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         objectKey,
@@ -62,7 +63,7 @@ describe("POST /api/uploads/complete", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         objectKey,
@@ -90,14 +91,14 @@ describe("POST /api/uploads/complete", () => {
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
       body: JSON.stringify({ subjectId: "seller_2", objectKey: canonicalKey })
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
       // Intentionally omits sha256 to exercise server-side digest computation.
       body: JSON.stringify({ subjectId: "seller_2", objectKey: duplicateKey })
     });
@@ -123,14 +124,14 @@ describe("POST /api/uploads/complete", () => {
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_a") },
       body: JSON.stringify({ subjectId: "seller_a", objectKey: subjectAKey })
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_b") },
       body: JSON.stringify({ subjectId: "seller_b", objectKey: subjectBKey })
     });
     expect(second.status).toBe(200);
@@ -177,7 +178,7 @@ describe("POST /api/uploads/complete", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_3") },
       body: JSON.stringify({ subjectId: "seller_3", objectKey: sourceKey })
     });
 

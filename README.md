@@ -117,7 +117,7 @@ Image publishing and deployment workflows:
   - waits for `/ready` and runs `npm run smoke:staging`
 - `.github/workflows/release-preflight.yml`
   - manual smoke contract against a target API URL
-  - reads optional bearer token from repository/environment secret `API_BEARER_TOKEN`
+  - reads bearer token from repository/environment secret `API_BEARER_TOKEN` (required)
 
 Required staging secrets for `deploy-staging.yml`:
 - `STAGING_SSH_HOST`
@@ -127,9 +127,9 @@ Required staging secrets for `deploy-staging.yml`:
 - `GHCR_DEPLOY_USER`
 - `GHCR_DEPLOY_TOKEN`
 - `STAGING_API_BASE_URL`
-- `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
+- `STAGING_API_BEARER_TOKEN` (required; API auth is enforced)
 
-Required secret for `release-preflight.yml` (optional when target API does not enforce auth):
+Required secret for `release-preflight.yml`:
 - `API_BEARER_TOKEN`
 
 ## Render + Cloudflare + R2

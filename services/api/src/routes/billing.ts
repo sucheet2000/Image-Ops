@@ -114,18 +114,27 @@ export function registerBillingRoutes(
   }));
 
   router.post("/api/webhooks/billing", asyncHandler(async (req, res) => {
-    const signature = String(req.header("x-billing-signature") || "").trim();
+    const signatureHeader = deps.config.billingProvider === "stripe" ? "stripe-signature" : "x-billing-signature";
+    const signature = String(req.header(signatureHeader) || "").trim();
     if (!signature) {
-      res.status(401).json({ error: "BILLING_SIGNATURE_REQUIRED", message: "x-billing-signature header is required." });
+      res.status(400).json({
+        error: "INVALID_SIGNATURE",
+        message: `${signatureHeader} header is required.`
+      });
       return;
     }
 
-    const payloadText = Buffer.isBuffer(req.body)
-      ? req.body.toString("utf8")
-      : JSON.stringify(req.body || {});
+    if (!Buffer.isBuffer(req.body)) {
+      res.status(400).json({
+        error: "INVALID_SIGNATURE",
+        message: "Webhook payload must be a raw request body."
+      });
+      return;
+    }
+    const payloadText = req.body.toString("utf8");
 
     if (!deps.billing.verifyWebhookSignature(payloadText, signature)) {
-      res.status(401).json({ error: "INVALID_BILLING_SIGNATURE", message: "Webhook signature is invalid." });
+      res.status(400).json({ error: "INVALID_SIGNATURE", message: "Webhook signature invalid" });
       return;
     }
 
