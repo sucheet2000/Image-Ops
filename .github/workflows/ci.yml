@@ -35,6 +35,7 @@ jobs:
         run: docker compose -f infra/docker-compose.integration.yml up -d redis minio minio-setup
       - name: Build API and worker
         run: |
+          npm run build -w packages/core
           npm run build -w services/api
           npm run build -w services/worker
       - name: Start API and worker
