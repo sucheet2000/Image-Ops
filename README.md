@@ -39,18 +39,22 @@ Required variables are listed in `.env.example`.
 
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
+- API hardening: `API_WRITE_RATE_LIMIT_WINDOW_MS`, `API_WRITE_RATE_LIMIT_MAX`, `MALWARE_SCAN_API_URL`, `MALWARE_SCAN_TIMEOUT_MS`, `MALWARE_SCAN_FAIL_CLOSED`
+- Quota policy: `FREE_PLAN_LIMIT`, `FREE_PLAN_WINDOW_HOURS`, `PRO_PLAN_LIMIT`, `PRO_PLAN_WINDOW_HOURS`, `TEAM_PLAN_LIMIT`, `TEAM_PLAN_WINDOW_HOURS`
 - Auth: `API_AUTH_REQUIRED`, `GOOGLE_CLIENT_ID`, `AUTH_TOKEN_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TTL_SECONDS`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_SECURE`, `AUTH_REFRESH_COOKIE_SAMESITE`, `AUTH_REFRESH_COOKIE_DOMAIN`, `AUTH_REFRESH_COOKIE_PATH`
-- Billing: `BILLING_PROVIDER`, `BILLING_PUBLIC_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_TEAM`
+- Billing: `BILLING_PROVIDER`, `BILLING_PUBLIC_BASE_URL`, `BILLING_PORTAL_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_TEAM`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
-- Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
+- Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
 - Worker/background remove: `WORKER_CONCURRENCY`, `WORKER_HEARTBEAT_INTERVAL_MS`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
 
 ## Observability
 - `GET /health`: basic liveness probe.
 - `GET /ready`: readiness probe that verifies storage and metadata repository connectivity.
-- `GET /metrics`: Prometheus-style metrics for uptime, in-flight requests, request counts, and duration totals.
+- `GET /metrics`: Prometheus-style metrics for uptime, in-flight requests, request counts/duration totals, and queue depth by state.
 - Worker emits `worker.ready`, `worker.completed`, `worker.failed`, and periodic `worker.heartbeat` structured log events.
+- Alert rules starter pack: `infra/observability/prometheus-alerts.yml`.
+- Dashboard/runbook notes: `docs/observability.md`.
 
 ## Auth Session Strategy
 - `POST /api/auth/google` issues a short-lived bearer access token plus an HttpOnly refresh cookie.
@@ -61,6 +65,8 @@ Key runtime groups:
 ## Billing Reconciliation
 - `POST /api/billing/reconcile` scans paid checkout sessions and repairs downgraded/missing subject plans.
 - Use this endpoint as a drift-recovery control when webhook delivery is delayed or partially failed.
+- `GET /api/billing/summary/:subjectId` returns lifecycle summary + available subscription actions.
+- `POST /api/billing/subscription` supports self-serve `cancel` and `reactivate` actions.
 
 ## Local Infrastructure
 Minimum local dependencies:
@@ -125,6 +131,11 @@ Required staging secrets for `deploy-staging.yml`:
 
 Required secret for `release-preflight.yml` (optional when target API does not enforce auth):
 - `API_BEARER_TOKEN`
+
+## Render + Cloudflare + R2
+For managed production deployment on Render with Cloudflare DNS and Cloudflare R2 storage, use:
+- `render.yaml` (Blueprint at repo root)
+- `docs/deploy/render-cloudflare-r2.md` (step-by-step runbook)
 
 ## Test Commands
 From the project root:
@@ -212,9 +223,14 @@ The smoke script validates:
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
 - Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
-- Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
+- Quota is plan-aware at job creation (defaults: free 6/10h, pro 250/24h, team 1000/24h; configurable via env).
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
 - SEO page surfaces include `/tools/:tool`, `/use-cases/:slug`, `/for/:audience/:intent`, `/guides/:topic`, and `/compare/:slug`.
+- SEO inventory is expanded to ~50 dynamic pages across tools/use-cases/workflows/guides/comparisons.
+- Browser tool workflow is available at `/tools`: upload init -> upload PUT -> upload complete -> create job -> poll -> download -> cleanup.
+
+## Product Policy Locks
+- `docs/product-decisions.md` captures current V1 product defaults for ad network, background-remove provider, quota policy targets, and consent behavior.
 
 ## Parallel Development (Git Worktrees)
 - Team worktree workflow: `docs/git-worktree-plan.md`
