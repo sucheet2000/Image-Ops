@@ -250,4 +250,81 @@ describe("billing routes", () => {
     const profile = await services.jobRepo.getSubjectProfile("seller_5");
     expect(profile?.plan).toBe("pro");
   });
+
+  it("returns billing summary and applies cancel/reactivate lifecycle actions", async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_6",
+        plan: "team",
+        successUrl: "https://example.com/success",
+        cancelUrl: "https://example.com/cancel"
+      })
+    });
+    expect(checkoutResponse.status).toBe(201);
+    const checkoutPayload = await checkoutResponse.json();
+
+    const webhookPayload = {
+      eventId: "evt_paid_6",
+      checkoutSessionId: checkoutPayload.checkoutSessionId,
+      subjectId: "seller_6",
+      plan: "team",
+      status: "paid"
+    };
+
+    const billing = new HmacBillingService({
+      publicBaseUrl: config.billingPublicBaseUrl,
+      providerSecret: config.billingProviderSecret,
+      webhookSecret: config.billingWebhookSecret
+    });
+    const signature = billing.signWebhookPayload(JSON.stringify(webhookPayload));
+
+    const webhookResponse = await fetch(`${server.baseUrl}/api/webhooks/billing`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-billing-signature": signature
+      },
+      body: JSON.stringify(webhookPayload)
+    });
+    expect(webhookResponse.status).toBe(200);
+
+    const summaryBefore = await fetch(`${server.baseUrl}/api/billing/summary/seller_6`);
+    expect(summaryBefore.status).toBe(200);
+    const summaryBeforePayload = await summaryBefore.json();
+    expect(summaryBeforePayload.plan).toBe("team");
+    expect(summaryBeforePayload.actions.canCancel).toBe(true);
+
+    const cancelResponse = await fetch(`${server.baseUrl}/api/billing/subscription`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_6",
+        action: "cancel"
+      })
+    });
+    expect(cancelResponse.status).toBe(200);
+    const canceled = await cancelResponse.json();
+    expect(canceled.plan).toBe("free");
+    expect(canceled.changed).toBe(true);
+
+    const reactivateResponse = await fetch(`${server.baseUrl}/api/billing/subscription`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_6",
+        action: "reactivate"
+      })
+    });
+    expect(reactivateResponse.status).toBe(200);
+    const reactivated = await reactivateResponse.json();
+    expect(reactivated.plan).toBe("team");
+    expect(reactivated.changed).toBe(true);
+  });
 });

@@ -34,6 +34,33 @@ describe("quota", () => {
     expect(result.window.usedCount).toBe(1);
     expect(result.window.windowStartAt).toBe(now.toISOString());
   });
+
+  it("supports custom quota limits and windows", () => {
+    const start = new Date("2026-02-23T00:00:00.000Z");
+    const withinWindow = new Date("2026-02-23T23:00:00.000Z");
+    const pastWindow = new Date("2026-02-24T01:00:00.000Z");
+
+    const blocked = applyQuota(
+      { windowStartAt: start.toISOString(), usedCount: 2 },
+      1,
+      withinWindow,
+      2,
+      24
+    );
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.nextWindowStartAt).toBe("2026-02-24T00:00:00.000Z");
+
+    const reset = applyQuota(
+      { windowStartAt: start.toISOString(), usedCount: 2 },
+      1,
+      pastWindow,
+      2,
+      24
+    );
+    expect(reset.allowed).toBe(true);
+    expect(reset.window.usedCount).toBe(1);
+    expect(reset.window.windowStartAt).toBe(pastWindow.toISOString());
+  });
 });
 
 describe("watermark", () => {

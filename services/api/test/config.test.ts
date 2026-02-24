@@ -1,0 +1,40 @@
+import { describe, expect, it } from "vitest";
+import { loadApiConfig } from "../src/config";
+
+function baseEnv(): NodeJS.ProcessEnv {
+  return {
+    NODE_ENV: "test",
+    WEB_ORIGIN: "http://localhost:3000",
+    S3_BUCKET: "image-ops-temp",
+    S3_ACCESS_KEY: "test-key",
+    S3_SECRET_KEY: "test-secret"
+  };
+}
+
+describe("loadApiConfig production safeguards", () => {
+  it("rejects development defaults in production", () => {
+    expect(() =>
+      loadApiConfig({
+        ...baseEnv(),
+        NODE_ENV: "production",
+        JOB_REPO_DRIVER: "postgres",
+        POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops"
+      })
+    ).toThrow();
+  });
+
+  it("accepts explicit production-safe values", () => {
+    const config = loadApiConfig({
+      ...baseEnv(),
+      NODE_ENV: "production",
+      JOB_REPO_DRIVER: "postgres",
+      POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops",
+      AUTH_TOKEN_SECRET: "prod-auth-token-secret-1",
+      BILLING_PROVIDER_SECRET: "prod-provider-secret-1",
+      BILLING_WEBHOOK_SECRET: "prod-webhook-secret-1"
+    });
+
+    expect(config.nodeEnv).toBe("production");
+    expect(config.jobRepoDriver).toBe("postgres");
+  });
+});

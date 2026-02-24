@@ -2,8 +2,17 @@ import type { ImageJobQueuePayload } from "@image-ops/core";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 
+export type QueueMetrics = {
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+};
+
 export interface JobQueueService {
   enqueue(payload: ImageJobQueuePayload): Promise<void>;
+  getMetrics(): Promise<QueueMetrics>;
   close(): Promise<void>;
 }
 
@@ -28,6 +37,17 @@ export class BullMqJobQueueService implements JobQueueService {
         delay: 1000
       }
     });
+  }
+
+  async getMetrics(): Promise<QueueMetrics> {
+    const counts = await this.queue.getJobCounts("waiting", "active", "completed", "failed", "delayed");
+    return {
+      waiting: counts.waiting || 0,
+      active: counts.active || 0,
+      completed: counts.completed || 0,
+      failed: counts.failed || 0,
+      delayed: counts.delayed || 0
+    };
   }
 
   async close(): Promise<void> {
@@ -56,6 +76,16 @@ export class InMemoryJobQueueService implements JobQueueService {
 
   async enqueue(payload: ImageJobQueuePayload): Promise<void> {
     this.items.push(payload);
+  }
+
+  async getMetrics(): Promise<QueueMetrics> {
+    return {
+      waiting: this.items.length,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0
+    };
   }
 
   async close(): Promise<void> {

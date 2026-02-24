@@ -13,7 +13,9 @@ import { z } from "zod";
 import type { Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
+import { logError } from "../lib/log";
 import type { JobRepository } from "../services/job-repo";
+import type { MalwareScanService } from "../services/malware-scan";
 import type { ObjectStorageService } from "../services/storage";
 
 const SUPPORTED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -89,9 +91,51 @@ function isStorageNotFoundError(error: unknown): boolean {
   return /not found/i.test(error.message);
 }
 
+function detectMimeFromBytes(bytes: Buffer): string | null {
+  if (
+    bytes.length >= 8
+    && bytes[0] === 0x89
+    && bytes[1] === 0x50
+    && bytes[2] === 0x4e
+    && bytes[3] === 0x47
+    && bytes[4] === 0x0d
+    && bytes[5] === 0x0a
+    && bytes[6] === 0x1a
+    && bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  if (
+    bytes.length >= 12
+    && bytes[0] === 0x52 // R
+    && bytes[1] === 0x49 // I
+    && bytes[2] === 0x46 // F
+    && bytes[3] === 0x46 // F
+    && bytes[8] === 0x57 // W
+    && bytes[9] === 0x45 // E
+    && bytes[10] === 0x42 // B
+    && bytes[11] === 0x50 // P
+  ) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
 export function registerUploadsRoutes(
   router: Router,
-  deps: { config: ApiConfig; storage: ObjectStorageService; jobRepo: JobRepository; now: () => Date }
+  deps: {
+    config: ApiConfig;
+    storage: ObjectStorageService;
+    jobRepo: JobRepository;
+    malwareScan: MalwareScanService;
+    now: () => Date;
+  }
 ): void {
   router.post("/api/uploads/init", asyncHandler(async (req, res) => {
     const parsed = uploadInitSchema.safeParse(req.body);
@@ -181,10 +225,49 @@ export function registerUploadsRoutes(
       return;
     }
 
+    const detectedMime = detectMimeFromBytes(object.bytes);
+    if (!detectedMime || !SUPPORTED_MIME.has(detectedMime)) {
+      res.status(400).json({
+        error: "UNSUPPORTED_MIME",
+        message: "Uploaded object signature is not a supported image type."
+      });
+      return;
+    }
+
     const sha256 = await sha256HexStreaming(object.bytes);
     if (payload.sha256 && payload.sha256.toLowerCase() !== sha256) {
       res.status(400).json({ error: "SHA256_MISMATCH", message: "Provided sha256 does not match uploaded bytes." });
       return;
+    }
+
+    try {
+      const scan = await deps.malwareScan.scan({
+        objectKey: payload.objectKey,
+        subjectId: safeSubjectId,
+        contentType: detectedMime,
+        bytes: object.bytes
+      });
+      if (!scan.clean) {
+        res.status(422).json({
+          error: "MALWARE_DETECTED",
+          message: scan.reason || "Upload blocked by malware scan policy."
+        });
+        return;
+      }
+    } catch (error) {
+      if (deps.config.malwareScanFailClosed) {
+        res.status(503).json({
+          error: "MALWARE_SCAN_UNAVAILABLE",
+          message: "Unable to complete malware scan. Try again shortly."
+        });
+        return;
+      }
+
+      logError("upload.malware_scan.failed_open", {
+        objectKey: payload.objectKey,
+        subjectId: safeSubjectId,
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
 
     const candidates = await deps.jobRepo.listDedupByHash(sha256);
@@ -221,7 +304,7 @@ export function registerUploadsRoutes(
       subjectId: safeSubjectId,
       sha256,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       deduplicated,
       createdAt: nowIso
     };
@@ -230,7 +313,7 @@ export function registerUploadsRoutes(
       sha256,
       objectKey: canonicalObjectKey,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       createdAt: nowIso
     };
 
@@ -245,7 +328,7 @@ export function registerUploadsRoutes(
       canonicalObjectKey,
       sha256,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       deduplicated
     });
   }));

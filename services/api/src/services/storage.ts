@@ -38,9 +38,11 @@ export interface ObjectStorageService {
 export class S3ObjectStorageService implements ObjectStorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly publicEndpoint?: string;
 
   constructor(config: ApiConfig) {
     this.bucket = config.s3Bucket;
+    this.publicEndpoint = config.s3PublicEndpoint;
     this.client = new S3Client({
       region: config.s3Region,
       endpoint: config.s3Endpoint,
@@ -50,6 +52,24 @@ export class S3ObjectStorageService implements ObjectStorageService {
         secretAccessKey: config.s3SecretKey
       }
     });
+  }
+
+  private rewriteSignedUrlOrigin(signedUrl: string): string {
+    if (!this.publicEndpoint) {
+      return signedUrl;
+    }
+
+    try {
+      const original = new URL(signedUrl);
+      const publicEndpoint = new URL(this.publicEndpoint);
+      original.protocol = publicEndpoint.protocol;
+      original.username = publicEndpoint.username;
+      original.password = publicEndpoint.password;
+      original.host = publicEndpoint.host;
+      return original.toString();
+    } catch {
+      return signedUrl;
+    }
   }
 
   async createPresignedUploadUrl(input: {
@@ -67,7 +87,8 @@ export class S3ObjectStorageService implements ObjectStorageService {
       ContentType: input.contentType
     });
 
-    return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
+    const signed = await getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
+    return this.rewriteSignedUrlOrigin(signed);
   }
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
@@ -76,7 +97,8 @@ export class S3ObjectStorageService implements ObjectStorageService {
       Key: input.objectKey
     });
 
-    return getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
+    const signed = await getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
+    return this.rewriteSignedUrlOrigin(signed);
   }
 
   async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {

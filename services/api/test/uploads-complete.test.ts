@@ -18,6 +18,13 @@ function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+function fakePngBytes(marker: string): Buffer {
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from(marker, "utf8")
+  ]);
+}
+
 describe("POST /api/uploads/complete", () => {
   it("completes upload and returns canonical metadata", async () => {
     const services = createFakeServices();
@@ -25,8 +32,8 @@ describe("POST /api/uploads/complete", () => {
     closers.push(server.close);
 
     const objectKey = "tmp/seller_1/input/2026/02/23/resize/source.jpg";
-    const bytes = Buffer.from("dedup-source");
-    services.storage.setObject(objectKey, "image/jpeg", bytes);
+    const bytes = fakePngBytes("dedup-source");
+    services.storage.setObject(objectKey, "image/png", bytes);
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
@@ -54,8 +61,8 @@ describe("POST /api/uploads/complete", () => {
     closers.push(server.close);
 
     const objectKey = "tmp/seller_1/input/2026/02/23/resize/source-mismatch.jpg";
-    const bytes = Buffer.from("actual-bytes");
-    services.storage.setObject(objectKey, "image/jpeg", bytes);
+    const bytes = fakePngBytes("actual-bytes");
+    services.storage.setObject(objectKey, "image/png", bytes);
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
@@ -82,10 +89,10 @@ describe("POST /api/uploads/complete", () => {
 
     const canonicalKey = "tmp/seller_2/input/2026/02/23/compress/original.jpg";
     const duplicateKey = "tmp/seller_2/input/2026/02/23/compress/duplicate.jpg";
-    const bytes = Buffer.from("same-content");
+    const bytes = fakePngBytes("same-content");
 
-    services.storage.setObject(canonicalKey, "image/jpeg", bytes);
-    services.storage.setObject(duplicateKey, "image/jpeg", bytes);
+    services.storage.setObject(canonicalKey, "image/png", bytes);
+    services.storage.setObject(duplicateKey, "image/png", bytes);
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
@@ -116,10 +123,10 @@ describe("POST /api/uploads/complete", () => {
 
     const subjectAKey = "tmp/seller_a/input/2026/02/23/resize/source-a.jpg";
     const subjectBKey = "tmp/seller_b/input/2026/02/23/resize/source-b.jpg";
-    const bytes = Buffer.from("same-cross-subject-content");
+    const bytes = fakePngBytes("same-cross-subject-content");
 
-    services.storage.setObject(subjectAKey, "image/jpeg", bytes);
-    services.storage.setObject(subjectBKey, "image/jpeg", bytes);
+    services.storage.setObject(subjectAKey, "image/png", bytes);
+    services.storage.setObject(subjectBKey, "image/png", bytes);
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
@@ -150,12 +157,12 @@ describe("POST /api/uploads/complete", () => {
 
     const sourceKey = "tmp/seller_3/input/2026/02/23/resize/source.jpg";
     const fakeCandidateKey = "tmp/seller_3/input/2026/02/23/resize/fake-candidate.jpg";
-    const sourceBytes = Buffer.from("source-bytes");
-    const fakeBytes = Buffer.from("different-bytes");
+    const sourceBytes = fakePngBytes("source-bytes");
+    const fakeBytes = fakePngBytes("different-bytes");
     const sourceHash = sha256Hex(sourceBytes);
 
-    services.storage.setObject(sourceKey, "image/jpeg", sourceBytes);
-    services.storage.setObject(fakeCandidateKey, "image/jpeg", fakeBytes);
+    services.storage.setObject(sourceKey, "image/png", sourceBytes);
+    services.storage.setObject(fakeCandidateKey, "image/png", fakeBytes);
 
     await services.jobRepo.finalizeUploadCompletion({
       completion: {

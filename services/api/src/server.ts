@@ -4,6 +4,7 @@ import type { Express, NextFunction, Request, Response } from "express";
 import { loadApiConfig, type ApiConfig } from "./config";
 import { requireApiAuth } from "./lib/auth-middleware";
 import { logError, logInfo } from "./lib/log";
+import { createRateLimitMiddleware } from "./lib/rate-limit";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerBillingRoutes } from "./routes/billing";
 import { registerCleanupRoutes } from "./routes/cleanup";
@@ -13,6 +14,7 @@ import { registerUploadsRoutes } from "./routes/uploads";
 import { HmacBillingService, StripeBillingService, type BillingService } from "./services/billing";
 import { GoogleTokenAuthService, type AuthService } from "./services/auth";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
+import { HttpMalwareScanService, NoopMalwareScanService, type MalwareScanService } from "./services/malware-scan";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
 import { S3ObjectStorageService, TMP_PREFIX, type ObjectStorageService } from "./services/storage";
 
@@ -23,6 +25,7 @@ export type ApiDependencies = {
   jobRepo: JobRepository;
   billing: BillingService;
   auth: AuthService;
+  malwareScan: MalwareScanService;
   now: () => Date;
 };
 
@@ -88,6 +91,17 @@ function createBillingService(config: ApiConfig): BillingService {
   });
 }
 
+function createMalwareScanService(config: ApiConfig): MalwareScanService {
+  if (!config.malwareScanApiUrl) {
+    return new NoopMalwareScanService();
+  }
+
+  return new HttpMalwareScanService({
+    endpointUrl: config.malwareScanApiUrl,
+    timeoutMs: config.malwareScanTimeoutMs
+  });
+}
+
 export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) {
     next(error);
@@ -111,6 +125,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
       authTokenSecret: config.authTokenSecret,
       authTokenTtlSeconds: config.authTokenTtlSeconds
     }),
+    malwareScan: incomingDeps?.malwareScan || createMalwareScanService(config),
     now: incomingDeps?.now || (() => new Date())
   };
 
@@ -131,7 +146,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     requestMetrics.set(key, existing);
   };
 
-  const renderMetrics = (): string => {
+  const renderMetrics = (queueMetrics: { waiting: number; active: number; completed: number; failed: number; delayed: number }): string => {
     const lines: string[] = [];
     lines.push("# HELP image_ops_up Service liveness state.");
     lines.push("# TYPE image_ops_up gauge");
@@ -146,6 +161,13 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     lines.push("# TYPE image_ops_http_requests_total counter");
     lines.push("# HELP image_ops_http_request_duration_seconds_total Total request duration in seconds.");
     lines.push("# TYPE image_ops_http_request_duration_seconds_total counter");
+    lines.push("# HELP image_ops_queue_jobs Number of jobs in each queue state.");
+    lines.push("# TYPE image_ops_queue_jobs gauge");
+    lines.push(`image_ops_queue_jobs{state="waiting"} ${queueMetrics.waiting}`);
+    lines.push(`image_ops_queue_jobs{state="active"} ${queueMetrics.active}`);
+    lines.push(`image_ops_queue_jobs{state="completed"} ${queueMetrics.completed}`);
+    lines.push(`image_ops_queue_jobs{state="failed"} ${queueMetrics.failed}`);
+    lines.push(`image_ops_queue_jobs{state="delayed"} ${queueMetrics.delayed}`);
 
     const sorted = [...requestMetrics.entries()].sort((left, right) => left[0].localeCompare(right[0]));
     for (const [key, value] of sorted) {
@@ -161,6 +183,19 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
+
+  const writeRateLimit = createRateLimitMiddleware({
+    limit: deps.config.apiWriteRateLimitMax,
+    windowMs: deps.config.apiWriteRateLimitWindowMs,
+    keyPrefix: "api-write"
+  });
+  app.use("/api/uploads/init", writeRateLimit);
+  app.use("/api/uploads/complete", writeRateLimit);
+  app.use("/api/jobs", writeRateLimit);
+  app.use("/api/cleanup", writeRateLimit);
+  app.use("/api/billing/checkout", writeRateLimit);
+  app.use("/api/billing/subscription", writeRateLimit);
+
   app.use((req, res, next) => {
     const startedAtNs = process.hrtime.bigint();
     inflightRequests += 1;
@@ -204,9 +239,22 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     });
   });
 
-  app.get("/metrics", (_req, res) => {
+  app.get("/metrics", async (_req, res) => {
+    let queueMetrics = {
+      waiting: 0,
+      active: 0,
+      completed: 0,
+      failed: 0,
+      delayed: 0
+    };
+    try {
+      queueMetrics = await deps.queue.getMetrics();
+    } catch (error) {
+      logError("metrics.queue.read_failed", { error: formatErrorForLog(error) });
+    }
+
     res.setHeader("Content-Type", METRICS_CONTENT_TYPE);
-    res.send(renderMetrics());
+    res.send(renderMetrics(queueMetrics));
   });
 
   if (deps.config.apiAuthRequired) {
@@ -215,9 +263,17 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     app.use("/api/quota", requireApiAuth(deps.auth));
     app.use("/api/billing/checkout", requireApiAuth(deps.auth));
     app.use("/api/billing/reconcile", requireApiAuth(deps.auth));
+    app.use("/api/billing/summary", requireApiAuth(deps.auth));
+    app.use("/api/billing/subscription", requireApiAuth(deps.auth));
   }
 
-  registerUploadsRoutes(app, { config: deps.config, storage: deps.storage, jobRepo: deps.jobRepo, now: deps.now });
+  registerUploadsRoutes(app, {
+    config: deps.config,
+    storage: deps.storage,
+    jobRepo: deps.jobRepo,
+    malwareScan: deps.malwareScan,
+    now: deps.now
+  });
   registerAuthRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, auth: deps.auth, now: deps.now });
   registerBillingRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, billing: deps.billing, now: deps.now });
   registerJobsRoutes(app, {
@@ -233,7 +289,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     jobRepo: deps.jobRepo,
     now: deps.now
   });
-  registerQuotaRoutes(app, { jobRepo: deps.jobRepo, now: deps.now });
+  registerQuotaRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, now: deps.now });
 
   app.use(errorHandler);
   return { app, deps };
@@ -277,7 +333,8 @@ if (require.main === module) {
     const dependencyResults = await Promise.allSettled([
       runtime.deps.queue.close(),
       runtime.deps.jobRepo.close(),
-      runtime.deps.storage.close()
+      runtime.deps.storage.close(),
+      runtime.deps.malwareScan.close()
     ]);
     for (const result of dependencyResults) {
       if (result.status === "rejected") {
