@@ -129,6 +129,26 @@ npm run infra:down:integration
 
 CI note:
 - Pull requests run an `integration` job in `.github/workflows/ci.yml` that brings up Redis + MinIO, starts API + worker, and executes `test:integration:api`.
+- Pushes to `master` also run the same integration gate before release promotion.
+
+## Staging Smoke Check
+After deploying API + worker to staging, run:
+```bash
+STAGING_API_BASE_URL=https://api-staging.example.com npm run smoke:staging
+```
+
+If staging enforces bearer auth on `/api/jobs` and `/api/cleanup`, pass a token:
+```bash
+STAGING_API_BASE_URL=https://api-staging.example.com \
+API_BEARER_TOKEN=your_token_here \
+npm run smoke:staging
+```
+
+The smoke script validates:
+- health endpoint
+- upload-init -> upload PUT -> upload complete
+- job create -> job completion -> download (when token is provided)
+- cleanup idempotency path (when token is provided)
 
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
