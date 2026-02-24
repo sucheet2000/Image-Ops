@@ -133,12 +133,17 @@ function timestampMsOrNow(input: string): number {
 }
 
 export class RedisJobRepository implements JobRepository {
+  private static readonly MAX_OPTIMISTIC_RETRIES = 5;
   private readonly redis: IORedis;
   private readonly now: () => Date;
   private closePromise: Promise<void> | null = null;
 
-  constructor(input: { redisUrl: string; clock?: () => Date }) {
-    this.redis = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
+  constructor(input: { redisUrl?: string; clock?: () => Date; redisClient?: IORedis }) {
+    if (!input.redisClient && !input.redisUrl) {
+      throw new Error("redisUrl is required when redisClient is not provided");
+    }
+
+    this.redis = input.redisClient || new IORedis(input.redisUrl!, { maxRetriesPerRequest: null });
     this.now = input.clock || (() => new Date());
   }
 
@@ -160,21 +165,39 @@ export class RedisJobRepository implements JobRepository {
     now: Date;
     job: ImageJobRecord;
   }): Promise<QuotaResult> {
-    const existing = (await this.getQuotaWindow(input.subjectId)) || {
-      windowStartAt: input.now.toISOString(),
-      usedCount: 0
-    };
-    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
-    if (!quotaResult.allowed) {
-      return quotaResult;
+    const subjectQuotaKey = quotaKey(input.subjectId);
+
+    for (let attempt = 0; attempt < RedisJobRepository.MAX_OPTIMISTIC_RETRIES; attempt += 1) {
+      await this.redis.watch(subjectQuotaKey);
+
+      try {
+        const existingRaw = await this.redis.get(subjectQuotaKey);
+        const existing = existingRaw
+          ? (JSON.parse(existingRaw) as QuotaWindow)
+          : {
+              windowStartAt: input.now.toISOString(),
+              usedCount: 0
+            };
+        const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+        if (!quotaResult.allowed) {
+          await this.redis.unwatch();
+          return quotaResult;
+        }
+
+        const committed = await this.redis.multi()
+          .set(subjectQuotaKey, JSON.stringify(quotaResult.window))
+          .set(jobKey(input.job.id), JSON.stringify(input.job))
+          .exec();
+
+        if (committed) {
+          return quotaResult;
+        }
+      } finally {
+        await this.redis.unwatch();
+      }
     }
 
-    await this.redis.multi()
-      .set(quotaKey(input.subjectId), JSON.stringify(quotaResult.window))
-      .set(jobKey(input.job.id), JSON.stringify(input.job))
-      .exec();
-
-    return quotaResult;
+    throw new Error("Failed to reserve quota and create job due to concurrent updates.");
   }
 
   async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
@@ -189,18 +212,33 @@ export class RedisJobRepository implements JobRepository {
     completion: UploadCompletionRecord;
     dedupRecord: DedupObjectRecord;
   }): Promise<void> {
+    const completionKey = uploadCompletionKey(input.completion.objectKey);
     const dedupKey = dedupHashKey(input.dedupRecord.sha256);
-    const existingRaw = await this.redis.get(dedupKey);
-    const existing = existingRaw ? (JSON.parse(existingRaw) as DedupObjectRecord[]) : [];
 
-    if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
-      existing.push(input.dedupRecord);
+    for (let attempt = 0; attempt < RedisJobRepository.MAX_OPTIMISTIC_RETRIES; attempt += 1) {
+      await this.redis.watch(completionKey, dedupKey);
+
+      try {
+        const existingRaw = await this.redis.get(dedupKey);
+        const existing = existingRaw ? (JSON.parse(existingRaw) as DedupObjectRecord[]) : [];
+
+        if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
+          existing.push(input.dedupRecord);
+        }
+
+        const committed = await this.redis.multi()
+          .set(completionKey, JSON.stringify(input.completion))
+          .set(dedupKey, JSON.stringify(existing))
+          .exec();
+        if (committed) {
+          return;
+        }
+      } finally {
+        await this.redis.unwatch();
+      }
     }
 
-    await this.redis.multi()
-      .set(uploadCompletionKey(input.completion.objectKey), JSON.stringify(input.completion))
-      .set(dedupKey, JSON.stringify(existing))
-      .exec();
+    throw new Error("Failed to finalize upload completion due to concurrent updates.");
   }
 
   async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {

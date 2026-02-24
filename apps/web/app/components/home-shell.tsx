@@ -37,7 +37,18 @@ export function HomeShell(): ReactNode {
       <section className="card">
         <h2>Session</h2>
         <p>Detected plan: <strong>{plan.toUpperCase()}</strong></p>
-        <p><Link href="/billing">Open billing</Link></p>
+        <p><Link href="/billing">Open billing</Link> · <Link href="/login">Login</Link></p>
+      </section>
+
+      <section className="card">
+        <h2>Explore</h2>
+        <ul>
+          <li><Link href="/tools/resize">Tool pages</Link></li>
+          <li><Link href="/use-cases/amazon-listings">Use-case pages</Link></li>
+          <li><Link href="/for/amazon/main-image-compliance">Audience workflows</Link></li>
+          <li><Link href="/guides/prepare-amazon-main-images">Guides</Link></li>
+          <li><Link href="/compare/jpg-vs-png">Comparisons</Link></li>
+        </ul>
       </section>
 
       <AdConsentBanner

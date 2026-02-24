@@ -186,6 +186,7 @@ The smoke script validates:
 - Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
 - Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
+- SEO page surfaces include `/tools/:tool`, `/use-cases/:slug`, `/for/:audience/:intent`, `/guides/:topic`, and `/compare/:slug`.
 
 ## Parallel Development (Git Worktrees)
 - Team worktree workflow: `docs/git-worktree-plan.md`
