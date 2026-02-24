@@ -41,7 +41,7 @@ groups:
           description: "Queue waiting depth has been above 50 for at least 10 minutes."
 
       - alert: ImageOpsQueueFailuresBacklog
-        expr: image_ops_queue_jobs{state="failed"} > 5
+        expr: increase(image_ops_queue_jobs{state="failed"}[5m]) > 5
         for: 5m
         labels:
           severity: critical

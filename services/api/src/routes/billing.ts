@@ -34,12 +34,6 @@ const PLAN_RANK: Record<SubjectProfile["plan"], number> = {
   team: 2
 };
 
-function listSubjectSessions(sessions: BillingCheckoutSession[], subjectId: string): BillingCheckoutSession[] {
-  return sessions
-    .filter((session) => session.subjectId === subjectId)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
 function buildManageUrl(portalBaseUrl: string | undefined, subjectId: string): string | null {
   if (!portalBaseUrl) {
     return null;
@@ -248,7 +242,7 @@ export function registerBillingRoutes(
 
     const subjectId = toSafeSubjectId(parsed.data.subjectId);
     const profile = await deps.jobRepo.getSubjectProfile(subjectId);
-    const sessions = listSubjectSessions(await deps.jobRepo.listBillingCheckoutSessions(500), subjectId);
+    const sessions = await deps.jobRepo.listBillingCheckoutSessionsForSubject(subjectId, 500);
     const latest = sessions[0] || null;
     const latestPaid = sessions.find((session) => session.status === "paid") || null;
 
@@ -283,7 +277,7 @@ export function registerBillingRoutes(
     if (parsed.data.action === "cancel") {
       nextPlan = "free";
     } else {
-      const sessions = listSubjectSessions(await deps.jobRepo.listBillingCheckoutSessions(500), subjectId);
+      const sessions = await deps.jobRepo.listBillingCheckoutSessionsForSubject(subjectId, 500);
       const latestPaid = sessions.find((session) => session.status === "paid");
       if (!latestPaid) {
         res.status(409).json({

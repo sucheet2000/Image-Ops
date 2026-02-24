@@ -22,6 +22,7 @@ const JOB_KEY_PREFIX = "imageops:job:";
 const QUOTA_KEY_PREFIX = "imageops:quota:";
 const SUBJECT_PROFILE_KEY_PREFIX = "imageops:subject-profile:";
 const BILLING_CHECKOUT_KEY_PREFIX = "imageops:billing-checkout:";
+const BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX = "imageops:billing-checkout-subject:";
 const BILLING_EVENT_KEY_PREFIX = "imageops:billing-event:";
 const CLEANUP_IDEMPOTENCY_PREFIX = "imageops:cleanup-idempotency:";
 const UPLOAD_COMPLETION_PREFIX = "imageops:upload-completion:";
@@ -75,6 +76,7 @@ export interface JobRepository {
   createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void>;
   getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null>;
   listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]>;
+  listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]>;
   updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void>;
 
   getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null>;
@@ -104,6 +106,10 @@ function subjectProfileKey(subjectId: string): string {
 
 function billingCheckoutKey(id: string): string {
   return `${BILLING_CHECKOUT_KEY_PREFIX}${id}`;
+}
+
+function billingCheckoutSubjectIndexKey(subjectId: string): string {
+  return `${BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX}${subjectId}`;
 }
 
 function billingEventKey(providerEventId: string): string {
@@ -356,7 +362,10 @@ export class RedisJobRepository implements JobRepository {
   }
 
   async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
-    await this.redis.set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds);
+    await this.redis.multi()
+      .set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds)
+      .zadd(billingCheckoutSubjectIndexKey(session.subjectId), timestampMsOrNow(session.updatedAt), session.id)
+      .exec();
   }
 
   async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
@@ -382,6 +391,24 @@ export class RedisJobRepository implements JobRepository {
     return sessions.slice(-limit);
   }
 
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
+    const ids = await this.redis.zrevrange(billingCheckoutSubjectIndexKey(subjectId), 0, Math.max(limit - 1, 0));
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.redis.mget(...ids.map((id) => billingCheckoutKey(id)));
+    return rows
+      .filter((value): value is string => Boolean(value))
+      .map((value) => JSON.parse(value) as BillingCheckoutSession)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit);
+  }
+
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
@@ -399,6 +426,7 @@ export class RedisJobRepository implements JobRepository {
       "EX",
       ttlSeconds
     );
+    await this.redis.zadd(billingCheckoutSubjectIndexKey(existing.subjectId), timestampMsOrNow(updatedAt), id);
   }
 
   async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
@@ -506,6 +534,11 @@ export class PostgresJobRepository implements JobRepository {
     await this.pool.query(`
       CREATE INDEX IF NOT EXISTS imageops_billing_events_created_idx
       ON ${POSTGRES_BILLING_EVENT_TABLE} (created_at DESC);
+    `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS imageops_billing_checkout_subject_updated_idx
+      ON ${POSTGRES_KV_TABLE} ((value->>'subjectId'), ((value->>'updatedAt')::timestamptz) DESC)
+      WHERE key LIKE '${BILLING_CHECKOUT_KEY_PREFIX}%';
     `);
   }
 
@@ -785,6 +818,30 @@ export class PostgresJobRepository implements JobRepository {
     return sessions.slice(-limit);
   }
 
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    await this.initialize();
+    if (limit <= 0) {
+      return [];
+    }
+
+    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+      `
+        SELECT value, expires_at
+        FROM ${POSTGRES_KV_TABLE}
+        WHERE key LIKE $1
+          AND value->>'subjectId' = $2
+        ORDER BY (value->>'updatedAt')::timestamptz DESC NULLS LAST
+        LIMIT $3
+      `,
+      [`${BILLING_CHECKOUT_KEY_PREFIX}%`, subjectId, limit]
+    );
+
+    const nowMs = this.now().getTime();
+    return result.rows
+      .filter((row) => !row.expires_at || row.expires_at.getTime() > nowMs)
+      .map((row) => row.value);
+  }
+
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
@@ -1034,6 +1091,17 @@ export class InMemoryJobRepository implements JobRepository {
     }
     const rows = Array.from(this.checkouts.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
     return rows.slice(-limit);
+  }
+
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
+    return Array.from(this.checkouts.values())
+      .filter((session) => session.subjectId === subjectId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit);
   }
 
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {

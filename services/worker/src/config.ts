@@ -42,11 +42,19 @@ const envSchema = z.object({
       });
     }
 
-    if (value.S3_ACCESS_KEY === "minioadmin" || value.S3_SECRET_KEY === "minioadmin") {
+    if (value.S3_ACCESS_KEY === "minioadmin") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["S3_ACCESS_KEY"],
-        message: "S3_ACCESS_KEY/S3_SECRET_KEY must not use minioadmin defaults in production"
+        message: "S3_ACCESS_KEY must not use minioadmin in production"
+      });
+    }
+
+    if (value.S3_SECRET_KEY === "minioadmin") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["S3_SECRET_KEY"],
+        message: "S3_SECRET_KEY must not use minioadmin in production"
       });
     }
   }

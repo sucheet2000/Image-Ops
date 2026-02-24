@@ -61,6 +61,13 @@ describe("quota", () => {
     expect(reset.window.usedCount).toBe(1);
     expect(reset.window.windowStartAt).toBe(pastWindow.toISOString());
   });
+
+  it("rejects negative requestedImages", () => {
+    const now = new Date("2026-02-23T00:00:00.000Z");
+    expect(() =>
+      applyQuota({ windowStartAt: now.toISOString(), usedCount: 1 }, -1, now)
+    ).toThrow("requestedImages must be non-negative");
+  });
 });
 
 describe("watermark", () => {

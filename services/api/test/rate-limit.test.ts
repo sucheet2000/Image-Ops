@@ -41,6 +41,7 @@ describe("api write rate limiting", () => {
         body: JSON.stringify(requestBody)
       });
       expect(third.status).toBe(429);
+      expect(third.headers.get("retry-after")).toBe("60");
       const payload = await third.json();
       expect(payload.error).toBe("RATE_LIMITED");
     } finally {

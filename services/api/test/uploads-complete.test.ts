@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
+import { fakePngBytes } from "./utils/image-helpers";
 
 const closers: Array<() => Promise<void>> = [];
 
@@ -16,13 +17,6 @@ afterEach(async () => {
 
 function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
-}
-
-function fakePngBytes(marker: string): Buffer {
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    Buffer.from(marker, "utf8")
-  ]);
 }
 
 describe("POST /api/uploads/complete", () => {
@@ -171,7 +165,7 @@ describe("POST /api/uploads/complete", () => {
         subjectId: "seller_3",
         sha256: sourceHash,
         sizeBytes: sourceBytes.length,
-        contentType: "image/jpeg",
+        contentType: "image/png",
         deduplicated: false,
         createdAt: "2026-02-23T00:00:00.000Z"
       },
@@ -179,7 +173,7 @@ describe("POST /api/uploads/complete", () => {
         sha256: sourceHash,
         objectKey: fakeCandidateKey,
         sizeBytes: sourceBytes.length,
-        contentType: "image/jpeg",
+        contentType: "image/png",
         createdAt: "2026-02-23T00:00:00.000Z"
       }
     });
