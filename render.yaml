@@ -1,6 +1,6 @@
 databases:
   - name: image-ops-postgres
-    plan: starter
+    plan: standard
     databaseName: image_ops
     user: image_ops
 
