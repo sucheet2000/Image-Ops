@@ -126,10 +126,12 @@ function authRefreshSessionKey(id: string): string {
 
 export class RedisJobRepository implements JobRepository {
   private readonly redis: IORedis;
+  private readonly now: () => Date;
   private closePromise: Promise<void> | null = null;
 
-  constructor(input: { redisUrl: string }) {
+  constructor(input: { redisUrl: string; clock?: () => Date }) {
     this.redis = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
+    this.now = input.clock || (() => new Date());
   }
 
   async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
@@ -231,7 +233,7 @@ export class RedisJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000);
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
     if (ttlSeconds <= 0) {
       await this.redis.del(authRefreshSessionKey(id));
       return;
@@ -330,7 +332,7 @@ export class RedisJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
     await this.redis.set(
       billingCheckoutKey(id),
       JSON.stringify({
@@ -403,10 +405,12 @@ export class RedisJobRepository implements JobRepository {
 
 export class PostgresJobRepository implements JobRepository {
   private readonly pool: Pool;
+  private readonly now: () => Date;
   private initPromise: Promise<void> | null = null;
 
-  constructor(input: { connectionString: string }) {
+  constructor(input: { connectionString: string; clock?: () => Date }) {
     this.pool = new Pool({ connectionString: input.connectionString });
+    this.now = input.clock || (() => new Date());
   }
 
   private async initialize(): Promise<void> {
@@ -459,7 +463,7 @@ export class PostgresJobRepository implements JobRepository {
     }
 
     const row = result.rows[0];
-    if (row.expires_at && row.expires_at.getTime() <= Date.now()) {
+    if (row.expires_at && row.expires_at.getTime() <= this.now().getTime()) {
       await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [key]);
       return null;
     }
@@ -469,7 +473,7 @@ export class PostgresJobRepository implements JobRepository {
 
   private async setStoredValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     await this.initialize();
-    const expiresAt = ttlSeconds ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
+    const expiresAt = ttlSeconds ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString() : null;
     await this.pool.query(
       `
         INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
@@ -622,7 +626,7 @@ export class PostgresJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000);
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
     if (ttlSeconds <= 0) {
       await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [authRefreshSessionKey(id)]);
       return;
@@ -707,7 +711,7 @@ export class PostgresJobRepository implements JobRepository {
       return [];
     }
 
-    const nowMs = Date.now();
+    const nowMs = this.now().getTime();
     const sessions = result.rows
       .filter((row) => !row.expires_at || row.expires_at.getTime() > nowMs)
       .map((row) => row.value)
@@ -722,7 +726,7 @@ export class PostgresJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
     await this.setStoredValue(
       billingCheckoutKey(id),
       {

@@ -1,7 +1,15 @@
-const TOKEN_KEY = "image_ops_api_token";
+import { TOKEN_KEY } from "./storage-keys";
 
-function getApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+}
+
+function safeStorageGet(storage: Storage, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 export function getApiToken(): string | null {
@@ -9,7 +17,7 @@ export function getApiToken(): string | null {
     return null;
   }
 
-  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
 }
 
 export function setApiToken(token: string): void {
@@ -31,23 +39,28 @@ export function clearApiToken(): void {
 }
 
 async function refreshApiToken(): Promise<string | null> {
-  const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
-    method: "POST",
-    credentials: "include"
-  });
-  if (!response.ok) {
+  try {
+    const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include"
+    });
+    if (!response.ok) {
+      clearApiToken();
+      return null;
+    }
+
+    const payload = await response.json() as { token?: string };
+    if (!payload.token) {
+      clearApiToken();
+      return null;
+    }
+
+    setApiToken(payload.token);
+    return payload.token;
+  } catch {
     clearApiToken();
     return null;
   }
-
-  const payload = await response.json() as { token?: string };
-  if (!payload.token) {
-    clearApiToken();
-    return null;
-  }
-
-  setApiToken(payload.token);
-  return payload.token;
 }
 
 export async function apiFetch(input: string, init: RequestInit = {}, retryOnUnauthorized = true): Promise<Response> {

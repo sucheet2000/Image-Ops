@@ -91,6 +91,10 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     now: incomingDeps?.now || (() => new Date())
   };
 
+  if (deps.config.webOrigin === "*" && process.env.NODE_ENV !== "development") {
+    throw new Error("WEB_ORIGIN cannot be '*' outside development.");
+  }
+
   const app = express();
   app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
