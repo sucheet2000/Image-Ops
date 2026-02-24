@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   JOB_QUEUE_NAME: z.string().default("image-ops-jobs"),
   JOB_REPO_DRIVER: z.enum(["redis", "postgres"]).default("redis"),
@@ -30,6 +31,24 @@ const envSchema = z.object({
       path: ["POSTGRES_URL"],
       message: "POSTGRES_URL is required when JOB_REPO_DRIVER=postgres"
     });
+  }
+
+  if (value.NODE_ENV === "production") {
+    if (value.JOB_REPO_DRIVER !== "postgres") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["JOB_REPO_DRIVER"],
+        message: "JOB_REPO_DRIVER must be postgres in production"
+      });
+    }
+
+    if (value.S3_ACCESS_KEY === "minioadmin" || value.S3_SECRET_KEY === "minioadmin") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["S3_ACCESS_KEY"],
+        message: "S3_ACCESS_KEY/S3_SECRET_KEY must not use minioadmin defaults in production"
+      });
+    }
   }
 });
 

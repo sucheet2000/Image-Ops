@@ -42,6 +42,8 @@ export interface JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult>;
 
   getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null>;
@@ -164,6 +166,8 @@ export class RedisJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
     const subjectQuotaKey = quotaKey(input.subjectId);
 
@@ -178,7 +182,13 @@ export class RedisJobRepository implements JobRepository {
               windowStartAt: input.now.toISOString(),
               usedCount: 0
             };
-        const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+        const quotaResult = applyQuota(
+          existing,
+          input.requestedImages,
+          input.now,
+          input.quotaLimit,
+          input.quotaWindowHours
+        );
         if (!quotaResult.allowed) {
           await this.redis.unwatch();
           return quotaResult;
@@ -545,6 +555,8 @@ export class PostgresJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
     await this.initialize();
     const client = await this.pool.connect();
@@ -560,7 +572,13 @@ export class PostgresJobRepository implements JobRepository {
         ? (quotaResultRow.rows[0].value as QuotaWindow)
         : { windowStartAt: input.now.toISOString(), usedCount: 0 };
 
-      const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+      const quotaResult = applyQuota(
+        existing,
+        input.requestedImages,
+        input.now,
+        input.quotaLimit,
+        input.quotaWindowHours
+      );
       if (!quotaResult.allowed) {
         await client.query("ROLLBACK");
         return quotaResult;
@@ -887,12 +905,20 @@ export class InMemoryJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
     const existing = this.quotas.get(input.subjectId) || {
       windowStartAt: input.now.toISOString(),
       usedCount: 0
     };
-    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+    const quotaResult = applyQuota(
+      existing,
+      input.requestedImages,
+      input.now,
+      input.quotaLimit,
+      input.quotaWindowHours
+    );
     if (!quotaResult.allowed) {
       return quotaResult;
     }

@@ -19,6 +19,7 @@ import type { Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
 import { logInfo } from "../lib/log";
+import { quotaPolicyForPlan } from "../lib/quota-policy";
 import type { JobQueueService } from "../services/queue";
 import type { JobRepository } from "../services/job-repo";
 import type { ObjectStorageService } from "../services/storage";
@@ -98,6 +99,7 @@ export function registerJobsRoutes(
     const id = ulid(now.getTime());
     const outputObjectKey = `${inferOutputObjectKeyPrefix(subjectId, tool, now)}/${id}.${formatToExtension(outputFormat)}`;
     const watermarkRequired = shouldApplyWatermarkForTool(plan, tool);
+    const quotaPolicy = quotaPolicyForPlan(deps.config, plan);
 
     const job: ImageJobRecord = {
       id,
@@ -120,13 +122,18 @@ export function registerJobsRoutes(
       subjectId,
       requestedImages: 1,
       now,
-      job
+      job,
+      quotaLimit: quotaPolicy.limit,
+      quotaWindowHours: quotaPolicy.windowHours
     });
 
     if (!quotaResult.allowed) {
       res.status(429).json({
-        error: "FREE_PLAN_LIMIT_EXCEEDED",
-        message: "Free plan allows 6 images per rolling 10 hours.",
+        error: "PLAN_LIMIT_EXCEEDED",
+        message: `${plan} plan allows ${quotaPolicy.limit} images per rolling ${quotaPolicy.windowHours} hours.`,
+        plan,
+        limit: quotaPolicy.limit,
+        windowHours: quotaPolicy.windowHours,
         nextWindowStartAt: quotaResult.nextWindowStartAt
       });
       return;
@@ -161,6 +168,9 @@ export function registerJobsRoutes(
       watermarkRequired,
       outputMime,
       quota: {
+        plan,
+        limit: quotaPolicy.limit,
+        windowHours: quotaPolicy.windowHours,
         usedCount: quotaResult.window.usedCount,
         windowStartAt: quotaResult.window.windowStartAt
       },

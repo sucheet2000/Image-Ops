@@ -3,6 +3,7 @@ import type { Express } from "express";
 import type { ApiConfig } from "../../src/config";
 import { createApiApp } from "../../src/server";
 import type { InMemoryJobRepository } from "../../src/services/job-repo";
+import type { MalwareScanService } from "../../src/services/malware-scan";
 import type { InMemoryJobQueueService } from "../../src/services/queue";
 import type { InMemoryObjectStorageService } from "../../src/services/storage";
 
@@ -11,6 +12,7 @@ export type TestServices = {
   storage: InMemoryObjectStorageService;
   queue: InMemoryJobQueueService;
   jobRepo: InMemoryJobRepository;
+  malwareScan?: MalwareScanService;
 };
 
 type StartServerInput =
@@ -34,6 +36,7 @@ export async function startApiTestServer(input: StartServerInput): Promise<{
         storage: input.storage,
         queue: input.queue,
         jobRepo: input.jobRepo,
+        malwareScan: input.malwareScan,
         now: input.now || (() => new Date("2026-02-23T00:00:00.000Z"))
       });
 
