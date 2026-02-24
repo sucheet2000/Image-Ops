@@ -57,13 +57,22 @@ jobs:
           echo $! > /tmp/worker.pid
       - name: Wait for worker ready
         run: |
-          for i in $(seq 1 40); do
-            if grep -q '"event":"worker.ready"' /tmp/worker.log; then
+          for i in $(seq 1 60); do
+            if grep -Eq '"event":"worker.ready"|"event":"worker.heartbeat"' /tmp/worker.log 2>/dev/null; then
+              echo "Worker readiness signal detected"
               exit 0
             fi
+
+            if [ -f /tmp/worker.pid ] && ! kill -0 "$(cat /tmp/worker.pid)" 2>/dev/null; then
+              echo "Worker process exited before reporting readiness"
+              tail -n 200 /tmp/worker.log || true
+              exit 1
+            fi
+
             sleep 1
           done
-          echo "Worker did not report ready event in time"
+          echo "Worker did not report ready/heartbeat event in time"
+          tail -n 200 /tmp/worker.log || true
           exit 1
       - name: Wait for API health
         run: |
