@@ -62,6 +62,20 @@ describe("API token enforcement", () => {
       now: new Date()
     });
 
+    services.storage.setObject("tmp/seller_1/input/1.jpg", "image/jpeg", Buffer.from("auth-flow-bytes"));
+    const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        subjectId: "seller_1",
+        objectKey: "tmp/seller_1/input/1.jpg"
+      })
+    });
+    expect(complete.status).toBe(200);
+
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
       headers: {
@@ -75,7 +89,7 @@ describe("API token enforcement", () => {
       })
     });
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(201);
 
     await server.close();
   });
