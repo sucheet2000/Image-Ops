@@ -92,7 +92,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   };
 
   if (deps.config.webOrigin === "*" && process.env.NODE_ENV !== "development") {
-    throw new Error("WEB_ORIGIN cannot be '*' when CORS credentials are enabled.");
+    throw new Error("WEB_ORIGIN cannot be '*' outside development.");
   }
 
   const app = express();

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { AdConsentBanner, useAdConsent } from "./ad-consent-banner";
@@ -36,6 +37,7 @@ export function HomeShell(): ReactNode {
       <section className="card">
         <h2>Session</h2>
         <p>Detected plan: <strong>{plan.toUpperCase()}</strong></p>
+        <p><Link href="/billing">Open billing</Link></p>
       </section>
 
       <AdConsentBanner

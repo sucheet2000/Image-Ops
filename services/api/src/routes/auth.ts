@@ -35,7 +35,7 @@ function sameSiteCookieValue(value: ApiConfig["authRefreshCookieSameSite"]): "La
   return "Lax";
 }
 
-function buildRefreshCookieParts(config: ApiConfig, rawValue: string): string[] {
+function buildRefreshCookieParts(config: ApiConfig, value: string): string[] {
   const parts = [
     `${config.authRefreshCookieName}=${rawValue}`,
     `Path=${config.authRefreshCookiePath}`,
@@ -54,22 +54,18 @@ function buildRefreshCookieParts(config: ApiConfig, rawValue: string): string[] 
 }
 
 function serializeRefreshCookie(config: ApiConfig, value: string, maxAgeSeconds: number): string {
-  const parts = buildRefreshCookieParts(config, encodeURIComponent(value));
+  const parts = buildRefreshCookieParts(config, value);
   parts.push(`Max-Age=${maxAgeSeconds}`);
-
   return parts.join("; ");
 }
 
 function clearRefreshCookie(config: ApiConfig): string {
   const parts = buildRefreshCookieParts(config, "");
-  parts.push("Max-Age=0");
-  parts.push("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
-
+  parts.push("Max-Age=0", "Expires=Thu, 01 Jan 1970 00:00:00 GMT");
   return parts.join("; ");
 }
 
-// Keep explicit cookie parsing here to avoid an extra runtime dependency for a single refresh-token cookie read path.
-// Parsing joins segments after the first "=" so signed/base64 values remain intact.
+// Keep custom cookie parsing to avoid an extra middleware dependency for two auth-only cookie reads.
 function parseCookieHeader(request: Request): Map<string, string> {
   const raw = request.header("cookie") || "";
   const map = new Map<string, string>();
@@ -227,7 +223,7 @@ export function registerAuthRoutes(
       try {
         await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
       } catch {
-        // Best-effort revocation; still return unauthorized.
+        // Continue returning unauthorized even if revocation persistence fails.
       }
       sendRefreshUnauthorized(res, deps.config);
       return;
@@ -241,6 +237,10 @@ export function registerAuthRoutes(
       createdAt: existingSession.createdAt,
       updatedAt: nowIso
     };
+
+    if (!storedProfile) {
+      await deps.jobRepo.upsertSubjectProfile(profile);
+    }
 
     await deps.jobRepo.revokeAuthRefreshSession(existingSession.id, nowIso);
 
@@ -270,7 +270,7 @@ export function registerAuthRoutes(
       token,
       tokenType: "Bearer",
       expiresIn: deps.config.authTokenTtlSeconds,
-      plan: profile.plan,
+      plan,
       profile
     });
   }));

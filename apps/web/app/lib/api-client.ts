@@ -1,13 +1,23 @@
-import { getApiBaseUrl, TOKEN_KEY } from "./auth-constants";
+import { TOKEN_KEY } from "./storage-keys";
 
-export { getApiBaseUrl } from "./auth-constants";
+export function getApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+}
+
+function safeStorageGet(storage: Storage, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 
 export function getApiToken(): string | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
 }
 
 export function setApiToken(token: string): void {

@@ -8,9 +8,11 @@ export type BillingProvider = (typeof BILLING_PROVIDERS)[number];
 
 const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(4000),
-  WEB_ORIGIN: z.string().url("WEB_ORIGIN must be a valid origin URL.").refine((value) => value !== "*", {
-    message: "WEB_ORIGIN must be an explicit origin URL; wildcard '*' is not allowed."
-  }).default("http://localhost:3000"),
+  WEB_ORIGIN: z
+    .string()
+    .url("WEB_ORIGIN must be a valid URL")
+    .refine((value) => value !== "*", "WEB_ORIGIN cannot be '*'")
+    .default("http://localhost:3000"),
   API_AUTH_REQUIRED: z
     .string()
     .default("false")

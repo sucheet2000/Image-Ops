@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AuthService } from "../src/services/auth";
 import { createApiApp } from "../src/server";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
-import { startExpressTestServer } from "./helpers/server";
+import { startApiTestServer } from "./helpers/server";
 
 describe("POST /api/auth/google", () => {
   it("issues API token and upserts profile", async () => {
@@ -21,7 +21,7 @@ describe("POST /api/auth/google", () => {
     };
 
     const app = createApiApp({ config, ...services, auth: authStub, now: () => new Date("2026-02-23T00:00:00.000Z") });
-    const server = await startExpressTestServer(app);
+    const server = await startApiTestServer({ app });
 
     const response = await fetch(`${server.baseUrl}/api/auth/google`, {
       method: "POST",
