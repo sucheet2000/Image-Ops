@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestConfig, createFakeServices } from "./helpers/fakes";
+import { logError, logInfo, resetLogBuffer } from "../src/lib/log";
 import { startApiTestServer } from "./helpers/server";
 
 describe("observability routes", () => {
+  afterEach(() => {
+    resetLogBuffer();
+  });
+
   it("returns ready when storage and repository probes succeed", async () => {
     const config = createTestConfig();
     const services = createFakeServices();
@@ -73,6 +78,68 @@ describe("observability routes", () => {
       expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/health\",status_code=\"200\"} 1");
       expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/ready\",status_code=\"200\"} 1");
       expect(metrics).toMatch(/image_ops_http_in_flight_requests [1-9]\d*/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("returns buffered logs for watch tower with counts", async () => {
+    const config = createTestConfig();
+    const services = createFakeServices();
+    const server = await startApiTestServer({ config, ...services });
+
+    try {
+      logInfo("watchtower.info", { phase: "boot" });
+      logError("watchtower.error", { issue: "queue stalled" });
+
+      const response = await fetch(`${server.baseUrl}/api/observability/logs?limit=10`);
+      expect(response.status).toBe(200);
+
+      const body = await response.json() as {
+        summary: { total: number; info: number; error: number };
+        logs: Array<{ level: "info" | "error"; event: string; payload: Record<string, unknown> }>;
+      };
+      expect(body.summary.total).toBeGreaterThanOrEqual(2);
+      expect(body.summary.info).toBeGreaterThanOrEqual(1);
+      expect(body.summary.error).toBeGreaterThanOrEqual(1);
+      expect(body.logs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            level: "info",
+            event: "watchtower.info",
+            payload: expect.objectContaining({ phase: "boot" })
+          }),
+          expect.objectContaining({
+            level: "error",
+            event: "watchtower.error",
+            payload: expect.objectContaining({ issue: "queue stalled" })
+          })
+        ])
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("filters watch tower logs by severity", async () => {
+    const config = createTestConfig();
+    const services = createFakeServices();
+    const server = await startApiTestServer({ config, ...services });
+
+    try {
+      logInfo("watchtower.info", { phase: "boot" });
+      logError("watchtower.error", { issue: "queue stalled" });
+
+      const response = await fetch(`${server.baseUrl}/api/observability/logs?level=error&limit=10`);
+      expect(response.status).toBe(200);
+
+      const body = await response.json() as {
+        logs: Array<{ level: "info" | "error"; event: string }>;
+      };
+      expect(body.logs.length).toBeGreaterThan(0);
+      expect(body.logs.every((entry) => entry.level === "error")).toBe(true);
+      expect(body.logs.some((entry) => entry.event === "watchtower.error")).toBe(true);
+      expect(body.logs.some((entry) => entry.event === "watchtower.info")).toBe(false);
     } finally {
       await server.close();
     }

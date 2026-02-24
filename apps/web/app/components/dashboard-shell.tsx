@@ -128,6 +128,7 @@ export function DashboardShell() {
             <p className="section-label">Workspace</p>
             <nav className="dashboard-nav" aria-label="Dashboard navigation" style={{ marginTop: "0.9rem" }}>
               <Link href="/dashboard" className="active">Overview</Link>
+              <Link href="/dashboard/watchtower">Watch Tower</Link>
               <Link href="/upload">Upload Studio</Link>
               <Link href="/tools">Tool Catalog</Link>
               <Link href="/billing">Billing</Link>

@@ -9,6 +9,7 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerBillingRoutes } from "./routes/billing";
 import { registerCleanupRoutes } from "./routes/cleanup";
 import { registerJobsRoutes } from "./routes/jobs";
+import { registerObservabilityRoutes } from "./routes/observability";
 import { registerQuotaRoutes } from "./routes/quota";
 import { registerUploadsRoutes } from "./routes/uploads";
 import { HmacBillingService, StripeBillingService, type BillingService } from "./services/billing";
@@ -278,6 +279,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     app.use("/api/jobs", requireApiAuth(deps.auth));
     app.use("/api/cleanup", requireApiAuth(deps.auth));
     app.use("/api/quota", requireApiAuth(deps.auth));
+    app.use("/api/observability", requireApiAuth(deps.auth));
     app.use("/api/billing/checkout", requireApiAuth(deps.auth));
     app.use("/api/billing/reconcile", requireApiAuth(deps.auth));
     app.use("/api/billing/summary", requireApiAuth(deps.auth));
@@ -306,6 +308,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     jobRepo: deps.jobRepo,
     now: deps.now
   });
+  registerObservabilityRoutes(app);
   registerQuotaRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, now: deps.now });
 
   app.use(errorHandler);

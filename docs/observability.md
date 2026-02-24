@@ -1,6 +1,7 @@
 # Observability and Alerting
 
 This project exports Prometheus-style metrics from the API at `/metrics`.
+It also exposes an owner-facing log stream endpoint at `/api/observability/logs` for dashboard "Watch Tower" views.
 
 ## Key Metrics
 
@@ -8,6 +9,24 @@ This project exports Prometheus-style metrics from the API at `/metrics`.
 - `image_ops_http_request_duration_seconds_total{method,path,status_code}` (counter of cumulative request duration)
 - `image_ops_http_in_flight_requests`
 - `image_ops_queue_jobs{state="waiting|active|completed|failed|delayed"}`
+
+## Watch Tower Logs API
+
+- Endpoint: `GET /api/observability/logs`
+- Query params:
+  - `limit` (1-500, default `200`)
+  - `level` (`all|info|error`, default `all`)
+  - `event` (optional event-name contains filter)
+- Response includes:
+  - `summary` counts (`total`, `info`, `error`, `returned`)
+  - `logs` array ordered newest-first with `id`, `ts`, `level`, `event`, `payload`
+  - in-memory retention metadata (`maxEntries`)
+
+Operational behavior:
+
+- Logs are buffered in API memory only (current process, rolling buffer).
+- Existing structured-log redaction rules remain in effect because entries come from `toStructuredLog`.
+- If `API_AUTH_REQUIRED=true`, `/api/observability/*` routes require valid bearer auth.
 
 ## Alert Rules
 

@@ -1112,6 +1112,11 @@ input[type="file"]:focus {
   color: var(--terra-dark);
 }
 
+.status-chip.info {
+  background: rgba(30, 28, 24, 0.06);
+  color: var(--muted);
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -1239,6 +1244,79 @@ input[type="file"]:focus {
 .jobs-list {
   margin-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.watchtower-controls {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.watchtower-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  align-items: end;
+}
+
+.watchtower-control {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 180px;
+}
+
+.watchtower-control-wide {
+  min-width: min(560px, 100%);
+  flex: 1;
+}
+
+.watchtower-control select,
+.watchtower-control input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink);
+  padding: 0.55rem 0.65rem;
+  font-family: var(--font-body), serif;
+}
+
+.watchtower-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-ui), sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.watchtower-list {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.watchtower-log-item {
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.9rem 0;
+}
+
+.watchtower-log-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.watchtower-log-payload {
+  margin-top: 0.7rem;
+  margin-bottom: 0;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: var(--white);
+  padding: 0.7rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
 }
 
 .jobs-item {

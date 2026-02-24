@@ -79,4 +79,19 @@ describe("API token enforcement", () => {
 
     await server.close();
   });
+
+  it("rejects watch tower logs endpoint without bearer token when API_AUTH_REQUIRED=true", async () => {
+    const config = createTestConfig();
+    config.apiAuthRequired = true;
+    const services = createFakeServices();
+    const auth = new InMemoryAuthService(config.authTokenSecret);
+
+    const app = createApiApp({ config, ...services, auth, now: () => new Date("2026-02-23T00:00:00.000Z") });
+    const server = await startServer(app);
+
+    const response = await fetch(`${server.baseUrl}/api/observability/logs`);
+    expect(response.status).toBe(401);
+
+    await server.close();
+  });
 });
