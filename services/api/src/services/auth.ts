@@ -1,5 +1,7 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { AuthError, type ImagePlan } from "@imageops/core";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { isPlan, type ImagePlan } from "@image-ops/core";
+import { OAuth2Client } from "google-auth-library";
+import jwt from "jsonwebtoken";
 import { ulid } from "ulid";
 
 export type ApiTokenClaims = {
@@ -28,22 +30,19 @@ export interface AuthService {
   verifyApiToken(token: string): ApiTokenClaims | null;
 }
 
-function toBase64Url(input: Buffer | string): string {
-  return Buffer.from(input)
-    .toString("base64")
-    .replace(/=/g, "")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
-}
-
-function fromBase64Url(input: string): Buffer {
-  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-  const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return Buffer.from(`${normalized}${pad}`, "base64");
+export class GoogleTokenVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GoogleTokenVerificationError";
+  }
 }
 
 function hashSecret(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+function isImagePlan(value: unknown): value is ImagePlan {
+  return typeof value === "string" && isPlan(value);
 }
 
 export function issueRefreshToken(now: Date): RefreshTokenIssueResult {
@@ -76,38 +75,74 @@ export class GoogleTokenAuthService implements AuthService {
   private readonly googleClientId: string;
   private readonly authTokenSecret: string;
   private readonly authTokenTtlSeconds: number;
+  private readonly oauthClient: OAuth2Client;
 
-  constructor(input: { googleClientId: string; authTokenSecret: string; authTokenTtlSeconds: number }) {
+  constructor(input: {
+    googleClientId: string;
+    authTokenSecret: string;
+    authTokenTtlSeconds: number;
+    oauthClient?: OAuth2Client;
+  }) {
     this.googleClientId = input.googleClientId;
     this.authTokenSecret = input.authTokenSecret;
     this.authTokenTtlSeconds = input.authTokenTtlSeconds;
+    this.oauthClient = input.oauthClient || new OAuth2Client(input.googleClientId);
   }
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    if (!response.ok) {
-      throw new AuthError("Invalid Google ID token.");
+    let payload:
+      | {
+          sub?: string;
+          email?: string;
+          email_verified?: boolean | string;
+          aud?: string | string[];
+          iss?: string;
+          exp?: number;
+        }
+      | undefined;
+
+    try {
+      const ticket = await this.oauthClient.verifyIdToken({
+        idToken,
+        audience: this.googleClientId
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new GoogleTokenVerificationError("Invalid Google ID token.");
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
-    if (String(payload.aud || "") !== this.googleClientId) {
-      throw new AuthError("Google token audience mismatch.");
+    if (!payload) {
+      throw new GoogleTokenVerificationError("Invalid Google ID token.");
+    }
+
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!audiences.some((audience) => String(audience || "") === this.googleClientId)) {
+      throw new GoogleTokenVerificationError("Google token audience mismatch.");
+    }
+
+    const issuer = String(payload.iss || "");
+    if (issuer !== "accounts.google.com" && issuer !== "https://accounts.google.com") {
+      throw new GoogleTokenVerificationError("Google token issuer mismatch.");
+    }
+
+    const exp = Number(payload.exp || 0);
+    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) {
+      throw new GoogleTokenVerificationError("Google token expired.");
     }
 
     const sub = String(payload.sub || "").trim();
     if (!sub) {
-      throw new AuthError("Google token missing subject.");
+      throw new GoogleTokenVerificationError("Google token missing subject.");
     }
 
     return {
       sub,
       email: payload.email ? String(payload.email) : undefined,
-      emailVerified: String(payload.email_verified || "false") === "true"
+      emailVerified: payload.email_verified === true || String(payload.email_verified || "").toLowerCase() === "true"
     };
   }
 
   issueApiToken(input: { sub: string; plan: ImagePlan; email?: string; now: Date }): string {
-    const header = toBase64Url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
     const iat = Math.floor(input.now.getTime() / 1000);
     const payloadClaims: ApiTokenClaims = {
       sub: input.sub,
@@ -116,34 +151,36 @@ export class GoogleTokenAuthService implements AuthService {
       iat,
       exp: iat + this.authTokenTtlSeconds
     };
-    const payload = toBase64Url(JSON.stringify(payloadClaims));
-    const signingInput = `${header}.${payload}`;
-    const signature = toBase64Url(createHmac("sha256", this.authTokenSecret).update(signingInput).digest());
-    return `${signingInput}.${signature}`;
+    return jwt.sign(payloadClaims, this.authTokenSecret, {
+      algorithm: "HS256",
+      noTimestamp: true
+    });
   }
 
   verifyApiToken(token: string): ApiTokenClaims | null {
-    const [headerPart, payloadPart, signaturePart] = token.split(".");
-    if (!headerPart || !payloadPart || !signaturePart) {
-      return null;
-    }
-
-    const expected = toBase64Url(createHmac("sha256", this.authTokenSecret).update(`${headerPart}.${payloadPart}`).digest());
-    if (expected.length !== signaturePart.length) {
-      return null;
-    }
-
-    if (!timingSafeEqual(Buffer.from(expected), Buffer.from(signaturePart))) {
-      return null;
-    }
-
     try {
-      const payload = JSON.parse(fromBase64Url(payloadPart).toString("utf8")) as ApiTokenClaims;
-      const nowUnix = Math.floor(Date.now() / 1000);
-      if (!payload.sub || !payload.plan || typeof payload.exp !== "number" || payload.exp <= nowUnix) {
+      const payload = jwt.verify(token, this.authTokenSecret, {
+        algorithms: ["HS256"]
+      });
+      if (!payload || typeof payload !== "object") {
         return null;
       }
-      return payload;
+
+      const sub = typeof payload.sub === "string" ? payload.sub : "";
+      const plan = payload.plan;
+      const exp = typeof payload.exp === "number" ? payload.exp : 0;
+      const nowUnix = Math.floor(Date.now() / 1000);
+      if (!sub || !isImagePlan(plan) || exp <= nowUnix) {
+        return null;
+      }
+
+      return {
+        sub,
+        plan,
+        email: typeof payload.email === "string" ? payload.email : undefined,
+        iat: typeof payload.iat === "number" ? payload.iat : nowUnix,
+        exp
+      };
     } catch {
       return null;
     }

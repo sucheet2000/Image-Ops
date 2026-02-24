@@ -5,6 +5,7 @@ import type { Request, Response, Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
 import {
+  GoogleTokenVerificationError,
   issueRefreshToken,
   parseRefreshToken,
   verifyRefreshTokenSecret,
@@ -148,7 +149,22 @@ export function registerAuthRoutes(
       return;
     }
 
-    const identity = await deps.auth.verifyGoogleIdToken(parsed.data.idToken);
+    let identity: Awaited<ReturnType<AuthService["verifyGoogleIdToken"]>>;
+    try {
+      identity = await deps.auth.verifyGoogleIdToken(parsed.data.idToken);
+    } catch (error) {
+      if (
+        error instanceof GoogleTokenVerificationError
+        || (error instanceof Error && /(google|id token|audience|subject|expired|invalid)/i.test(error.message))
+      ) {
+        res.status(401).json({
+          error: "INVALID_GOOGLE_ID_TOKEN",
+          message: error instanceof Error ? error.message : "Invalid Google ID token."
+        });
+        return;
+      }
+      throw error;
+    }
     const subjectId = toSafeSubjectId(`google_${identity.sub}`);
     const now = deps.now();
     const nowIso = now.toISOString();

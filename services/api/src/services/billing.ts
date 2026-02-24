@@ -96,7 +96,14 @@ export class HmacBillingService implements BillingService {
   }
 
   parseWebhookPayload(payload: string): ParsedBillingWebhook | null {
-    const parsed = hmacWebhookSchema.safeParse(JSON.parse(payload));
+    let raw: unknown;
+    try {
+      raw = JSON.parse(payload);
+    } catch {
+      return null;
+    }
+
+    const parsed = hmacWebhookSchema.safeParse(raw);
     if (!parsed.success) {
       return null;
     }
@@ -213,7 +220,12 @@ export class StripeBillingService implements BillingService {
   }
 
   parseWebhookPayload(payload: string): ParsedBillingWebhook | null {
-    const raw = JSON.parse(payload) as Record<string, unknown>;
+    let raw: Record<string, unknown>;
+    try {
+      raw = JSON.parse(payload) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
     const eventId = String(raw.id || "").trim();
     const eventType = String(raw.type || "").trim();
     const status = STRIPE_WEBHOOK_STATUS_BY_TYPE[eventType];

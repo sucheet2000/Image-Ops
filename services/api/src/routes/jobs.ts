@@ -91,7 +91,15 @@ export function registerJobsRoutes(
       return;
     }
 
-    const inputMime = (head.contentType || completion.contentType || "image/jpeg").toLowerCase();
+    const inputMimeRaw = (head.contentType || completion.contentType || "").toLowerCase().trim();
+    if (!inputMimeRaw) {
+      res.status(422).json({
+        error: "INPUT_MIME_UNKNOWN",
+        message: "Unable to determine input MIME type for this upload."
+      });
+      return;
+    }
+    const inputMime = inputMimeRaw;
     const mergedOptions = mergeToolOptions(tool, payload.options as Record<string, unknown> | undefined);
     const outputFormat = toolOutputFormat(tool, inputMime, mergedOptions);
     const outputMime = formatToMime(outputFormat);

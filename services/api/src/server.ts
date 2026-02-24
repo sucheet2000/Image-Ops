@@ -90,9 +90,22 @@ function runAppCleanup(app: Express): void {
 
 function createBillingService(config: ApiConfig): BillingService {
   if (config.billingProvider === "stripe") {
+    if (!config.stripeSecretKey || !config.stripeSecretKey.trim()) {
+      throw new Error("STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe");
+    }
+    if (!config.stripeWebhookSecret || !config.stripeWebhookSecret.trim()) {
+      throw new Error("STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe");
+    }
+    if (!config.stripePriceIdPro || !config.stripePriceIdPro.trim()) {
+      throw new Error("STRIPE_PRICE_ID_PRO is required when BILLING_PROVIDER=stripe");
+    }
+    if (!config.stripePriceIdTeam || !config.stripePriceIdTeam.trim()) {
+      throw new Error("STRIPE_PRICE_ID_TEAM is required when BILLING_PROVIDER=stripe");
+    }
+
     return new StripeBillingService({
-      secretKey: config.stripeSecretKey || "",
-      webhookSecret: config.stripeWebhookSecret || "",
+      secretKey: config.stripeSecretKey,
+      webhookSecret: config.stripeWebhookSecret,
       webhookToleranceSeconds: config.stripeWebhookToleranceSeconds,
       priceIdByPlan: {
         pro: config.stripePriceIdPro,
@@ -292,6 +305,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   });
 
   if (deps.config.apiAuthRequired) {
+    app.use("/api/uploads", requireApiAuth(deps.auth));
     app.use("/api/jobs", requireApiAuth(deps.auth));
     app.use("/api/cleanup", requireApiAuth(deps.auth));
     app.use("/api/quota", requireApiAuth(deps.auth));

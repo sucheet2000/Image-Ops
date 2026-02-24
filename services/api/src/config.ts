@@ -116,6 +116,24 @@ const envSchema = z.object({
     });
   }
 
+  if (value.API_AUTH_REQUIRED) {
+    if (value.AUTH_TOKEN_SECRET === "dev-auth-token-secret") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["AUTH_TOKEN_SECRET"],
+        message: "AUTH_TOKEN_SECRET must not use the development default when API_AUTH_REQUIRED=true"
+      });
+    }
+
+    if (value.GOOGLE_CLIENT_ID === "google-client-id") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["GOOGLE_CLIENT_ID"],
+        message: "GOOGLE_CLIENT_ID must not use the development default when API_AUTH_REQUIRED=true"
+      });
+    }
+  }
+
   if (value.NODE_ENV === "production") {
     if (value.JOB_REPO_DRIVER !== "postgres") {
       ctx.addIssue({

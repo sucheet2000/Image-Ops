@@ -67,12 +67,13 @@ describe("POST /api/jobs", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig() });
     closers.push(server.close);
 
+    const missingObjectKey = "tmp/seller_1/input/2026/02/23/compress/missing.jpg";
     const completeResponse = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_1",
-        objectKey: "tmp/seller_1/input/missing.jpg"
+        objectKey: missingObjectKey
       })
     });
     expect(completeResponse.status).toBe(404);
@@ -84,7 +85,7 @@ describe("POST /api/jobs", () => {
         subjectId: "seller_1",
         plan: "free",
         tool: "compress",
-        inputObjectKey: "tmp/seller_1/input/missing.jpg"
+        inputObjectKey: missingObjectKey
       })
     });
 

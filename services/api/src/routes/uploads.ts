@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Readable } from "node:stream";
 import {
   inferUploadObjectKeyPrefix,
   isTool,
@@ -57,11 +56,7 @@ function selectExtension(filename: string, mime: string): string {
 }
 
 async function sha256HexStreaming(bytes: Buffer): Promise<string> {
-  const hasher = createHash("sha256");
-  for await (const chunk of Readable.from(bytes)) {
-    hasher.update(chunk as Buffer);
-  }
-  return hasher.digest("hex");
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function buffersEqualByteByByte(left: Buffer, right: Buffer): boolean {
@@ -125,6 +120,48 @@ function detectMimeFromBytes(bytes: Buffer): string | null {
   }
 
   return null;
+}
+
+function parseUploadObjectKeyForSubject(subjectId: string, objectKey: string): {
+  year: number;
+  month: number;
+  day: number;
+  tool: ImageTool;
+  filename: string;
+} | null {
+  const segments = objectKey.split("/");
+  if (segments.length !== 8) {
+    return null;
+  }
+
+  const [tmp, keySubjectId, scope, yyyyRaw, mmRaw, ddRaw, toolRaw, filename] = segments;
+  if (tmp !== "tmp" || keySubjectId !== subjectId || scope !== "input" || !filename) {
+    return null;
+  }
+  if (!/^\d{4}$/.test(yyyyRaw) || !/^\d{2}$/.test(mmRaw) || !/^\d{2}$/.test(ddRaw)) {
+    return null;
+  }
+  if (!isTool(toolRaw)) {
+    return null;
+  }
+  if (!/^[^/]+\.[a-z0-9]+$/i.test(filename)) {
+    return null;
+  }
+
+  const year = Number.parseInt(yyyyRaw, 10);
+  const month = Number.parseInt(mmRaw, 10);
+  const day = Number.parseInt(ddRaw, 10);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  return {
+    year,
+    month,
+    day,
+    tool: toolRaw,
+    filename
+  };
 }
 
 export function registerUploadsRoutes(
@@ -195,8 +232,14 @@ export function registerUploadsRoutes(
 
     const payload = parsed.data;
     const safeSubjectId = toSafeSubjectId(payload.subjectId);
-    const subjectUploadPrefix = `tmp/${safeSubjectId}/input/`;
-    if (!payload.objectKey.startsWith(subjectUploadPrefix)) {
+    const parsedKey = parseUploadObjectKeyForSubject(safeSubjectId, payload.objectKey);
+    if (!parsedKey) {
+      res.status(400).json({ error: "INVALID_OBJECT_KEY", message: "Object key does not match expected upload key format." });
+      return;
+    }
+    const prefixDate = new Date(Date.UTC(parsedKey.year, parsedKey.month - 1, parsedKey.day));
+    const expectedPrefix = inferUploadObjectKeyPrefix(safeSubjectId, parsedKey.tool, prefixDate);
+    if (!payload.objectKey.startsWith(`${expectedPrefix}/`)) {
       res.status(400).json({ error: "INVALID_OBJECT_KEY", message: "Object key does not match subject upload prefix." });
       return;
     }
@@ -204,6 +247,13 @@ export function registerUploadsRoutes(
     const head = await deps.storage.headObject(payload.objectKey);
     if (!head.exists) {
       res.status(404).json({ error: "INPUT_OBJECT_NOT_FOUND", message: "Input object key is missing or expired." });
+      return;
+    }
+    if (typeof head.contentLength === "number" && head.contentLength > deps.config.maxUploadBytes) {
+      res.status(413).json({
+        error: "FILE_TOO_LARGE",
+        message: `Maximum upload size is ${deps.config.maxUploadBytes} bytes.`
+      });
       return;
     }
 
@@ -276,8 +326,9 @@ export function registerUploadsRoutes(
     let deduplicated = false;
 
     for (const candidate of candidates) {
+      const candidateParsed = parseUploadObjectKeyForSubject(safeSubjectId, candidate.objectKey);
       if (
-        !candidate.objectKey.startsWith(subjectUploadPrefix)
+        !candidateParsed
         || candidate.objectKey === payload.objectKey
         || candidate.sizeBytes !== object.bytes.length
       ) {

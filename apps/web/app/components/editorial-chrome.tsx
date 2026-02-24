@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useMagnetic } from "../../components/cursor/useMagnetic";
+import { onScroll } from "../../lib/lenis";
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/") {
@@ -18,6 +20,7 @@ export function EditorialChrome() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [progress, setProgress] = useState(0);
+  const ctaRef = useMagnetic(0.3);
 
   const navItems = useMemo(
     () => [
@@ -30,79 +33,45 @@ export function EditorialChrome() {
   );
 
   useEffect(() => {
-    const onScroll = () => {
-      const y = window.scrollY;
-      setScrolled(y > 60);
-      const doc = document.documentElement;
-      const max = doc.scrollHeight - window.innerHeight;
-      const next = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
-      setProgress(next);
+    const updateFromScroll = (scrollY: number) => {
+      setScrolled(scrollY > 60);
+      const maxScroll = document.body.scrollHeight - window.innerHeight;
+      const pct = maxScroll > 0 ? Math.min((scrollY / maxScroll) * 100, 100) : 0;
+      setProgress(pct);
     };
 
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
+    const unsubscribe = onScroll(updateFromScroll);
+    const onResize = () => updateFromScroll(window.scrollY || window.pageYOffset || 0);
+    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      unsubscribe();
+      window.removeEventListener("resize", onResize);
     };
   }, []);
 
   useEffect(() => {
-    const revealElements = Array.from(document.querySelectorAll<HTMLElement>(".reveal-el"));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
-
-    revealElements.forEach((element) => {
-      const delayMs = Number.parseInt(element.dataset.delay || "0", 10);
-      if (Number.isFinite(delayMs) && delayMs > 0) {
-        element.style.transitionDelay = `${delayMs}ms`;
-      }
-      observer.observe(element);
-    });
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [pathname]);
-
-  useEffect(() => {
-    const parallaxNodes = Array.from(document.querySelectorAll<HTMLElement>(".editorial-media-inner[data-parallax-speed]"));
-    if (parallaxNodes.length === 0) {
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
       return;
     }
 
-    const updateParallax = () => {
-      const viewportCenter = window.innerHeight / 2;
-      parallaxNodes.forEach((node) => {
-        const parent = node.parentElement;
-        if (!parent) {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".editorial-media-inner[data-parallax-speed]"));
+    if (nodes.length === 0) {
+      return;
+    }
+
+    return onScroll(() => {
+      nodes.forEach((node) => {
+        const wrapper = node.parentElement;
+        if (!wrapper) {
           return;
         }
-        const rect = parent.getBoundingClientRect();
-        const elementCenter = rect.top + rect.height / 2;
-        const delta = viewportCenter - elementCenter;
+        const rect = wrapper.getBoundingClientRect();
+        const center = rect.top + rect.height / 2 - window.innerHeight / 2;
         const speed = Number.parseFloat(node.dataset.parallaxSpeed || "0.12");
-        node.style.transform = `translate3d(0, ${Math.round(delta * speed)}px, 0)`;
+        node.style.transform = `translateY(${center * speed}px)`;
       });
-    };
-
-    updateParallax();
-    window.addEventListener("scroll", updateParallax, { passive: true });
-    window.addEventListener("resize", updateParallax);
-
-    return () => {
-      window.removeEventListener("scroll", updateParallax);
-      window.removeEventListener("resize", updateParallax);
-    };
+    });
   }, [pathname]);
 
   useEffect(() => {
@@ -145,8 +114,22 @@ export function EditorialChrome() {
 
   return (
     <>
-      <div className="scroll-progress" style={{ transform: `scaleX(${progress})` }} />
-      <header className={`site-header${scrolled ? " scrolled" : ""}`}>
+      <div className="scroll-progress" style={{ width: `${progress}%` }} />
+      <header
+        className={`site-header${scrolled ? " scrolled" : ""}`}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 900,
+          padding: scrolled ? "15px 52px" : "22px 52px",
+          background: scrolled ? "rgba(245,240,232,0.94)" : "transparent",
+          backdropFilter: scrolled ? "blur(14px)" : "none",
+          borderBottom: scrolled ? "1px solid var(--border)" : "1px solid transparent",
+          transition: "all 0.5s ease"
+        }}
+      >
         <div className="site-header-inner">
           <Link href="/" className="site-logo">
             ImageOps
@@ -162,8 +145,8 @@ export function EditorialChrome() {
               </Link>
             ))}
           </nav>
-          <Link href="/upload" className="editorial-button primary site-header-cta">
-            Start Free
+          <Link href="/upload" className="editorial-button primary site-header-cta nav-btn btn-primary" ref={ctaRef as never}>
+            <span>Start Free</span>
           </Link>
         </div>
       </header>
