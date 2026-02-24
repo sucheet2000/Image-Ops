@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { apiFetch, getApiBaseUrl } from "../lib/api-client";
 import { JOB_HISTORY_KEY } from "../lib/storage-keys";
 import { ensureViewerSubjectId } from "../lib/viewer-subject";
@@ -390,6 +391,15 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
   const chip = toStatusChip(statusText, running, Boolean(errorText), Boolean(result));
   const progress = progressFromStatus(statusText, Boolean(result), Boolean(errorText));
   const progressStyle = { "--progress": `${progress}%` } as CSSProperties;
+  const workflowStep = running
+    ? "processing"
+    : result
+      ? "done"
+      : errorText
+        ? "failed"
+        : file
+          ? "tool-select"
+          : "upload";
 
   return (
     <section className="workbench">
@@ -515,55 +525,65 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
             ) : null}
 
             <div className="workbench-actions">
-              <button type="button" className="editorial-button accent" disabled={running || !file || !subjectId} onClick={() => void runPipeline()}>
-                {running ? "Processing..." : "Run Tool"}
+              <button type="button" className="editorial-button accent btn-primary" disabled={running || !file || !subjectId} onClick={() => void runPipeline()}>
+                <span>{running ? "Processing..." : "Run Tool"}</span>
               </button>
               <button
                 type="button"
-                className="editorial-button ghost"
+                className="editorial-button ghost btn-cream"
                 disabled={running || !lastInputKey}
                 onClick={() => void cleanupRun(false)}
               >
-                Cleanup Input
+                <span>Cleanup Input</span>
               </button>
               <button
                 type="button"
-                className="editorial-button ghost"
+                className="editorial-button ghost btn-cream"
                 disabled={running || !lastInputKey || !lastOutputKey}
                 onClick={() => void cleanupRun(true)}
               >
-                Cleanup Input + Output
+                <span>Cleanup Input + Output</span>
               </button>
             </div>
           </div>
 
           <aside className="workbench-output">
-            <span className={`status-chip ${chip.className}`}>{chip.label}</span>
-            <p style={{ marginTop: "0.7rem" }}>{statusText}</p>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={workflowStep}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <span className={`status-chip ${chip.className} status-${chip.className}`}>{chip.label}</span>
+                <p style={{ marginTop: "0.7rem" }}>{statusText}</p>
 
-            {errorText ? (
-              <p style={{ marginTop: "0.7rem", color: "var(--terra-dark)" }}>{errorText}</p>
-            ) : null}
-
-            <div className="editorial-card" style={{ marginTop: "1rem" }}>
-              <p className="workbench-meta">Input Key</p>
-              <p>{lastInputKey || "-"}</p>
-            </div>
-            <div className="editorial-card" style={{ marginTop: "0.7rem" }}>
-              <p className="workbench-meta">Output Key</p>
-              <p>{lastOutputKey || "-"}</p>
-            </div>
-
-            {result?.downloadUrl ? (
-              <div className="tool-result" style={{ marginTop: "1rem" }}>
-                <a href={result.downloadUrl} target="_blank" rel="noreferrer" className="editorial-button primary">
-                  Download Output
-                </a>
-                {result.outputMime?.startsWith("image/") ? (
-                  <img src={result.downloadUrl} alt="Processed output preview" />
+                {errorText ? (
+                  <p style={{ marginTop: "0.7rem", color: "var(--terra-dark)" }}>{errorText}</p>
                 ) : null}
-              </div>
-            ) : null}
+
+                <div className="editorial-card" style={{ marginTop: "1rem" }}>
+                  <p className="workbench-meta">Input Key</p>
+                  <p>{lastInputKey || "-"}</p>
+                </div>
+                <div className="editorial-card" style={{ marginTop: "0.7rem" }}>
+                  <p className="workbench-meta">Output Key</p>
+                  <p>{lastOutputKey || "-"}</p>
+                </div>
+
+                {result?.downloadUrl ? (
+                  <div className="tool-result" style={{ marginTop: "1rem" }}>
+                    <a href={result.downloadUrl} target="_blank" rel="noreferrer" className="editorial-button primary btn-primary">
+                      <span>Download Output</span>
+                    </a>
+                    {result.outputMime?.startsWith("image/") ? (
+                      <img src={result.downloadUrl} alt="Processed output preview" />
+                    ) : null}
+                  </div>
+                ) : null}
+              </motion.div>
+            </AnimatePresence>
           </aside>
         </div>
       </div>

@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import FadeReveal from "../../components/animation/FadeReveal";
+import ScrambleNumber from "../../components/animation/ScrambleNumber";
+import WipeText from "../../components/animation/WipeText";
 import { apiFetch, getApiBaseUrl } from "../lib/api-client";
 import { getViewerSession } from "../lib/session";
 import { JOB_HISTORY_KEY } from "../lib/storage-keys";
@@ -114,16 +117,19 @@ export function DashboardShell() {
     <main className="app-page">
       <section className="page-shell">
         <header className="page-head">
-          <span className="section-label reveal-el" data-delay="0">Dashboard</span>
-          <h1 className="reveal-el" data-delay="100">
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Dashboard
+          </FadeReveal>
+          <WipeText as="h1" triggerOnMount>
             Operational view for your <span className="accent-italic">image pipeline.</span>
-          </h1>
-          <p className="reveal-el" data-delay="200">
-            Track quota usage, view recent jobs, and move between processing workflows without leaving this console.
-          </p>
+          </WipeText>
+          <FadeReveal delay={200}>
+            <p>Track quota usage, view recent jobs, and move between processing workflows without leaving this console.</p>
+          </FadeReveal>
         </header>
 
-        <section className="dashboard-layout reveal-el" data-delay="280">
+        <FadeReveal delay={280}>
+          <section className="dashboard-layout">
           <aside className="dashboard-sidebar">
             <p className="section-label">Workspace</p>
             <nav className="dashboard-nav" aria-label="Dashboard navigation" style={{ marginTop: "0.9rem" }}>
@@ -143,15 +149,21 @@ export function DashboardShell() {
               </article>
               <article className="dashboard-card">
                 <p className="dashboard-card-label">Quota Used</p>
-                <p className="dashboard-card-value">{usedCount}</p>
+                <p className="dashboard-card-value">
+                  <ScrambleNumber value={usedCount} />
+                </p>
               </article>
               <article className="dashboard-card">
                 <p className="dashboard-card-label">Remaining</p>
-                <p className="dashboard-card-value">{remaining}</p>
+                <p className="dashboard-card-value">
+                  <ScrambleNumber value={remaining} />
+                </p>
               </article>
               <article className="dashboard-card">
                 <p className="dashboard-card-label">Recent Jobs</p>
-                <p className="dashboard-card-value">{history.length}</p>
+                <p className="dashboard-card-value">
+                  <ScrambleNumber value={history.length} />
+                </p>
               </article>
             </div>
 
@@ -169,6 +181,23 @@ export function DashboardShell() {
             </article>
 
             <article style={{ marginTop: "1.2rem" }}>
+              <p className="section-label">Quick Actions</p>
+              <div className="workbench-actions" style={{ marginTop: "0.7rem" }}>
+                {[
+                  { href: "/upload", label: "Open Upload" },
+                  { href: "/tools", label: "Browse Tools" },
+                  { href: "/billing", label: "Manage Billing" }
+                ].map((action, index) => (
+                  <FadeReveal key={action.href} delay={index * 50}>
+                    <Link href={action.href} className="editorial-button ghost btn-cream">
+                      <span>{action.label}</span>
+                    </Link>
+                  </FadeReveal>
+                ))}
+              </div>
+            </article>
+
+            <article style={{ marginTop: "1.2rem" }}>
               <p className="section-label">Recent Jobs</p>
               <ul className="jobs-list">
                 {history.length === 0 ? (
@@ -179,8 +208,8 @@ export function DashboardShell() {
                     </div>
                   </li>
                 ) : (
-                  history.map((item) => (
-                    <li key={item.id} className="jobs-item">
+                  history.map((item, index) => (
+                    <FadeReveal key={item.id} as="li" className="jobs-item" delay={index * 60}>
                       <div>
                         <p>
                           {item.tool} · {item.id}
@@ -190,7 +219,7 @@ export function DashboardShell() {
                       <span className={`status-chip ${statusClass(item.status)}`}>
                         {item.status === "done" ? "Completed" : "Failed"}
                       </span>
-                    </li>
+                    </FadeReveal>
                   ))
                 )}
               </ul>
@@ -198,7 +227,8 @@ export function DashboardShell() {
 
             {error ? <p style={{ marginTop: "1rem", color: "var(--terra-dark)" }}>{error}</p> : null}
           </div>
-        </section>
+          </section>
+        </FadeReveal>
       </section>
     </main>
   );

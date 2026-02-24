@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import FadeReveal from "../../../components/animation/FadeReveal";
+import WipeText from "../../../components/animation/WipeText";
 import { JsonLd } from "../../components/json-ld";
 import { COMPARE_PAGES, findCompare, getBaseUrl } from "../../lib/seo-data";
 
@@ -55,29 +57,45 @@ export default async function ComparePage({ params }: ComparePageProps) {
     <>
       <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "56vh" }}>
         <div className="section-inner">
-          <span className="section-label reveal-el" data-delay="0">Comparison</span>
-          <h1 className="reveal-el" data-delay="100">{page.title}</h1>
-          <p className="section-lead reveal-el" data-delay="180">{page.summary}</p>
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Comparison
+          </FadeReveal>
+          <WipeText as="h1" triggerOnMount>
+            {page.title}
+          </WipeText>
+          <FadeReveal delay={180}>
+            <p className="section-lead">{page.summary}</p>
+          </FadeReveal>
         </div>
       </section>
 
       <section className="editorial-page-grid">
         <div className="editorial-page-copy">
-          <span className="section-label reveal-el" data-delay="0">Decision Core</span>
-          <h2 className="reveal-el" data-delay="100">Winner When</h2>
-          <p className="section-lead reveal-el" data-delay="180">{page.winnerWhen}</p>
-          <h3 className="reveal-el" data-delay="230" style={{ marginTop: "1rem" }}>But Consider</h3>
-          <p className="section-lead reveal-el" data-delay="280">{page.winnerBut}</p>
+          <FadeReveal as="span" className="section-label" delay={0}>
+            Decision Core
+          </FadeReveal>
+          <WipeText as="h2">Winner When</WipeText>
+          <FadeReveal delay={180}>
+            <p className="section-lead">{page.winnerWhen}</p>
+          </FadeReveal>
+          <FadeReveal as="h3" delay={230} style={{ marginTop: "1rem" }}>
+            But Consider
+          </FadeReveal>
+          <FadeReveal delay={280}>
+            <p className="section-lead">{page.winnerBut}</p>
+          </FadeReveal>
         </div>
 
         <aside className="editorial-page-side">
-          <span className="section-label reveal-el" data-delay="80">Checklist</span>
-          <ol className="editorial-list reveal-el" data-delay="140">
+          <FadeReveal as="span" className="section-label" delay={80}>
+            Checklist
+          </FadeReveal>
+          <ol className="editorial-list">
             {page.decisionChecklist.map((item, index) => (
-              <li key={item}>
+              <FadeReveal key={item} as="li" delay={140 + index * 80} y={10}>
                 <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
                 <span>{item}</span>
-              </li>
+              </FadeReveal>
             ))}
           </ol>
           <div className="editorial-card" style={{ marginTop: "1rem" }}>
