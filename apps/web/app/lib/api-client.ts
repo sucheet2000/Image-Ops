@@ -12,6 +12,22 @@ function safeStorageGet(storage: Storage, key: string): string | null {
   }
 }
 
+function safeStorageSet(storage: Storage, key: string, value: string): void {
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures in restrictive/private browsing modes.
+  }
+}
+
+function safeStorageRemove(storage: Storage, key: string): void {
+  try {
+    storage.removeItem(key);
+  } catch {
+    // Ignore storage write failures in restrictive/private browsing modes.
+  }
+}
+
 export function getApiToken(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -25,8 +41,8 @@ export function setApiToken(token: string): void {
     return;
   }
 
-  sessionStorage.setItem(TOKEN_KEY, token);
-  localStorage.removeItem(TOKEN_KEY);
+  safeStorageSet(sessionStorage, TOKEN_KEY, token);
+  safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
 export function clearApiToken(): void {
@@ -34,8 +50,8 @@ export function clearApiToken(): void {
     return;
   }
 
-  sessionStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(TOKEN_KEY);
+  safeStorageRemove(sessionStorage, TOKEN_KEY);
+  safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
 async function refreshApiToken(): Promise<string | null> {
