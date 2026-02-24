@@ -13,7 +13,7 @@ services:
   - type: web
     name: image-ops-api
     runtime: docker
-    plan: starter
+    plan: standard
     dockerContext: .
     dockerfilePath: ./services/api/Dockerfile
     autoDeploy: true
@@ -82,7 +82,7 @@ services:
   - type: worker
     name: image-ops-worker
     runtime: docker
-    plan: starter
+    plan: standard
     dockerContext: .
     dockerfilePath: ./services/worker/Dockerfile
     autoDeploy: true
@@ -123,11 +123,11 @@ services:
       - key: BG_REMOVE_API_URL
         sync: false
       - key: BG_REMOVE_TIMEOUT_MS
-        value: "5000"
+        value: "15000"
       - key: BG_REMOVE_MAX_RETRIES
-        value: "2"
+        value: "1"
       - key: BG_REMOVE_BACKOFF_BASE_MS
-        value: "250"
+        value: "500"
       - key: BG_REMOVE_BACKOFF_MAX_MS
         value: "1000"
 
