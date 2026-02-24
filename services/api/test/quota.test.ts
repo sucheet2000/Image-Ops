@@ -28,14 +28,15 @@ describe("GET /api/quota/:subjectId", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig(), now });
     closers.push(server.close);
 
-    services.storage.setObject("tmp/seller_1/input/a.jpg", "image/png", fakeImageBytes("quota-seller-1"));
+    const inputObjectKey = "tmp/seller_1/input/2026/02/23/compress/a.jpg";
+    services.storage.setObject(inputObjectKey, "image/png", fakeImageBytes("quota-seller-1"));
 
     const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         subjectId: "seller_1",
-        objectKey: "tmp/seller_1/input/a.jpg"
+        objectKey: inputObjectKey
       })
     });
     expect(complete.status).toBe(200);
@@ -47,7 +48,7 @@ describe("GET /api/quota/:subjectId", () => {
         subjectId: "seller_1",
         plan: "free",
         tool: "compress",
-        inputObjectKey: "tmp/seller_1/input/a.jpg"
+        inputObjectKey
       })
     });
     expect(createJob.status).toBe(201);

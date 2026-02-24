@@ -1,5 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { ImagePlan } from "@image-ops/core";
+import { OAuth2Client } from "google-auth-library";
 import { ulid } from "ulid";
 
 export type ApiTokenClaims = {
@@ -26,6 +27,13 @@ export interface AuthService {
   verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity>;
   issueApiToken(input: { sub: string; plan: ImagePlan; email?: string; now: Date }): string;
   verifyApiToken(token: string): ApiTokenClaims | null;
+}
+
+export class GoogleTokenVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GoogleTokenVerificationError";
+  }
 }
 
 function toBase64Url(input: Buffer | string): string {
@@ -76,33 +84,70 @@ export class GoogleTokenAuthService implements AuthService {
   private readonly googleClientId: string;
   private readonly authTokenSecret: string;
   private readonly authTokenTtlSeconds: number;
+  private readonly oauthClient: OAuth2Client;
 
-  constructor(input: { googleClientId: string; authTokenSecret: string; authTokenTtlSeconds: number }) {
+  constructor(input: {
+    googleClientId: string;
+    authTokenSecret: string;
+    authTokenTtlSeconds: number;
+    oauthClient?: OAuth2Client;
+  }) {
     this.googleClientId = input.googleClientId;
     this.authTokenSecret = input.authTokenSecret;
     this.authTokenTtlSeconds = input.authTokenTtlSeconds;
+    this.oauthClient = input.oauthClient || new OAuth2Client(input.googleClientId);
   }
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
-    const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    if (!response.ok) {
-      throw new Error("Invalid Google ID token.");
+    let payload:
+      | {
+          sub?: string;
+          email?: string;
+          email_verified?: boolean | string;
+          aud?: string | string[];
+          iss?: string;
+          exp?: number;
+        }
+      | undefined;
+
+    try {
+      const ticket = await this.oauthClient.verifyIdToken({
+        idToken,
+        audience: this.googleClientId
+      });
+      payload = ticket.getPayload();
+    } catch {
+      throw new GoogleTokenVerificationError("Invalid Google ID token.");
     }
 
-    const payload = (await response.json()) as Record<string, unknown>;
-    if (String(payload.aud || "") !== this.googleClientId) {
-      throw new Error("Google token audience mismatch.");
+    if (!payload) {
+      throw new GoogleTokenVerificationError("Invalid Google ID token.");
+    }
+
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!audiences.some((audience) => String(audience || "") === this.googleClientId)) {
+      throw new GoogleTokenVerificationError("Google token audience mismatch.");
+    }
+
+    const issuer = String(payload.iss || "");
+    if (issuer !== "accounts.google.com" && issuer !== "https://accounts.google.com") {
+      throw new GoogleTokenVerificationError("Google token issuer mismatch.");
+    }
+
+    const exp = Number(payload.exp || 0);
+    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) {
+      throw new GoogleTokenVerificationError("Google token expired.");
     }
 
     const sub = String(payload.sub || "").trim();
     if (!sub) {
-      throw new Error("Google token missing subject.");
+      throw new GoogleTokenVerificationError("Google token missing subject.");
     }
 
     return {
       sub,
       email: payload.email ? String(payload.email) : undefined,
-      emailVerified: String(payload.email_verified || "false") === "true"
+      emailVerified: payload.email_verified === true || String(payload.email_verified || "").toLowerCase() === "true"
     };
   }
 

@@ -1,7 +1,11 @@
+export const TOOL_SLUGS = ["resize", "compress", "convert", "background-remove"] as const;
+export type ToolSlug = (typeof TOOL_SLUGS)[number];
+
 export type ToolPage = {
-  slug: string;
+  slug: ToolSlug;
   name: string;
   summary: string;
+  whenToUse?: string;
   keywords: string[];
   faq: { question: string; answer: string }[];
 };
@@ -10,7 +14,7 @@ export type UseCasePage = {
   slug: string;
   title: string;
   summary: string;
-  recommendedTools: string[];
+  recommendedTools: ToolSlug[];
   relatedGuides: { title: string; href: string }[];
   relatedComparisons: { title: string; href: string }[];
 };
@@ -20,7 +24,7 @@ export type AudienceIntentPage = {
   intent: string;
   title: string;
   summary: string;
-  recommendedTools: string[];
+  recommendedTools: ToolSlug[];
   faq: { question: string; answer: string }[];
 };
 
@@ -29,7 +33,7 @@ export type GuidePage = {
   title: string;
   summary: string;
   steps: string[];
-  relatedTools: string[];
+  relatedTools: ToolSlug[];
   faq: { question: string; answer: string }[];
 };
 
@@ -59,6 +63,7 @@ export const TOOL_PAGES: ToolPage[] = [
     slug: "resize",
     name: "Image Resize",
     summary: "Resize marketplace images without breaking aspect ratio.",
+    whenToUse: "Use this when a channel requires exact dimensions or consistent gallery framing.",
     keywords: ["resize image", "marketplace photo resize", "listing image dimensions"],
     faq: [
       {
@@ -75,6 +80,7 @@ export const TOOL_PAGES: ToolPage[] = [
     slug: "compress",
     name: "Image Compression",
     summary: "Reduce file size while preserving listing quality.",
+    whenToUse: "Use this before publishing when storefront speed or upload limits are your primary constraint.",
     keywords: ["compress image", "reduce image size", "optimize listing photos"],
     faq: [
       {
@@ -91,6 +97,7 @@ export const TOOL_PAGES: ToolPage[] = [
     slug: "convert",
     name: "Format Conversion",
     summary: "Convert JPG, PNG, and WEBP for channel compatibility.",
+    whenToUse: "Use this when your destination platform requires a specific format or transparency behavior.",
     keywords: ["convert image format", "jpg png webp converter", "marketplace format"],
     faq: [
       {
@@ -107,6 +114,7 @@ export const TOOL_PAGES: ToolPage[] = [
     slug: "background-remove",
     name: "Background Remove",
     summary: "Generate clean product cutouts for catalogs and ads.",
+    whenToUse: "Use this for hero images and ads where subject isolation improves clarity and compliance.",
     keywords: ["remove background", "product photo cutout", "transparent background"],
     faq: [
       {
@@ -709,7 +717,26 @@ export const COMPARE_PAGES: ComparePage[] = [
 ];
 
 export function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+  const fallback = "http://localhost:3000";
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL || "").trim();
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!raw) {
+    if (isProduction) {
+      throw new Error("NEXT_PUBLIC_SITE_URL is required in production.");
+    }
+    return fallback;
+  }
+
+  try {
+    const normalized = new URL(raw).toString();
+    return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
+  } catch {
+    if (isProduction) {
+      throw new Error(`NEXT_PUBLIC_SITE_URL is invalid: ${raw}`);
+    }
+    return fallback;
+  }
 }
 
 export function findTool(slug: string): ToolPage | null {

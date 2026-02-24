@@ -1,7 +1,8 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { GoogleAuthPanel } from "../components/google-auth";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Login | Image Ops",
   description: "Sign in with Google to use protected Image Ops APIs."
 };

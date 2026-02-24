@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { AuthService, ApiTokenClaims } from "../services/auth";
 
-type RequestWithAuth = Request & {
+export type RequestWithAuth = Request & {
   auth?: ApiTokenClaims;
 };
 
