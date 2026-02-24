@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { JsonLd } from "../../components/json-ld";
 import { COMPARE_PAGES, findCompare, getBaseUrl } from "../../lib/seo-data";
 
 type ComparePageProps = {
@@ -80,7 +81,7 @@ export default async function ComparePage({ params }: ComparePageProps) {
         </ul>
       </section>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
+      <JsonLd data={articleSchema} />
     </main>
   );
 }

@@ -144,15 +144,15 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     lines.push(`image_ops_http_in_flight_requests ${inflightRequests}`);
     lines.push("# HELP image_ops_http_requests_total Total HTTP requests handled.");
     lines.push("# TYPE image_ops_http_requests_total counter");
-    lines.push("# HELP image_ops_http_request_duration_seconds_sum Total request duration in seconds.");
-    lines.push("# TYPE image_ops_http_request_duration_seconds_sum counter");
+    lines.push("# HELP image_ops_http_request_duration_seconds_total Total request duration in seconds.");
+    lines.push("# TYPE image_ops_http_request_duration_seconds_total counter");
 
     const sorted = [...requestMetrics.entries()].sort((left, right) => left[0].localeCompare(right[0]));
     for (const [key, value] of sorted) {
       const [method, path, statusCode] = key.split("|");
       const labels = `method="${escapeMetricLabelValue(method)}",path="${escapeMetricLabelValue(path)}",status_code="${escapeMetricLabelValue(statusCode)}"`;
       lines.push(`image_ops_http_requests_total{${labels}} ${value.count}`);
-      lines.push(`image_ops_http_request_duration_seconds_sum{${labels}} ${value.durationSecondsTotal.toFixed(6)}`);
+      lines.push(`image_ops_http_request_duration_seconds_total{${labels}} ${value.durationSecondsTotal.toFixed(6)}`);
     }
 
     return `${lines.join("\n")}\n`;
@@ -173,7 +173,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
 
       const routePath = typeof (req.route as { path?: string } | undefined)?.path === "string"
         ? String((req.route as { path?: string }).path)
-        : req.path;
+        : "unmatched";
       const durationSeconds = Number(process.hrtime.bigint() - startedAtNs) / 1_000_000_000;
       observeRequest(req.method, routePath, res.statusCode, durationSeconds);
     });

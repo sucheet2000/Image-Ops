@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { JsonLd } from "../../components/json-ld";
 import { findUseCase, getBaseUrl, USE_CASE_PAGES } from "../../lib/seo-data";
 
 type UseCasePageProps = {
@@ -69,23 +70,31 @@ export default async function UseCasePage({ params }: UseCasePageProps) {
           ))}
         </ol>
       </section>
-      <section className="card">
-        <h2>Related Guides</h2>
-        <ul>
-          <li><Link href="/guides/prepare-amazon-main-images">Prepare Amazon Main Images</Link></li>
-          <li><Link href="/guides/optimize-etsy-thumbnails">Optimize Etsy Thumbnails</Link></li>
-          <li><Link href="/guides/batch-convert-marketplace-images">Batch Convert Marketplace Images</Link></li>
-        </ul>
-      </section>
-      <section className="card">
-        <h2>Format References</h2>
-        <ul>
-          <li><Link href="/compare/jpg-vs-png">JPG vs PNG</Link></li>
-          <li><Link href="/compare/png-vs-webp">PNG vs WEBP</Link></li>
-          <li><Link href="/compare/jpeg-vs-webp">JPEG vs WEBP</Link></li>
-        </ul>
-      </section>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      {useCase.relatedGuides.length > 0 ? (
+        <section className="card">
+          <h2>Related Guides</h2>
+          <ul>
+            {useCase.relatedGuides.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href}>{item.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {useCase.relatedComparisons.length > 0 ? (
+        <section className="card">
+          <h2>Format References</h2>
+          <ul>
+            {useCase.relatedComparisons.map((item) => (
+              <li key={item.href}>
+                <Link href={item.href}>{item.title}</Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <JsonLd data={schema} />
     </main>
   );
 }

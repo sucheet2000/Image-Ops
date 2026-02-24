@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { JsonLd } from "../../../components/json-ld";
 import { AUDIENCE_INTENT_PAGES, findAudienceIntent, getBaseUrl } from "../../../lib/seo-data";
 
 type AudienceIntentPageProps = {
@@ -107,8 +108,8 @@ export default async function AudienceIntentPage({ params }: AudienceIntentPageP
         </ul>
       </section>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
+      <JsonLd data={howToSchema} />
+      <JsonLd data={faqSchema} />
     </main>
   );
 }
