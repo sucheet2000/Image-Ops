@@ -1,0 +1,69 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Container image tag to deploy (commit SHA or latest)"
+        required: true
+        default: "latest"
+        type: string
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.STAGING_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync compose file to host
+        run: |
+          ssh "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" "mkdir -p '${{ secrets.STAGING_APP_DIR }}/infra'"
+          scp infra/docker-compose.release.yml "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}:${{ secrets.STAGING_APP_DIR }}/infra/docker-compose.release.yml"
+
+      - name: Deploy stack on host
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          GHCR_OWNER: ${{ github.repository_owner }}
+          GHCR_DEPLOY_USER: ${{ secrets.GHCR_DEPLOY_USER }}
+          GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
+        run: |
+          ssh "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" "
+            set -euo pipefail
+            cd '${{ secrets.STAGING_APP_DIR }}'
+            echo '${GHCR_DEPLOY_TOKEN}' | docker login ghcr.io -u '${GHCR_DEPLOY_USER}' --password-stdin
+            IMAGE_TAG='${IMAGE_TAG}' GHCR_OWNER='${GHCR_OWNER}' docker compose -f infra/docker-compose.release.yml pull
+            IMAGE_TAG='${IMAGE_TAG}' GHCR_OWNER='${GHCR_OWNER}' docker compose -f infra/docker-compose.release.yml up -d
+            docker compose -f infra/docker-compose.release.yml ps
+          "
+
+      - name: Wait for remote API ready
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --connect-timeout 5 --max-time 10 "${STAGING_API_BASE_URL}/ready" >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Staging API did not become ready in time"
+          exit 1
+
+      - name: Run smoke against staging
+        env:
+          STAGING_API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+          API_BEARER_TOKEN: ${{ secrets.STAGING_API_BEARER_TOKEN }}
+        run: npm run smoke:staging

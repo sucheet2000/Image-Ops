@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { findTool, getBaseUrl, TOOL_PAGES } from "../../lib/seo-data";
+import { findTool, getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from "../../lib/seo-data";
 
 type ToolPageProps = {
   params: Promise<{ tool: string }>;
@@ -45,7 +46,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
   }
 
   const baseUrl = getBaseUrl();
-  const schema = {
+  const softwareSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: `Image Ops ${tool.name}`,
@@ -54,6 +55,19 @@ export default async function ToolPage({ params }: ToolPageProps) {
     url: `${baseUrl}/tools/${tool.slug}`,
     description: tool.summary
   };
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: tool.faq.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer
+      }
+    }))
+  };
+  const relatedUseCases = USE_CASE_PAGES.filter((item) => item.recommendedTools.includes(tool.slug)).slice(0, 3);
 
   return (
     <main className="container">
@@ -67,7 +81,32 @@ export default async function ToolPage({ params }: ToolPageProps) {
         <h2>Keywords</h2>
         <p>{tool.keywords.join(" · ")}</p>
       </section>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+
+      <section className="card">
+        <h2>Common Questions</h2>
+        {tool.faq.map((item) => (
+          <article key={item.question}>
+            <h3>{item.question}</h3>
+            <p>{item.answer}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="card">
+        <h2>Related Pages</h2>
+        <ul>
+          <li><Link href="/guides/prepare-amazon-main-images">Guide: Prepare Amazon Main Images</Link></li>
+          {relatedUseCases.map((item) => (
+            <li key={item.slug}>
+              <Link href={`/use-cases/${item.slug}`}>{item.title}</Link>
+            </li>
+          ))}
+          <li><Link href="/compare/jpg-vs-png">Compare: JPG vs PNG</Link></li>
+        </ul>
+      </section>
+
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
     </main>
   );
 }

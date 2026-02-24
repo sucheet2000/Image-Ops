@@ -7,22 +7,31 @@ if [[ -z "${STAGING_API_BASE_URL:-}" ]]; then
 fi
 
 BASE_URL="${STAGING_API_BASE_URL%/}"
-AUTH_HEADER=()
-if [[ -n "${API_BEARER_TOKEN:-}" ]]; then
-  AUTH_HEADER=(-H "authorization: Bearer ${API_BEARER_TOKEN}")
-fi
+CURL_LONG=(--connect-timeout 5 --max-time 30)
+CURL_POLL=(--connect-timeout 5 --max-time 10)
+
+curl_with_optional_auth() {
+  if [[ -n "${API_BEARER_TOKEN:-}" ]]; then
+    curl "$@" -H "authorization: Bearer ${API_BEARER_TOKEN}"
+    return
+  fi
+
+  curl "$@"
+}
 
 echo "==> health check"
-curl -fsS "${BASE_URL}/health" >/dev/null
+curl -fsS "${CURL_LONG[@]}" "${BASE_URL}/health" >/dev/null
 
-SUBJECT_ID="staging_smoke_$(date +%Y%m%d%H%M%S)"
+SUBJECT_ID="staging_smoke_$(date +%Y%m%d%H%M%S)_$$"
 TMP_PNG="$(mktemp /tmp/image-ops-smoke-XXXXXX.png)"
-trap 'rm -f "${TMP_PNG}"' EXIT
-printf '%s' "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2p6i8AAAAASUVORK5CYII=" | base64 --decode >"${TMP_PNG}"
+TMP_JOB="$(mktemp /tmp/image-ops-smoke-job-XXXXXX.json)"
+TMP_CLEANUP="$(mktemp /tmp/image-ops-smoke-cleanup-XXXXXX.json)"
+trap 'rm -f "${TMP_PNG}" "${TMP_JOB}" "${TMP_CLEANUP}"' EXIT
+printf '%s' "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2p6i8AAAAASUVORK5CYII=" | base64 -d >"${TMP_PNG}"
 PNG_SIZE="$(wc -c <"${TMP_PNG}" | tr -d ' ')"
 
 echo "==> init upload"
-UPLOAD_INIT_RESPONSE="$(curl -fsS -X POST "${BASE_URL}/api/uploads/init" \
+UPLOAD_INIT_RESPONSE="$(curl -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/init" \
   -H "content-type: application/json" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"tool\":\"resize\",\"filename\":\"smoke.png\",\"mime\":\"image/png\",\"size\":${PNG_SIZE}}")"
 
@@ -34,7 +43,7 @@ if [[ -z "${OBJECT_KEY}" || -z "${UPLOAD_URL}" ]]; then
 fi
 
 echo "==> upload object"
-UPLOAD_STATUS="$(curl -sS -o /dev/null -w "%{http_code}" -X PUT "${UPLOAD_URL}" \
+UPLOAD_STATUS="$(curl -sS "${CURL_LONG[@]}" -o /dev/null -w "%{http_code}" -X PUT "${UPLOAD_URL}" \
   -H "content-type: image/png" \
   --data-binary @"${TMP_PNG}")"
 if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "204" ]]; then
@@ -43,15 +52,13 @@ if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "204" ]]; then
 fi
 
 echo "==> complete upload"
-curl -fsS -X POST "${BASE_URL}/api/uploads/complete" \
+curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/complete" \
   -H "content-type: application/json" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"objectKey\":\"${OBJECT_KEY}\"}" >/dev/null
 
 echo "==> create job (requires auth when API_AUTH_REQUIRED=true)"
-CREATE_JOB_STATUS="$(curl -sS -o /tmp/image-ops-smoke-job.json -w "%{http_code}" -X POST "${BASE_URL}/api/jobs" \
+CREATE_JOB_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_JOB}" -w "%{http_code}" -X POST "${BASE_URL}/api/jobs" \
   -H "content-type: application/json" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"plan\":\"free\",\"tool\":\"resize\",\"inputObjectKey\":\"${OBJECT_KEY}\",\"options\":{\"width\":1,\"height\":1}}")"
 
 if [[ "${CREATE_JOB_STATUS}" == "401" ]]; then
@@ -62,11 +69,11 @@ fi
 
 if [[ "${CREATE_JOB_STATUS}" != "201" ]]; then
   echo "unexpected job create status: ${CREATE_JOB_STATUS}"
-  cat /tmp/image-ops-smoke-job.json || true
+  cat "${TMP_JOB}" || true
   exit 1
 fi
 
-JOB_ID="$(node -e 'const v=require("fs").readFileSync("/tmp/image-ops-smoke-job.json","utf8");const p=JSON.parse(v);process.stdout.write(p.id||"")')"
+JOB_ID="$(node -e 'const v=require("fs").readFileSync(process.argv[1],"utf8");const p=JSON.parse(v);process.stdout.write(p.id||"")' "${TMP_JOB}")"
 if [[ -z "${JOB_ID}" ]]; then
   echo "job create did not return job id"
   exit 1
@@ -77,7 +84,7 @@ DEADLINE=$(( $(date +%s) + 45 ))
 OUTPUT_KEY=""
 DOWNLOAD_URL=""
 while [[ "$(date +%s)" -lt "${DEADLINE}" ]]; do
-  STATUS_JSON="$(curl -fsS -X GET "${BASE_URL}/api/jobs/${JOB_ID}" "${AUTH_HEADER[@]}")"
+  STATUS_JSON="$(curl_with_optional_auth -fsS "${CURL_POLL[@]}" -X GET "${BASE_URL}/api/jobs/${JOB_ID}")"
   STATUS_VALUE="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.status||"")' "${STATUS_JSON}")"
   if [[ "${STATUS_VALUE}" == "done" ]]; then
     OUTPUT_KEY="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.outputObjectKey||"")' "${STATUS_JSON}")"
@@ -98,17 +105,16 @@ if [[ -z "${OUTPUT_KEY}" || -z "${DOWNLOAD_URL}" ]]; then
 fi
 
 echo "==> verify download"
-curl -fsS "${DOWNLOAD_URL}" >/dev/null
+curl -fsS "${CURL_LONG[@]}" "${DOWNLOAD_URL}" >/dev/null
 
 echo "==> cleanup"
-CLEANUP_STATUS="$(curl -sS -o /tmp/image-ops-smoke-cleanup.json -w "%{http_code}" -X POST "${BASE_URL}/api/cleanup" \
+CLEANUP_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_CLEANUP}" -w "%{http_code}" -X POST "${BASE_URL}/api/cleanup" \
   -H "content-type: application/json" \
   -H "idempotency-key: staging-smoke-${SUBJECT_ID}" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"objectKeys\":[\"${OBJECT_KEY}\",\"${OUTPUT_KEY}\"],\"reason\":\"manual\"}")"
 if [[ "${CLEANUP_STATUS}" != "202" ]]; then
   echo "unexpected cleanup status: ${CLEANUP_STATUS}"
-  cat /tmp/image-ops-smoke-cleanup.json || true
+  cat "${TMP_CLEANUP}" || true
   exit 1
 fi
 

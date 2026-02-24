@@ -44,7 +44,13 @@ Key runtime groups:
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
-- Worker/background remove: `WORKER_CONCURRENCY`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+- Worker/background remove: `WORKER_CONCURRENCY`, `WORKER_HEARTBEAT_INTERVAL_MS`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+
+## Observability
+- `GET /health`: basic liveness probe.
+- `GET /ready`: readiness probe that verifies storage and metadata repository connectivity.
+- `GET /metrics`: Prometheus-style metrics for uptime, in-flight requests, request counts, and duration totals.
+- Worker emits `worker.ready`, `worker.completed`, `worker.failed`, and periodic `worker.heartbeat` structured log events.
 
 ## Auth Session Strategy
 - `POST /api/auth/google` issues a short-lived bearer access token plus an HttpOnly refresh cookie.
@@ -93,6 +99,26 @@ npm run infra:down:deploy
 Notes:
 - `infra/docker-compose.deploy.yml` is intended for staging/self-hosted environments.
 - For managed cloud production, keep the same images/env values and use managed Redis/Postgres/S3.
+
+## Release Images + Deploy
+Image publishing and deployment workflows:
+- `.github/workflows/publish-images.yml`
+  - builds and pushes `web`, `api`, and `worker` images to GHCR on `master`
+  - tags include `${GITHUB_SHA}` and `latest`
+- `.github/workflows/deploy-staging.yml`
+  - manual staging rollout using `infra/docker-compose.release.yml`
+  - requires staging SSH + GHCR pull secrets
+  - waits for `/ready` and runs `npm run smoke:staging`
+
+Required staging secrets for `deploy-staging.yml`:
+- `STAGING_SSH_HOST`
+- `STAGING_SSH_USER`
+- `STAGING_SSH_KEY`
+- `STAGING_APP_DIR`
+- `GHCR_DEPLOY_USER`
+- `GHCR_DEPLOY_TOKEN`
+- `STAGING_API_BASE_URL`
+- `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
 
 ## Test Commands
 From the project root:
@@ -147,6 +173,7 @@ RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run t
 This includes:
 - `health.integration.test.ts` (health smoke)
 - `workflow.integration.test.ts` (upload-init -> upload PUT -> jobs -> worker completion -> status -> cleanup)
+- `auth-billing-dedup.integration.test.ts` (session + billing webhook plan sync + dedup canonicalization)
 4. Tear down stack:
 ```bash
 npm run infra:down:integration
@@ -155,6 +182,7 @@ npm run infra:down:integration
 CI note:
 - Pull requests run an `integration` job in `.github/workflows/ci.yml` that brings up Redis + MinIO, starts API + worker, and executes `test:integration:api`.
 - Pushes to `master` also run the same integration gate before release promotion.
+- Production promotion can be gated through manual `Release Preflight` workflow (`.github/workflows/release-preflight.yml`) which executes the same smoke contract against a target API URL.
 
 ## Staging Smoke Check
 After deploying API + worker to staging, run:
@@ -180,6 +208,7 @@ The smoke script validates:
 - Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
 - Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
+- SEO page surfaces include `/tools/:tool`, `/use-cases/:slug`, `/for/:audience/:intent`, `/guides/:topic`, and `/compare/:slug`.
 
 ## Parallel Development (Git Worktrees)
 - Team worktree workflow: `docs/git-worktree-plan.md`

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from "./lib/seo-data";
+import { AUDIENCE_INTENT_PAGES, COMPARE_PAGES, getBaseUrl, GUIDE_PAGES, TOOL_PAGES, USE_CASE_PAGES } from "./lib/seo-data";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl = getBaseUrl();
@@ -28,5 +28,26 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7
   }));
 
-  return [...fixed, ...tools, ...useCases];
+  const audienceIntents = AUDIENCE_INTENT_PAGES.map((item) => ({
+    url: `${baseUrl}/for/${item.audience}/${item.intent}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.7
+  }));
+
+  const guides = GUIDE_PAGES.map((item) => ({
+    url: `${baseUrl}/guides/${item.topic}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.65
+  }));
+
+  const comparisons = COMPARE_PAGES.map((item) => ({
+    url: `${baseUrl}/compare/${item.slug}`,
+    lastModified: now,
+    changeFrequency: "weekly" as const,
+    priority: 0.65
+  }));
+
+  return [...fixed, ...tools, ...useCases, ...audienceIntents, ...guides, ...comparisons];
 }
