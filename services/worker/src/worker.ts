@@ -5,7 +5,7 @@ import { loadWorkerConfig } from "./config";
 import { startWorkerHeartbeat } from "./heartbeat";
 import { HttpBackgroundRemoveProvider } from "./providers/bg-remove-provider";
 import { processImageJob } from "./processor";
-import { RedisWorkerJobRepository } from "./services/job-repo";
+import { PostgresWorkerJobRepository, RedisWorkerJobRepository, type WorkerJobRepository } from "./services/job-repo";
 import { S3WorkerStorageService } from "./services/storage";
 
 const config = loadWorkerConfig();
@@ -13,7 +13,9 @@ const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS || 10000);
 
 const storage = new S3WorkerStorageService(config);
-const jobRepo = new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
+const jobRepo: WorkerJobRepository = config.jobRepoDriver === "postgres"
+  ? new PostgresWorkerJobRepository({ connectionString: config.postgresUrl! })
+  : new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
 const bgRemoveProvider = new HttpBackgroundRemoveProvider({
   endpointUrl: config.bgRemoveApiUrl,
   apiKey: config.bgRemoveApiKey,
@@ -110,6 +112,7 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
   try {
     stopHeartbeat();
     await withShutdownTimeout(worker.close(), "worker.close");
+    await withShutdownTimeout(jobRepo.close(), "jobRepo.close");
     await withShutdownTimeout(connection.quit(), "connection.quit");
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ event: "worker.shutdown.complete", reason }));

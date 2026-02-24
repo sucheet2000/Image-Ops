@@ -3,6 +3,8 @@ import { z } from "zod";
 const envSchema = z.object({
   REDIS_URL: z.string().default("redis://localhost:6379"),
   JOB_QUEUE_NAME: z.string().default("image-ops-jobs"),
+  JOB_REPO_DRIVER: z.enum(["redis", "postgres"]).default("redis"),
+  POSTGRES_URL: z.string().optional(),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1),
@@ -21,11 +23,21 @@ const envSchema = z.object({
   BG_REMOVE_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(250),
   BG_REMOVE_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(1000),
   WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(30000)
+}).superRefine((value, ctx) => {
+  if (value.JOB_REPO_DRIVER === "postgres" && !value.POSTGRES_URL) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["POSTGRES_URL"],
+      message: "POSTGRES_URL is required when JOB_REPO_DRIVER=postgres"
+    });
+  }
 });
 
 export type WorkerConfig = {
   redisUrl: string;
   queueName: string;
+  jobRepoDriver: "redis" | "postgres";
+  postgresUrl?: string;
   concurrency: number;
   s3Region: string;
   s3Bucket: string;
@@ -55,6 +67,8 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
   return {
     redisUrl: parsed.REDIS_URL,
     queueName: parsed.JOB_QUEUE_NAME,
+    jobRepoDriver: parsed.JOB_REPO_DRIVER,
+    postgresUrl: parsed.POSTGRES_URL,
     concurrency: parsed.WORKER_CONCURRENCY,
     s3Region: parsed.S3_REGION,
     s3Bucket: parsed.S3_BUCKET,

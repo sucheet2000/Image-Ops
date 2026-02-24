@@ -7,12 +7,17 @@ if [[ -z "${STAGING_API_BASE_URL:-}" ]]; then
 fi
 
 BASE_URL="${STAGING_API_BASE_URL%/}"
-AUTH_HEADER=()
-if [[ -n "${API_BEARER_TOKEN:-}" ]]; then
-  AUTH_HEADER=(-H "authorization: Bearer ${API_BEARER_TOKEN}")
-fi
 CURL_LONG=(--connect-timeout 5 --max-time 30)
 CURL_POLL=(--connect-timeout 5 --max-time 10)
+
+curl_with_optional_auth() {
+  if [[ -n "${API_BEARER_TOKEN:-}" ]]; then
+    curl "$@" -H "authorization: Bearer ${API_BEARER_TOKEN}"
+    return
+  fi
+
+  curl "$@"
+}
 
 echo "==> health check"
 curl -fsS "${CURL_LONG[@]}" "${BASE_URL}/health" >/dev/null
@@ -47,15 +52,13 @@ if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "204" ]]; then
 fi
 
 echo "==> complete upload"
-curl -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/complete" \
+curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/complete" \
   -H "content-type: application/json" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"objectKey\":\"${OBJECT_KEY}\"}" >/dev/null
 
 echo "==> create job (requires auth when API_AUTH_REQUIRED=true)"
-CREATE_JOB_STATUS="$(curl -sS "${CURL_LONG[@]}" -o "${TMP_JOB}" -w "%{http_code}" -X POST "${BASE_URL}/api/jobs" \
+CREATE_JOB_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_JOB}" -w "%{http_code}" -X POST "${BASE_URL}/api/jobs" \
   -H "content-type: application/json" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"plan\":\"free\",\"tool\":\"resize\",\"inputObjectKey\":\"${OBJECT_KEY}\",\"options\":{\"width\":1,\"height\":1}}")"
 
 if [[ "${CREATE_JOB_STATUS}" == "401" ]]; then
@@ -81,7 +84,7 @@ DEADLINE=$(( $(date +%s) + 45 ))
 OUTPUT_KEY=""
 DOWNLOAD_URL=""
 while [[ "$(date +%s)" -lt "${DEADLINE}" ]]; do
-  STATUS_JSON="$(curl -fsS "${CURL_POLL[@]}" -X GET "${BASE_URL}/api/jobs/${JOB_ID}" "${AUTH_HEADER[@]}")"
+  STATUS_JSON="$(curl_with_optional_auth -fsS "${CURL_POLL[@]}" -X GET "${BASE_URL}/api/jobs/${JOB_ID}")"
   STATUS_VALUE="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.status||"")' "${STATUS_JSON}")"
   if [[ "${STATUS_VALUE}" == "done" ]]; then
     OUTPUT_KEY="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.outputObjectKey||"")' "${STATUS_JSON}")"
@@ -105,10 +108,9 @@ echo "==> verify download"
 curl -fsS "${CURL_LONG[@]}" "${DOWNLOAD_URL}" >/dev/null
 
 echo "==> cleanup"
-CLEANUP_STATUS="$(curl -sS "${CURL_LONG[@]}" -o "${TMP_CLEANUP}" -w "%{http_code}" -X POST "${BASE_URL}/api/cleanup" \
+CLEANUP_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_CLEANUP}" -w "%{http_code}" -X POST "${BASE_URL}/api/cleanup" \
   -H "content-type: application/json" \
   -H "idempotency-key: staging-smoke-${SUBJECT_ID}" \
-  "${AUTH_HEADER[@]}" \
   -d "{\"objectKeys\":[\"${OBJECT_KEY}\",\"${OUTPUT_KEY}\"],\"reason\":\"manual\"}")"
 if [[ "${CLEANUP_STATUS}" != "202" ]]; then
   echo "unexpected cleanup status: ${CLEANUP_STATUS}"
