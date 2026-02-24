@@ -5,7 +5,7 @@ This project exports Prometheus-style metrics from the API at `/metrics`.
 ## Key Metrics
 
 - `image_ops_http_requests_total{method,path,status_code}`
-- `image_ops_http_request_duration_seconds_total{method,path,status_code}`
+- `image_ops_http_request_duration_seconds_total{method,path,status_code}` (counter of cumulative request duration)
 - `image_ops_http_in_flight_requests`
 - `image_ops_queue_jobs{state="waiting|active|completed|failed|delayed"}`
 
@@ -45,3 +45,4 @@ Recommended initial Grafana panels:
 
 - Route labels use resolved route templates where available; unmatched paths are grouped under `path="unmatched"` to avoid high-cardinality metric explosions.
 - For multi-instance deployments, aggregate queue metrics at the service level and pair alerts with deployment metadata (`instance`, `pod`, or `node`).
+- Request latency is exported as a duration-total counter, so percentile queries (P95/P99) are not currently supported without switching to histogram metrics.

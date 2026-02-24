@@ -64,7 +64,7 @@ export function registerJobsRoutes(
     const now = deps.now();
     const subjectId = toSafeSubjectId(payload.subjectId);
     const profile = await deps.jobRepo.getSubjectProfile(subjectId);
-    const plan = (payload.plan || profile?.plan || "free") as ImagePlan;
+    const plan = (profile?.plan || "free") as ImagePlan;
     const tool = payload.tool as ImageTool;
 
     const completion = await deps.jobRepo.getUploadCompletion(payload.inputObjectKey);

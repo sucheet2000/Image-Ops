@@ -5,14 +5,28 @@ type RateLimitRecord = {
   resetAtMs: number;
 };
 
+export type RateLimitMiddleware = ((req: Request, res: Response, next: NextFunction) => void) & {
+  close: () => void;
+};
+
 export function createRateLimitMiddleware(input: {
   limit: number;
   windowMs: number;
   keyPrefix: string;
-}) {
+}): RateLimitMiddleware {
   const records = new Map<string, RateLimitRecord>();
+  const sweepIntervalMs = Math.max(1000, Math.floor(input.windowMs / 2));
+  const sweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of records.entries()) {
+      if (record.resetAtMs <= now) {
+        records.delete(key);
+      }
+    }
+  }, sweepIntervalMs);
+  sweepTimer.unref?.();
 
-  return (req: Request, res: Response, next: NextFunction): void => {
+  const middleware = ((req: Request, res: Response, next: NextFunction): void => {
     const now = Date.now();
     const ip = req.ip || "unknown";
     const subjectId = req.body && typeof req.body.subjectId === "string" ? req.body.subjectId : "anonymous";
@@ -45,5 +59,11 @@ export function createRateLimitMiddleware(input: {
     res.setHeader("x-ratelimit-remaining", String(Math.max(0, input.limit - existing.count)));
     res.setHeader("x-ratelimit-reset", String(Math.ceil(existing.resetAtMs / 1000)));
     next();
+  }) as RateLimitMiddleware;
+
+  middleware.close = () => {
+    clearInterval(sweepTimer);
   };
+
+  return middleware;
 }

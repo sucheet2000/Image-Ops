@@ -37,12 +37,11 @@ export interface ObjectStorageService {
 
 export class S3ObjectStorageService implements ObjectStorageService {
   private readonly client: S3Client;
+  private readonly presignClient: S3Client;
   private readonly bucket: string;
-  private readonly publicEndpoint?: string;
 
   constructor(config: ApiConfig) {
     this.bucket = config.s3Bucket;
-    this.publicEndpoint = config.s3PublicEndpoint;
     this.client = new S3Client({
       region: config.s3Region,
       endpoint: config.s3Endpoint,
@@ -52,24 +51,17 @@ export class S3ObjectStorageService implements ObjectStorageService {
         secretAccessKey: config.s3SecretKey
       }
     });
-  }
-
-  private rewriteSignedUrlOrigin(signedUrl: string): string {
-    if (!this.publicEndpoint) {
-      return signedUrl;
-    }
-
-    try {
-      const original = new URL(signedUrl);
-      const publicEndpoint = new URL(this.publicEndpoint);
-      original.protocol = publicEndpoint.protocol;
-      original.username = publicEndpoint.username;
-      original.password = publicEndpoint.password;
-      original.host = publicEndpoint.host;
-      return original.toString();
-    } catch {
-      return signedUrl;
-    }
+    this.presignClient = config.s3PublicEndpoint
+      ? new S3Client({
+          region: config.s3Region,
+          endpoint: config.s3PublicEndpoint,
+          forcePathStyle: config.s3ForcePathStyle,
+          credentials: {
+            accessKeyId: config.s3AccessKey,
+            secretAccessKey: config.s3SecretKey
+          }
+        })
+      : this.client;
   }
 
   async createPresignedUploadUrl(input: {
@@ -87,8 +79,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       ContentType: input.contentType
     });
 
-    const signed = await getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
-    return this.rewriteSignedUrlOrigin(signed);
+    return getSignedUrl(this.presignClient, command, { expiresIn: input.expiresInSeconds });
   }
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
@@ -97,8 +88,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       Key: input.objectKey
     });
 
-    const signed = await getSignedUrl(this.client, command, { expiresIn: input.expiresInSeconds });
-    return this.rewriteSignedUrlOrigin(signed);
+    return getSignedUrl(this.presignClient, command, { expiresIn: input.expiresInSeconds });
   }
 
   async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
@@ -170,6 +160,9 @@ export class S3ObjectStorageService implements ObjectStorageService {
   }
 
   async close(): Promise<void> {
+    if (this.presignClient !== this.client) {
+      this.presignClient.destroy();
+    }
     this.client.destroy();
   }
 }

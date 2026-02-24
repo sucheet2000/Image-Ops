@@ -45,8 +45,8 @@ export async function startApiTestServer(input: StartServerInput): Promise<{
 
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () =>
-      new Promise<void>((resolve, reject) => {
+    close: async () => {
+      await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
             reject(error);
@@ -54,6 +54,18 @@ export async function startApiTestServer(input: StartServerInput): Promise<{
           }
           resolve();
         });
-      })
+      });
+
+      const cleanupCallbacks = app.locals.__runtimeCleanup as Array<() => void> | undefined;
+      if (cleanupCallbacks) {
+        for (const cleanup of cleanupCallbacks) {
+          cleanup();
+        }
+      }
+
+      if ("malwareScan" in input && input.malwareScan) {
+        await input.malwareScan.close();
+      }
+    }
   };
 }

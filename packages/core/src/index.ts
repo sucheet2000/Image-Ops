@@ -214,6 +214,10 @@ export function applyQuota(
   limit = FREE_PLAN_LIMIT,
   windowHours = FREE_PLAN_WINDOW_HOURS
 ): QuotaResult {
+  if (!Number.isInteger(requestedImages) || requestedImages < 0) {
+    throw new Error("requestedImages must be non-negative");
+  }
+
   const start = new Date(existing.windowStartAt);
   const current = { ...existing };
 

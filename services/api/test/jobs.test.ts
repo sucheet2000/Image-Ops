@@ -236,4 +236,32 @@ describe("POST /api/jobs", () => {
     expect(payload.limit).toBe(2);
     expect(payload.windowHours).toBe(24);
   });
+
+  it("ignores client-supplied plan when server profile is free", async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const inputObjectKey = "tmp/seller_spoof/input/2026/02/23/background-remove/input.png";
+    services.storage.setObject(inputObjectKey, "image/png", fakeImageBytes("seller-spoof-image"));
+    await completeUpload(server.baseUrl, "seller_spoof", inputObjectKey);
+
+    const response = await fetch(`${server.baseUrl}/api/jobs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        subjectId: "seller_spoof",
+        plan: "team",
+        tool: "background-remove",
+        inputObjectKey,
+        options: { outputFormat: "png" }
+      })
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    expect(payload.quota.plan).toBe("free");
+    expect(payload.watermarkRequired).toBe(true);
+    expect(services.queue.items[0]?.plan).toBe("free");
+  });
 });

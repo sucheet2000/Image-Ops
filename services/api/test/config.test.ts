@@ -18,9 +18,11 @@ describe("loadApiConfig production safeguards", () => {
         ...baseEnv(),
         NODE_ENV: "production",
         JOB_REPO_DRIVER: "postgres",
-        POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops"
+        POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops",
+        BILLING_PROVIDER_SECRET: "prod-provider-secret-1",
+        BILLING_WEBHOOK_SECRET: "prod-webhook-secret-1"
       })
-    ).toThrow();
+    ).toThrow(/AUTH_TOKEN_SECRET must not use the development default in production/i);
   });
 
   it("accepts explicit production-safe values", () => {

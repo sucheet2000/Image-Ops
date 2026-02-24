@@ -16,6 +16,19 @@ describe("loadWorkerConfig production safeguards", () => {
     expect(() => loadWorkerConfig({ ...baseEnv(), NODE_ENV: "production", JOB_REPO_DRIVER: "redis" })).toThrow();
   });
 
+  it("rejects minioadmin credentials in production", () => {
+    expect(() =>
+      loadWorkerConfig({
+        ...baseEnv(),
+        NODE_ENV: "production",
+        JOB_REPO_DRIVER: "postgres",
+        POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops",
+        S3_ACCESS_KEY: "minioadmin",
+        S3_SECRET_KEY: "minioadmin"
+      })
+    ).toThrow();
+  });
+
   it("accepts postgres metadata driver in production", () => {
     const config = loadWorkerConfig({
       ...baseEnv(),
@@ -26,5 +39,18 @@ describe("loadWorkerConfig production safeguards", () => {
 
     expect(config.jobRepoDriver).toBe("postgres");
     expect(config.postgresUrl).toContain("postgres://");
+  });
+
+  it("accepts non-default S3 credentials in production", () => {
+    const config = loadWorkerConfig({
+      ...baseEnv(),
+      NODE_ENV: "production",
+      JOB_REPO_DRIVER: "postgres",
+      POSTGRES_URL: "postgres://user:pass@localhost:5432/image_ops",
+      S3_ACCESS_KEY: "prod-access-key",
+      S3_SECRET_KEY: "prod-secret-key"
+    });
+
+    expect(config.s3AccessKey).toBe("prod-access-key");
   });
 });

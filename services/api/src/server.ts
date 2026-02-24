@@ -71,6 +71,21 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
   return { value: error };
 }
 
+function runAppCleanup(app: Express): void {
+  const cleanupCallbacks = app.locals.__runtimeCleanup as Array<() => void> | undefined;
+  if (!cleanupCallbacks) {
+    return;
+  }
+
+  for (const cleanup of cleanupCallbacks) {
+    try {
+      cleanup();
+    } catch (error) {
+      logError("api.cleanup.failed", { error: formatErrorForLog(error) });
+    }
+  }
+}
+
 function createBillingService(config: ApiConfig): BillingService {
   if (config.billingProvider === "stripe") {
     return new StripeBillingService({
@@ -134,6 +149,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   }
 
   const app = express();
+  app.locals.__runtimeCleanup = [];
   const requestMetrics = new Map<string, { count: number; durationSecondsTotal: number }>();
   const metricsStartMs = Date.now();
   let inflightRequests = 0;
@@ -189,6 +205,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     windowMs: deps.config.apiWriteRateLimitWindowMs,
     keyPrefix: "api-write"
   });
+  (app.locals.__runtimeCleanup as Array<() => void>).push(() => writeRateLimit.close());
   app.use("/api/uploads/init", writeRateLimit);
   app.use("/api/uploads/complete", writeRateLimit);
   app.use("/api/jobs", writeRateLimit);
@@ -334,7 +351,8 @@ if (require.main === module) {
       runtime.deps.queue.close(),
       runtime.deps.jobRepo.close(),
       runtime.deps.storage.close(),
-      runtime.deps.malwareScan.close()
+      runtime.deps.malwareScan.close(),
+      Promise.resolve().then(() => runAppCleanup(runtime.app))
     ]);
     for (const result of dependencyResults) {
       if (result.status === "rejected") {

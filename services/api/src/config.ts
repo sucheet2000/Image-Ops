@@ -6,6 +6,14 @@ export type JobRepoDriver = (typeof JOB_REPO_DRIVERS)[number];
 export const BILLING_PROVIDERS = ["hmac", "stripe"] as const;
 export type BillingProvider = (typeof BILLING_PROVIDERS)[number];
 
+function emptyStringToUndefined(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? undefined : trimmed;
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_PORT: z.coerce.number().int().positive().default(4000),
@@ -50,7 +58,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default("redis://localhost:6379"),
   BILLING_PROVIDER: z.enum(BILLING_PROVIDERS).default("hmac"),
   BILLING_PUBLIC_BASE_URL: z.string().url().default("http://localhost:3000"),
-  BILLING_PORTAL_BASE_URL: z.string().url().optional(),
+  BILLING_PORTAL_BASE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   BILLING_PROVIDER_SECRET: z.string().min(1, "BILLING_PROVIDER_SECRET is required").default("dev-provider-secret"),
   BILLING_WEBHOOK_SECRET: z.string().min(1, "BILLING_WEBHOOK_SECRET is required").default("dev-webhook-secret"),
   STRIPE_SECRET_KEY: z.string().optional(),
@@ -67,7 +75,7 @@ const envSchema = z.object({
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1, "S3_BUCKET is required"),
   S3_ENDPOINT: z.string().optional(),
-  S3_PUBLIC_ENDPOINT: z.string().optional(),
+  S3_PUBLIC_ENDPOINT: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   S3_ACCESS_KEY: z.string().min(1, "S3_ACCESS_KEY is required"),
   S3_SECRET_KEY: z.string().min(1, "S3_SECRET_KEY is required"),
   S3_FORCE_PATH_STYLE: z
@@ -141,10 +149,18 @@ const envSchema = z.object({
       });
     }
 
-    if (value.S3_ACCESS_KEY === "minioadmin" || value.S3_SECRET_KEY === "minioadmin") {
+    if (value.S3_ACCESS_KEY === "minioadmin") {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["S3_ACCESS_KEY"],
+        message: "S3_ACCESS_KEY/S3_SECRET_KEY must not use minioadmin defaults in production"
+      });
+    }
+
+    if (value.S3_SECRET_KEY === "minioadmin") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["S3_SECRET_KEY"],
         message: "S3_ACCESS_KEY/S3_SECRET_KEY must not use minioadmin defaults in production"
       });
     }
