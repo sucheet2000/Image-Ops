@@ -41,8 +41,16 @@ function parseClaimsFromToken(token: string): { sub?: string; plan?: ViewerPlan 
   }
 }
 
+function safeStorageGet(storage: Storage, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 function readApiToken(): string | null {
-  return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY);
+  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
 }
 
 export function getViewerSession(): ViewerSession {
@@ -50,7 +58,7 @@ export function getViewerSession(): ViewerSession {
     return { subjectId: null, plan: "free", isAuthenticated: false };
   }
 
-  const explicitPlan = localStorage.getItem(PLAN_KEY);
+  const explicitPlan = safeStorageGet(localStorage, PLAN_KEY);
   const token = readApiToken();
   if (!token) {
     const plan = explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team" ? explicitPlan : "free";
