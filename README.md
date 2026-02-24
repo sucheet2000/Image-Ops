@@ -69,6 +69,31 @@ docker run --rm -p 9000:9000 -p 9001:9001 \
   quay.io/minio/minio server /data --console-address \":9001\"
 ```
 
+## Containerized Staging Stack
+For a self-hosted staging-like stack (web + api + worker + redis + postgres + minio):
+```bash
+npm run infra:up:deploy
+```
+
+This uses `infra/docker-compose.deploy.yml` and builds:
+- `apps/web/Dockerfile`
+- `services/api/Dockerfile`
+- `services/worker/Dockerfile`
+
+After stack startup:
+```bash
+STAGING_API_BASE_URL=http://127.0.0.1:4000 npm run smoke:staging
+```
+
+Stop the stack:
+```bash
+npm run infra:down:deploy
+```
+
+Notes:
+- `infra/docker-compose.deploy.yml` is intended for staging/self-hosted environments.
+- For managed cloud production, keep the same images/env values and use managed Redis/Postgres/S3.
+
 ## Test Commands
 From the project root:
 ```bash

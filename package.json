@@ -14,6 +14,8 @@
     "lint": "npm run lint -ws --if-present",
     "infra:up:integration": "docker compose -f infra/docker-compose.integration.yml up -d",
     "infra:down:integration": "docker compose -f infra/docker-compose.integration.yml down -v",
+    "infra:up:deploy": "docker compose -f infra/docker-compose.deploy.yml up -d --build",
+    "infra:down:deploy": "docker compose -f infra/docker-compose.deploy.yml down",
     "test:integration:api": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration",
     "test:integration:api:workflow": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration/workflow.integration.test.ts",
     "smoke:staging": "bash scripts/staging-smoke.sh"
