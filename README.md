@@ -100,6 +100,26 @@ Notes:
 - `infra/docker-compose.deploy.yml` is intended for staging/self-hosted environments.
 - For managed cloud production, keep the same images/env values and use managed Redis/Postgres/S3.
 
+## Release Images + Deploy
+Image publishing and deployment workflows:
+- `.github/workflows/publish-images.yml`
+  - builds and pushes `web`, `api`, and `worker` images to GHCR on `master`
+  - tags include `${GITHUB_SHA}` and `latest`
+- `.github/workflows/deploy-staging.yml`
+  - manual staging rollout using `infra/docker-compose.release.yml`
+  - requires staging SSH + GHCR pull secrets
+  - waits for `/ready` and runs `npm run smoke:staging`
+
+Required staging secrets for `deploy-staging.yml`:
+- `STAGING_SSH_HOST`
+- `STAGING_SSH_USER`
+- `STAGING_SSH_KEY`
+- `STAGING_APP_DIR`
+- `GHCR_DEPLOY_USER`
+- `GHCR_DEPLOY_TOKEN`
+- `STAGING_API_BASE_URL`
+- `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
+
 ## Test Commands
 From the project root:
 ```bash
