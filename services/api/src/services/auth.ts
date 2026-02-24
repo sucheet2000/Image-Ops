@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { ImagePlan } from "@image-ops/core";
+import { isPlan, type ImagePlan } from "@image-ops/core";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import { ulid } from "ulid";
@@ -42,7 +42,7 @@ function hashSecret(input: string): string {
 }
 
 function isImagePlan(value: unknown): value is ImagePlan {
-  return value === "free" || value === "pro" || value === "team";
+  return typeof value === "string" && isPlan(value);
 }
 
 export function issueRefreshToken(now: Date): RefreshTokenIssueResult {
