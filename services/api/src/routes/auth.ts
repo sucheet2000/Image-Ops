@@ -1,4 +1,4 @@
-import { isPlan, toSafeSubjectId, type AuthRefreshSession, type ImagePlan, type SubjectProfile } from "@image-ops/core";
+import { isPlan, toSafeSubjectId, type AuthRefreshSession, type ImagePlan, type SubjectProfile } from "@imageops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Request, Response, Router } from "express";

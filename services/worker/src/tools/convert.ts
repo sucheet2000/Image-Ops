@@ -1,4 +1,4 @@
-import { formatToMime, type ConvertOptions } from "@image-ops/core";
+import { formatToMime, type ConvertOptions } from "@imageops/core";
 import sharp from "sharp";
 
 /**

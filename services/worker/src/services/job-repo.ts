@@ -1,4 +1,4 @@
-import type { DeletionAuditRecord, ImageJobRecord, JobStatus } from "@image-ops/core";
+import type { DeletionAuditRecord, ImageJobRecord, JobStatus } from "@imageops/core";
 import IORedis from "ioredis";
 import { Pool } from "pg";
 

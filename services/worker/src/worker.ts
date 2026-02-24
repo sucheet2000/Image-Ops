@@ -1,4 +1,4 @@
-import type { ImageJobQueuePayload } from "@image-ops/core";
+import type { ImageJobQueuePayload } from "@imageops/core";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadWorkerConfig } from "./config";

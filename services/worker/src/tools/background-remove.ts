@@ -1,4 +1,4 @@
-import { formatToMime, type BackgroundRemoveOptions } from "@image-ops/core";
+import { formatToMime, type BackgroundRemoveOptions } from "@imageops/core";
 import sharp from "sharp";
 import type { BackgroundRemoveProvider } from "../providers/bg-remove-provider";
 

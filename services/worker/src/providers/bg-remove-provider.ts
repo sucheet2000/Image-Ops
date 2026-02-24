@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AppError } from "@imageops/core";
 
 export type BackgroundRemoveResult = {
   bytes: Buffer;
@@ -54,7 +55,11 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
           if (response.status >= 400 && response.status < 500 && response.status !== 429) {
             throw new NonRetryableProviderError(`Background remove provider rejected request with status ${response.status}`);
           }
-          throw new Error(`Background remove provider returned status ${response.status}`);
+          throw new AppError(
+            "BACKGROUND_REMOVE_PROVIDER_ERROR",
+            502,
+            `Background remove provider returned status ${response.status}`
+          );
         }
 
         const contentType = response.headers.get("content-type") || "image/png";
@@ -87,6 +92,6 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
       }
     }
 
-    throw new Error(`Background remove failed after retries: ${String(lastError)}`);
+    throw new AppError("BACKGROUND_REMOVE_FAILED", 502, `Background remove failed after retries: ${String(lastError)}`);
   }
 }

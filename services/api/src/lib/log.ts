@@ -1,4 +1,4 @@
-import { toStructuredLog } from "@image-ops/core";
+import { toStructuredLog } from "@imageops/core";
 import {
   appendBufferedLogEntry,
   readBufferedLogs,

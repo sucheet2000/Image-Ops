@@ -1,4 +1,4 @@
-import { cleanupRequestSignature, isCleanupReplayAllowed, normalizeObjectKeys, type CleanupIdempotencyRecord } from "@image-ops/core";
+import { cleanupRequestSignature, isCleanupReplayAllowed, normalizeObjectKeys, type CleanupIdempotencyRecord } from "@imageops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Router } from "express";

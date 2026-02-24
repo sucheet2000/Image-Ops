@@ -200,7 +200,7 @@ export class InMemoryAuthService implements AuthService {
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
     if (!idToken) {
-      throw new Error("Invalid Google ID token.");
+      throw new AuthError("Invalid Google ID token.");
     }
 
     return {

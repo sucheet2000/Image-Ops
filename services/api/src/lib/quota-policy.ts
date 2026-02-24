@@ -1,4 +1,4 @@
-import type { ImagePlan } from "@image-ops/core";
+import type { ImagePlan } from "@imageops/core";
 import type { ApiConfig } from "../config";
 
 export type QuotaPolicy = {
