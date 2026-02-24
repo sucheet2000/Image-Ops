@@ -1,4 +1,4 @@
-import { mimeToFormat, type ResizeOptions } from "@image-ops/core";
+import { mimeToFormat, type ResizeOptions } from "@imageops/core";
 import sharp from "sharp";
 
 /**

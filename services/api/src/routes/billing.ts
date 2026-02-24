@@ -1,4 +1,4 @@
-import { isPaidPlan, toSafeSubjectId, type BillingCheckoutSession, type BillingWebhookEvent, type SubjectProfile } from "@image-ops/core";
+import { isPaidPlan, toSafeSubjectId, type BillingCheckoutSession, type BillingWebhookEvent, type SubjectProfile } from "@imageops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Router } from "express";

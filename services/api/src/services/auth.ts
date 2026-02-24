@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { ImagePlan } from "@image-ops/core";
+import { AuthError, type ImagePlan } from "@imageops/core";
 import { ulid } from "ulid";
 
 export type ApiTokenClaims = {
@@ -86,17 +86,17 @@ export class GoogleTokenAuthService implements AuthService {
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
     const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
     if (!response.ok) {
-      throw new Error("Invalid Google ID token.");
+      throw new AuthError("Invalid Google ID token.");
     }
 
     const payload = (await response.json()) as Record<string, unknown>;
     if (String(payload.aud || "") !== this.googleClientId) {
-      throw new Error("Google token audience mismatch.");
+      throw new AuthError("Google token audience mismatch.");
     }
 
     const sub = String(payload.sub || "").trim();
     if (!sub) {
-      throw new Error("Google token missing subject.");
+      throw new AuthError("Google token missing subject.");
     }
 
     return {
@@ -163,7 +163,7 @@ export class InMemoryAuthService implements AuthService {
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
     if (!idToken) {
-      throw new Error("Invalid Google ID token.");
+      throw new AuthError("Invalid Google ID token.");
     }
 
     return {

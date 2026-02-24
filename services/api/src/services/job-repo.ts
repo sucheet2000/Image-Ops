@@ -1,5 +1,7 @@
 import {
   applyQuota,
+  ConflictError,
+  ValidationError,
   type AuthRefreshSession,
   type DedupObjectRecord,
   BillingCheckoutSession,
@@ -13,7 +15,7 @@ import {
   SubjectProfile,
   type UploadCompletionRecord,
   type QuotaResult
-} from "@image-ops/core";
+} from "@imageops/core";
 import type { ApiConfig } from "../config";
 import IORedis from "ioredis";
 import { Pool } from "pg";
@@ -148,7 +150,7 @@ export class RedisJobRepository implements JobRepository {
 
   constructor(input: { redisUrl?: string; clock?: () => Date; redisClient?: IORedis }) {
     if (!input.redisClient && !input.redisUrl) {
-      throw new Error("redisUrl is required when redisClient is not provided");
+      throw new ValidationError("redisUrl is required when redisClient is not provided");
     }
 
     this.redis = input.redisClient || new IORedis(input.redisUrl!, { maxRetriesPerRequest: null });
@@ -213,7 +215,7 @@ export class RedisJobRepository implements JobRepository {
       }
     }
 
-    throw new Error("Failed to reserve quota and create job due to concurrent updates.");
+    throw new ConflictError("Failed to reserve quota and create job due to concurrent updates.");
   }
 
   async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
@@ -254,7 +256,7 @@ export class RedisJobRepository implements JobRepository {
       }
     }
 
-    throw new Error("Failed to finalize upload completion due to concurrent updates.");
+    throw new ConflictError("Failed to finalize upload completion due to concurrent updates.");
   }
 
   async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
@@ -1155,7 +1157,7 @@ export class InMemoryJobRepository implements JobRepository {
 export function createJobRepository(config: ApiConfig): JobRepository {
   if (config.jobRepoDriver === "postgres") {
     if (!config.postgresUrl) {
-      throw new Error("POSTGRES_URL is required when JOB_REPO_DRIVER=postgres");
+      throw new ValidationError("POSTGRES_URL is required when JOB_REPO_DRIVER=postgres");
     }
     return new PostgresJobRepository({ connectionString: config.postgresUrl });
   }

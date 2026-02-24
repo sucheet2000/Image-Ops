@@ -7,7 +7,7 @@ import {
   type DedupObjectRecord,
   type ImageTool,
   type UploadCompletionRecord
-} from "@image-ops/core";
+} from "@imageops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 import type { Router } from "express";

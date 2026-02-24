@@ -1,9 +1,10 @@
 import {
+  ValidationError,
   classifyProcessingError,
   toStructuredLog,
   type DeletionAuditRecord,
   type ImageJobQueuePayload
-} from "@image-ops/core";
+} from "@imageops/core";
 import { ulid } from "ulid";
 import type { BackgroundRemoveProvider } from "./providers/bg-remove-provider";
 import type { WorkerJobRepository } from "./services/job-repo";
@@ -64,7 +65,7 @@ async function transform(payload: ImageJobQueuePayload, inputBytes: Buffer): Pro
     });
   }
 
-  throw new Error("background-remove transform needs provider context");
+  throw new ValidationError("background-remove transform needs provider context");
 }
 
 /**

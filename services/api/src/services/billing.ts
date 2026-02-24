@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { BillingError } from "@imageops/core";
 import { ulid } from "ulid";
 import { z } from "zod";
 
@@ -155,14 +156,14 @@ export class StripeBillingService implements BillingService {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(`Stripe checkout session failed: ${response.status} ${body}`);
+      throw new BillingError(`Stripe checkout session failed: ${response.status} ${body}`);
     }
 
     const payload = (await response.json()) as Record<string, unknown>;
     const sessionId = String(payload.id || "").trim();
     const checkoutUrl = String(payload.url || "").trim();
     if (!sessionId || !checkoutUrl) {
-      throw new Error("Stripe checkout response missing id/url.");
+      throw new BillingError("Stripe checkout response missing id/url.");
     }
 
     const expiresAtUnix = Number(payload.expires_at || 0);

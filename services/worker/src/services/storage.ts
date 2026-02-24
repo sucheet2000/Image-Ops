@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { AppError, NotFoundError } from "@imageops/core";
 import type { WorkerConfig } from "../config";
 
 /**
@@ -60,7 +61,7 @@ export class S3WorkerStorageService implements WorkerStorageService {
     );
 
     if (!response.Body) {
-      throw new Error(`Object body missing for key: ${objectKey}`);
+      throw new AppError("STORAGE_ERROR", 500, `Object body missing for key: ${objectKey}`);
     }
 
     const bytes = await streamToBuffer(response.Body as ReadableStream<Uint8Array> | NodeJS.ReadableStream);
@@ -105,7 +106,7 @@ export class InMemoryWorkerStorageService implements WorkerStorageService {
   async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
     const object = this.objects.get(objectKey);
     if (!object) {
-      throw new Error(`Object not found: ${objectKey}`);
+      throw new NotFoundError(`Object ${objectKey}`);
     }
 
     return object;

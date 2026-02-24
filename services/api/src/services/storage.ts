@@ -6,6 +6,7 @@ import {
   S3Client
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { AppError, NotFoundError, ValidationError } from "@imageops/core";
 import type { ApiConfig } from "../config";
 
 export const TMP_PREFIX = "tmp/";
@@ -99,7 +100,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
     const body = response.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
     if (!body?.transformToByteArray) {
-      throw new Error("S3 getObject response body is missing bytes.");
+      throw new AppError("STORAGE_ERROR", 500, "S3 getObject response body is missing bytes.");
     }
 
     const bytes = Buffer.from(await body.transformToByteArray());
@@ -139,7 +140,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
     const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
     if (invalid.length > 0) {
-      throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
     }
 
     const response = await this.client.send(
@@ -186,7 +187,7 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
   async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
     const object = this.objects.get(objectKey);
     if (!object) {
-      throw new Error(`Object not found: ${objectKey}`);
+      throw new NotFoundError(`Object ${objectKey}`);
     }
 
     return {
@@ -211,7 +212,7 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
   async deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult> {
     const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
     if (invalid.length > 0) {
-      throw new Error(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
     }
 
     const deleted: string[] = [];

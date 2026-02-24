@@ -1,4 +1,4 @@
-import { applyQuota, quotaWindowResetAt, toSafeSubjectId, type ImagePlan, type QuotaWindow } from "@image-ops/core";
+import { applyQuota, quotaWindowResetAt, toSafeSubjectId, type ImagePlan, type QuotaWindow } from "@imageops/core";
 import { z } from "zod";
 import type { Router } from "express";
 import { asyncHandler } from "../lib/async-handler";

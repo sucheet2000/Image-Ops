@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
+import { AppError, ValidationError } from "@imageops/core";
 import { loadApiConfig, type ApiConfig } from "./config";
 import { requireApiAuth } from "./lib/auth-middleware";
 import { logError, logInfo } from "./lib/log";
@@ -124,8 +125,23 @@ export function errorHandler(error: unknown, _req: Request, res: Response, next:
     return;
   }
 
+  if (error instanceof AppError) {
+    res.status(error.status).json({
+      error: {
+        code: error.code,
+        message: error.message
+      }
+    });
+    return;
+  }
+
   logError("api.error", { error: formatErrorForLog(error) });
-  res.status(500).json({ error: "INTERNAL_SERVER_ERROR", message: INTERNAL_ERROR_MESSAGE });
+  res.status(500).json({
+    error: {
+      code: "INTERNAL",
+      message: INTERNAL_ERROR_MESSAGE
+    }
+  });
 }
 
 export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRuntime {
@@ -146,7 +162,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   };
 
   if (deps.config.webOrigin === "*" && process.env.NODE_ENV !== "development") {
-    throw new Error("WEB_ORIGIN cannot be '*' outside development.");
+    throw new ValidationError("WEB_ORIGIN cannot be '*' outside development.");
   }
 
   const app = express();
