@@ -1,0 +1,148 @@
+databases:
+  - name: image-ops-postgres
+    plan: standard
+    databaseName: image_ops
+    user: image_ops
+
+services:
+  - type: keyvalue
+    name: image-ops-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+
+  - type: web
+    name: image-ops-api
+    runtime: docker
+    plan: standard
+    dockerContext: .
+    dockerfilePath: ./services/api/Dockerfile
+    autoDeploy: true
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "10000"
+      - key: WEB_ORIGIN
+        sync: false
+      - key: API_AUTH_REQUIRED
+        value: "true"
+      - key: AUTH_TOKEN_SECRET
+        generateValue: true
+      - key: AUTH_TOKEN_TTL_SECONDS
+        value: "3600"
+      - key: AUTH_REFRESH_TTL_SECONDS
+        value: "1209600"
+      - key: AUTH_REFRESH_COOKIE_SECURE
+        value: "true"
+      - key: AUTH_REFRESH_COOKIE_SAMESITE
+        value: lax
+      - key: AUTH_REFRESH_COOKIE_PATH
+        value: /api/auth
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: JOB_QUEUE_NAME
+        value: image-ops-jobs
+      - key: JOB_REPO_DRIVER
+        value: postgres
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: image-ops-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: image-ops-redis
+          property: connectionString
+      - key: BILLING_PROVIDER
+        value: hmac
+      - key: BILLING_PUBLIC_BASE_URL
+        sync: false
+      - key: BILLING_PORTAL_BASE_URL
+        sync: false
+      - key: BILLING_PROVIDER_SECRET
+        generateValue: true
+      - key: BILLING_WEBHOOK_SECRET
+        generateValue: true
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_PUBLIC_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "false"
+
+  - type: worker
+    name: image-ops-worker
+    runtime: docker
+    plan: standard
+    dockerContext: .
+    dockerfilePath: ./services/worker/Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JOB_QUEUE_NAME
+        value: image-ops-jobs
+      - key: JOB_REPO_DRIVER
+        value: postgres
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: image-ops-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: image-ops-redis
+          property: connectionString
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: WORKER_HEARTBEAT_INTERVAL_MS
+        value: "30000"
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: "false"
+      - key: BG_REMOVE_PROVIDER
+        value: http
+      - key: BG_REMOVE_API_URL
+        sync: false
+      - key: BG_REMOVE_TIMEOUT_MS
+        value: "15000"
+      - key: BG_REMOVE_MAX_RETRIES
+        value: "1"
+      - key: BG_REMOVE_BACKOFF_BASE_MS
+        value: "500"
+      - key: BG_REMOVE_BACKOFF_MAX_MS
+        value: "1000"
+
+  - type: web
+    name: image-ops-web
+    runtime: docker
+    plan: starter
+    dockerContext: .
+    dockerfilePath: ./apps/web/Dockerfile
+    autoDeploy: true
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false

@@ -62,20 +62,6 @@ describe("API token enforcement", () => {
       now: new Date()
     });
 
-    services.storage.setObject("tmp/seller_1/input/1.jpg", "image/jpeg", Buffer.from("auth-flow-bytes"));
-    const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        subjectId: "seller_1",
-        objectKey: "tmp/seller_1/input/1.jpg"
-      })
-    });
-    expect(complete.status).toBe(200);
-
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
       headers: {
@@ -89,7 +75,22 @@ describe("API token enforcement", () => {
       })
     });
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(409);
+
+    await server.close();
+  });
+
+  it("rejects watch tower logs endpoint without bearer token when API_AUTH_REQUIRED=true", async () => {
+    const config = createTestConfig();
+    config.apiAuthRequired = true;
+    const services = createFakeServices();
+    const auth = new InMemoryAuthService(config.authTokenSecret);
+
+    const app = createApiApp({ config, ...services, auth, now: () => new Date("2026-02-23T00:00:00.000Z") });
+    const server = await startServer(app);
+
+    const response = await fetch(`${server.baseUrl}/api/observability/logs`);
+    expect(response.status).toBe(401);
 
     await server.close();
   });

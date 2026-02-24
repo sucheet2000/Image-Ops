@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getApiBaseUrl, setApiToken } from "../lib/api-client";
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -8,8 +9,6 @@ type GoogleCredentialResponse = {
 
 type AuthPayload = {
   token: string;
-  tokenType: string;
-  expiresIn: number;
   profile: {
     subjectId: string;
     plan: string;
@@ -31,17 +30,6 @@ declare global {
       };
     };
   }
-}
-
-const TOKEN_KEY = "image_ops_api_token";
-
-function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
-}
-
-function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  document.cookie = `image_ops_api_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 }
 
 export function GoogleAuthPanel() {
@@ -77,6 +65,7 @@ export function GoogleAuthPanel() {
           try {
             const authResponse = await fetch(`${getApiBaseUrl()}/api/auth/google`, {
               method: "POST",
+              credentials: "include",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ idToken: response.credential })
             });
@@ -87,7 +76,7 @@ export function GoogleAuthPanel() {
             }
 
             const payload = (await authResponse.json()) as AuthPayload;
-            setToken(payload.token);
+            setApiToken(payload.token);
             setMessage(`Signed in as ${payload.profile.subjectId} (${payload.profile.plan}).`);
           } catch (error) {
             setMessage(`Auth request failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -115,10 +104,11 @@ export function GoogleAuthPanel() {
   }, [clientId]);
 
   return (
-    <section className="card">
-      <h2>Google Login</h2>
-      <div id="google-signin-button" style={{ minHeight: 44 }} />
-      <p>{message}</p>
+    <section className="editorial-card reveal-el" data-delay="180">
+      <span className="section-label">Google Login</span>
+      <h2 style={{ marginTop: "0.65rem" }}>Secure sign-in</h2>
+      <div id="google-signin-button" style={{ marginTop: "0.9rem", minHeight: 44 }} />
+      <p style={{ marginTop: "0.85rem", color: "var(--muted)" }}>{message}</p>
     </section>
   );
 }

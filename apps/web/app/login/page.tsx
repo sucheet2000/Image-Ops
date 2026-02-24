@@ -8,13 +8,24 @@ export const metadata = {
 
 export default function LoginPage() {
   return (
-    <main className="container">
-      <h1>Login</h1>
-      <p className="subhead">Use your Google account to create a secure Image Ops API session.</p>
-      <GoogleAuthPanel />
-      <p>
-        <Link href="/">Back to home</Link>
-      </p>
+    <main className="app-page">
+      <section className="page-shell">
+        <header className="page-head">
+          <span className="section-label reveal-el" data-delay="0">Authentication</span>
+          <h1 className="reveal-el" data-delay="100">
+            Log in to your <span className="accent-italic">workspace.</span>
+          </h1>
+          <p className="reveal-el" data-delay="180">
+            Use your Google account to create a secure Image Ops API session.
+          </p>
+        </header>
+
+        <GoogleAuthPanel />
+
+        <p style={{ marginTop: "1rem" }}>
+          <Link href="/">Back to home</Link>
+        </p>
+      </section>
     </main>
   );
 }

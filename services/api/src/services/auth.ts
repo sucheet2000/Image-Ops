@@ -1,5 +1,6 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { ImagePlan } from "@image-ops/core";
+import { ulid } from "ulid";
 
 export type ApiTokenClaims = {
   sub: string;
@@ -13,6 +14,12 @@ export type GoogleIdentity = {
   sub: string;
   email?: string;
   emailVerified: boolean;
+};
+
+export type RefreshTokenIssueResult = {
+  sessionId: string;
+  token: string;
+  secretHash: string;
 };
 
 export interface AuthService {
@@ -33,6 +40,36 @@ function fromBase64Url(input: string): Buffer {
   const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
   const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
   return Buffer.from(`${normalized}${pad}`, "base64");
+}
+
+function hashSecret(input: string): string {
+  return createHash("sha256").update(input, "utf8").digest("hex");
+}
+
+export function issueRefreshToken(now: Date): RefreshTokenIssueResult {
+  const sessionId = ulid(now.getTime());
+  const secret = randomBytes(32).toString("base64url");
+  return {
+    sessionId,
+    token: `${sessionId}.${secret}`,
+    secretHash: hashSecret(secret)
+  };
+}
+
+export function parseRefreshToken(token: string): { sessionId: string; secret: string } | null {
+  const [sessionId, secret, ...rest] = token.split(".");
+  if (!sessionId || !secret || rest.length > 0) {
+    return null;
+  }
+  return { sessionId, secret };
+}
+
+export function verifyRefreshTokenSecret(secret: string, secretHash: string): boolean {
+  const candidate = hashSecret(secret);
+  if (candidate.length !== secretHash.length) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(candidate, "utf8"), Buffer.from(secretHash, "utf8"));
 }
 
 export class GoogleTokenAuthService implements AuthService {

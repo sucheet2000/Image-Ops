@@ -1,7 +1,11 @@
-export type ViewerPlan = "free" | "pro" | "team";
+import { PLAN_KEY, SUBJECT_KEY, TOKEN_KEY } from "./storage-keys";
 
-const TOKEN_KEY = "image_ops_api_token";
-const PLAN_KEY = "image_ops_subject_plan";
+export type ViewerPlan = "free" | "pro" | "team";
+export type ViewerSession = {
+  subjectId: string | null;
+  plan: ViewerPlan;
+  isAuthenticated: boolean;
+};
 
 function parseBase64Url(input: string): string | null {
   try {
@@ -13,7 +17,7 @@ function parseBase64Url(input: string): string | null {
   }
 }
 
-function parsePlanFromToken(token: string): ViewerPlan | null {
+function parseClaimsFromToken(token: string): { sub?: string; plan?: ViewerPlan } | null {
   const parts = token.split(".");
   if (parts.length < 2) {
     return null;
@@ -25,30 +29,85 @@ function parsePlanFromToken(token: string): ViewerPlan | null {
   }
 
   try {
-    const payload = JSON.parse(payloadRaw) as { plan?: string };
-    if (payload.plan === "free" || payload.plan === "pro" || payload.plan === "team") {
-      return payload.plan;
-    }
-    return null;
+    const payload = JSON.parse(payloadRaw) as { sub?: string; plan?: string };
+    const plan = payload.plan === "free" || payload.plan === "pro" || payload.plan === "team"
+      ? payload.plan
+      : undefined;
+    const sub = typeof payload.sub === "string" && payload.sub.length > 0 ? payload.sub : undefined;
+    return { sub, plan };
   } catch {
     return null;
   }
 }
 
-export function getViewerPlan(): ViewerPlan {
+function safeStorageGet(storage: Storage, key: string): string | null {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(storage: Storage, key: string, value: string): void {
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // Ignore storage write failures in restrictive/private browsing modes.
+  }
+}
+
+function readStoredSubjectId(): string | null {
   if (typeof window === "undefined") {
-    return "free";
+    return null;
+  }
+  const value = safeStorageGet(localStorage, SUBJECT_KEY);
+  return value && value.length > 0 ? value : null;
+}
+
+function readApiToken(): string | null {
+  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
+}
+
+export function getViewerSession(): ViewerSession {
+  if (typeof window === "undefined") {
+    return { subjectId: null, plan: "free", isAuthenticated: false };
   }
 
-  const explicitPlan = localStorage.getItem(PLAN_KEY);
-  if (explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team") {
-    return explicitPlan;
-  }
-
-  const token = localStorage.getItem(TOKEN_KEY);
+  const subjectId = readStoredSubjectId();
+  const explicitPlan = safeStorageGet(localStorage, PLAN_KEY);
+  const token = readApiToken();
   if (!token) {
-    return "free";
+    const plan = explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team" ? explicitPlan : "free";
+    return { subjectId, plan, isAuthenticated: false };
   }
 
-  return parsePlanFromToken(token) || "free";
+  const claims = parseClaimsFromToken(token);
+  const plan = claims?.plan || (explicitPlan === "free" || explicitPlan === "pro" || explicitPlan === "team" ? explicitPlan : "free");
+  return {
+    subjectId: claims?.sub || subjectId,
+    plan,
+    isAuthenticated: Boolean(claims?.sub)
+  };
+}
+
+export function getViewerPlan(): ViewerPlan {
+  return getViewerSession().plan;
+}
+
+export function setViewerPlan(plan: ViewerPlan): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  safeStorageSet(localStorage, PLAN_KEY, plan);
+}
+
+export function setViewerSubjectId(subjectId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const trimmed = subjectId.trim();
+  if (!trimmed) {
+    return;
+  }
+  safeStorageSet(localStorage, SUBJECT_KEY, trimmed);
 }

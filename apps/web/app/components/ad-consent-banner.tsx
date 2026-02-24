@@ -43,14 +43,19 @@ export function AdConsentBanner(props: {
   }
 
   return (
-    <section className="card consent-banner" aria-label="Ad consent">
+    <section className="editorial-card" aria-label="Ad consent">
+      <span className="section-label">Ads Consent</span>
       <h2>Ads Consent</h2>
       <p>
         Free plan uses ads to keep tools affordable. We only render ad slots after explicit consent.
       </p>
-      <div className="consent-actions">
-        <button type="button" onClick={props.onAccept}>Allow Ads</button>
-        <button type="button" className="ghost" onClick={props.onReject}>No Thanks</button>
+      <div className="workbench-actions">
+        <button type="button" className="editorial-button accent" onClick={props.onAccept}>
+          Allow Ads
+        </button>
+        <button type="button" className="editorial-button ghost" onClick={props.onReject}>
+          No Thanks
+        </button>
       </div>
     </section>
   );

@@ -1,5 +1,6 @@
 import {
   applyQuota,
+  type AuthRefreshSession,
   type DedupObjectRecord,
   BillingCheckoutSession,
   BillingCheckoutStatus,
@@ -21,10 +22,12 @@ const JOB_KEY_PREFIX = "imageops:job:";
 const QUOTA_KEY_PREFIX = "imageops:quota:";
 const SUBJECT_PROFILE_KEY_PREFIX = "imageops:subject-profile:";
 const BILLING_CHECKOUT_KEY_PREFIX = "imageops:billing-checkout:";
+const BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX = "imageops:billing-checkout-subject:";
 const BILLING_EVENT_KEY_PREFIX = "imageops:billing-event:";
 const CLEANUP_IDEMPOTENCY_PREFIX = "imageops:cleanup-idempotency:";
 const UPLOAD_COMPLETION_PREFIX = "imageops:upload-completion:";
 const DEDUP_HASH_PREFIX = "imageops:dedup-hash:";
+const AUTH_REFRESH_SESSION_PREFIX = "imageops:auth-refresh:";
 const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
 const BILLING_EVENT_LIST_KEY = "imageops:billing-events";
 
@@ -40,6 +43,8 @@ export interface JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult>;
 
   getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null>;
@@ -51,6 +56,10 @@ export interface JobRepository {
 
   getSubjectProfile(subjectId: string): Promise<SubjectProfile | null>;
   upsertSubjectProfile(profile: SubjectProfile): Promise<void>;
+
+  putAuthRefreshSession(session: AuthRefreshSession, ttlSeconds: number): Promise<void>;
+  getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null>;
+  revokeAuthRefreshSession(id: string, revokedAt: string): Promise<void>;
 
   createJob(job: ImageJobRecord): Promise<void>;
   getJob(id: string): Promise<ImageJobRecord | null>;
@@ -66,6 +75,8 @@ export interface JobRepository {
 
   createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void>;
   getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null>;
+  listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]>;
+  listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]>;
   updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void>;
 
   getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null>;
@@ -97,6 +108,10 @@ function billingCheckoutKey(id: string): string {
   return `${BILLING_CHECKOUT_KEY_PREFIX}${id}`;
 }
 
+function billingCheckoutSubjectIndexKey(subjectId: string): string {
+  return `${BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX}${subjectId}`;
+}
+
 function billingEventKey(providerEventId: string): string {
   return `${BILLING_EVENT_KEY_PREFIX}${providerEventId}`;
 }
@@ -113,12 +128,31 @@ function dedupHashKey(sha256: string): string {
   return `${DEDUP_HASH_PREFIX}${sha256}`;
 }
 
+function authRefreshSessionKey(id: string): string {
+  return `${AUTH_REFRESH_SESSION_PREFIX}${id}`;
+}
+
+function timestampMsOrNow(input: string): number {
+  const parsed = Date.parse(input);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return Date.now();
+}
+
 export class RedisJobRepository implements JobRepository {
+  private static readonly MAX_OPTIMISTIC_RETRIES = 5;
   private readonly redis: IORedis;
+  private readonly now: () => Date;
   private closePromise: Promise<void> | null = null;
 
-  constructor(input: { redisUrl: string }) {
-    this.redis = new IORedis(input.redisUrl, { maxRetriesPerRequest: null });
+  constructor(input: { redisUrl?: string; clock?: () => Date; redisClient?: IORedis }) {
+    if (!input.redisClient && !input.redisUrl) {
+      throw new Error("redisUrl is required when redisClient is not provided");
+    }
+
+    this.redis = input.redisClient || new IORedis(input.redisUrl!, { maxRetriesPerRequest: null });
+    this.now = input.clock || (() => new Date());
   }
 
   async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
@@ -138,22 +172,48 @@ export class RedisJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
-    const existing = (await this.getQuotaWindow(input.subjectId)) || {
-      windowStartAt: input.now.toISOString(),
-      usedCount: 0
-    };
-    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
-    if (!quotaResult.allowed) {
-      return quotaResult;
+    const subjectQuotaKey = quotaKey(input.subjectId);
+
+    for (let attempt = 0; attempt < RedisJobRepository.MAX_OPTIMISTIC_RETRIES; attempt += 1) {
+      await this.redis.watch(subjectQuotaKey);
+
+      try {
+        const existingRaw = await this.redis.get(subjectQuotaKey);
+        const existing = existingRaw
+          ? (JSON.parse(existingRaw) as QuotaWindow)
+          : {
+              windowStartAt: input.now.toISOString(),
+              usedCount: 0
+            };
+        const quotaResult = applyQuota(
+          existing,
+          input.requestedImages,
+          input.now,
+          input.quotaLimit,
+          input.quotaWindowHours
+        );
+        if (!quotaResult.allowed) {
+          await this.redis.unwatch();
+          return quotaResult;
+        }
+
+        const committed = await this.redis.multi()
+          .set(subjectQuotaKey, JSON.stringify(quotaResult.window))
+          .set(jobKey(input.job.id), JSON.stringify(input.job))
+          .exec();
+
+        if (committed) {
+          return quotaResult;
+        }
+      } finally {
+        await this.redis.unwatch();
+      }
     }
 
-    await this.redis.multi()
-      .set(quotaKey(input.subjectId), JSON.stringify(quotaResult.window))
-      .set(jobKey(input.job.id), JSON.stringify(input.job))
-      .exec();
-
-    return quotaResult;
+    throw new Error("Failed to reserve quota and create job due to concurrent updates.");
   }
 
   async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
@@ -168,18 +228,33 @@ export class RedisJobRepository implements JobRepository {
     completion: UploadCompletionRecord;
     dedupRecord: DedupObjectRecord;
   }): Promise<void> {
+    const completionKey = uploadCompletionKey(input.completion.objectKey);
     const dedupKey = dedupHashKey(input.dedupRecord.sha256);
-    const existingRaw = await this.redis.get(dedupKey);
-    const existing = existingRaw ? (JSON.parse(existingRaw) as DedupObjectRecord[]) : [];
 
-    if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
-      existing.push(input.dedupRecord);
+    for (let attempt = 0; attempt < RedisJobRepository.MAX_OPTIMISTIC_RETRIES; attempt += 1) {
+      await this.redis.watch(completionKey, dedupKey);
+
+      try {
+        const existingRaw = await this.redis.get(dedupKey);
+        const existing = existingRaw ? (JSON.parse(existingRaw) as DedupObjectRecord[]) : [];
+
+        if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
+          existing.push(input.dedupRecord);
+        }
+
+        const committed = await this.redis.multi()
+          .set(completionKey, JSON.stringify(input.completion))
+          .set(dedupKey, JSON.stringify(existing))
+          .exec();
+        if (committed) {
+          return;
+        }
+      } finally {
+        await this.redis.unwatch();
+      }
     }
 
-    await this.redis.multi()
-      .set(uploadCompletionKey(input.completion.objectKey), JSON.stringify(input.completion))
-      .set(dedupKey, JSON.stringify(existing))
-      .exec();
+    throw new Error("Failed to finalize upload completion due to concurrent updates.");
   }
 
   async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
@@ -200,6 +275,42 @@ export class RedisJobRepository implements JobRepository {
 
   async upsertSubjectProfile(profile: SubjectProfile): Promise<void> {
     await this.redis.set(subjectProfileKey(profile.subjectId), JSON.stringify(profile));
+  }
+
+  async putAuthRefreshSession(session: AuthRefreshSession, ttlSeconds: number): Promise<void> {
+    await this.redis.set(authRefreshSessionKey(session.id), JSON.stringify(session), "EX", ttlSeconds);
+  }
+
+  async getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null> {
+    const raw = await this.redis.get(authRefreshSessionKey(id));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as AuthRefreshSession;
+  }
+
+  async revokeAuthRefreshSession(id: string, revokedAt: string): Promise<void> {
+    const existing = await this.getAuthRefreshSession(id);
+    if (!existing) {
+      return;
+    }
+
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
+    if (ttlSeconds <= 0) {
+      await this.redis.del(authRefreshSessionKey(id));
+      return;
+    }
+
+    await this.redis.set(
+      authRefreshSessionKey(id),
+      JSON.stringify({
+        ...existing,
+        revokedAt,
+        updatedAt: revokedAt
+      }),
+      "EX",
+      ttlSeconds
+    );
   }
 
   async createJob(job: ImageJobRecord): Promise<void> {
@@ -251,7 +362,10 @@ export class RedisJobRepository implements JobRepository {
   }
 
   async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
-    await this.redis.set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds);
+    await this.redis.multi()
+      .set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds)
+      .zadd(billingCheckoutSubjectIndexKey(session.subjectId), timestampMsOrNow(session.updatedAt), session.id)
+      .exec();
   }
 
   async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
@@ -262,13 +376,46 @@ export class RedisJobRepository implements JobRepository {
     return JSON.parse(raw) as BillingCheckoutSession;
   }
 
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    const keys = await this.redis.keys(`${BILLING_CHECKOUT_KEY_PREFIX}*`);
+    if (keys.length === 0 || limit <= 0) {
+      return [];
+    }
+
+    const rows = await this.redis.mget(...keys);
+    const sessions = rows
+      .filter((value): value is string => Boolean(value))
+      .map((value) => JSON.parse(value) as BillingCheckoutSession)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+    return sessions.slice(-limit);
+  }
+
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
+    const ids = await this.redis.zrevrange(billingCheckoutSubjectIndexKey(subjectId), 0, Math.max(limit - 1, 0));
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.redis.mget(...ids.map((id) => billingCheckoutKey(id)));
+    return rows
+      .filter((value): value is string => Boolean(value))
+      .map((value) => JSON.parse(value) as BillingCheckoutSession)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit);
+  }
+
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
     await this.redis.set(
       billingCheckoutKey(id),
       JSON.stringify({
@@ -279,6 +426,7 @@ export class RedisJobRepository implements JobRepository {
       "EX",
       ttlSeconds
     );
+    await this.redis.zadd(billingCheckoutSubjectIndexKey(existing.subjectId), timestampMsOrNow(updatedAt), id);
   }
 
   async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
@@ -341,10 +489,12 @@ export class RedisJobRepository implements JobRepository {
 
 export class PostgresJobRepository implements JobRepository {
   private readonly pool: Pool;
+  private readonly now: () => Date;
   private initPromise: Promise<void> | null = null;
 
-  constructor(input: { connectionString: string }) {
+  constructor(input: { connectionString: string; clock?: () => Date }) {
     this.pool = new Pool({ connectionString: input.connectionString });
+    this.now = input.clock || (() => new Date());
   }
 
   private async initialize(): Promise<void> {
@@ -355,6 +505,7 @@ export class PostgresJobRepository implements JobRepository {
   }
 
   private async ensureSchema(): Promise<void> {
+    // Keep runtime bootstrap as a safety net for environments that have not applied SQL migrations yet.
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS ${POSTGRES_KV_TABLE} (
         key TEXT PRIMARY KEY,
@@ -384,6 +535,11 @@ export class PostgresJobRepository implements JobRepository {
       CREATE INDEX IF NOT EXISTS imageops_billing_events_created_idx
       ON ${POSTGRES_BILLING_EVENT_TABLE} (created_at DESC);
     `);
+    await this.pool.query(`
+      CREATE INDEX IF NOT EXISTS imageops_billing_checkout_subject_updated_idx
+      ON ${POSTGRES_KV_TABLE} ((value->>'subjectId'), (value->>'updatedAt') DESC)
+      WHERE key LIKE '${BILLING_CHECKOUT_KEY_PREFIX}%';
+    `);
   }
 
   private async getStoredValue<T>(key: string): Promise<T | null> {
@@ -397,7 +553,7 @@ export class PostgresJobRepository implements JobRepository {
     }
 
     const row = result.rows[0];
-    if (row.expires_at && row.expires_at.getTime() <= Date.now()) {
+    if (row.expires_at && row.expires_at.getTime() <= this.now().getTime()) {
       await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [key]);
       return null;
     }
@@ -407,7 +563,7 @@ export class PostgresJobRepository implements JobRepository {
 
   private async setStoredValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     await this.initialize();
-    const expiresAt = ttlSeconds ? new Date(Date.now() + ttlSeconds * 1000).toISOString() : null;
+    const expiresAt = ttlSeconds ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString() : null;
     await this.pool.query(
       `
         INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
@@ -432,6 +588,8 @@ export class PostgresJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
     await this.initialize();
     const client = await this.pool.connect();
@@ -447,7 +605,13 @@ export class PostgresJobRepository implements JobRepository {
         ? (quotaResultRow.rows[0].value as QuotaWindow)
         : { windowStartAt: input.now.toISOString(), usedCount: 0 };
 
-      const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+      const quotaResult = applyQuota(
+        existing,
+        input.requestedImages,
+        input.now,
+        input.quotaLimit,
+        input.quotaWindowHours
+      );
       if (!quotaResult.allowed) {
         await client.query("ROLLBACK");
         return quotaResult;
@@ -546,6 +710,37 @@ export class PostgresJobRepository implements JobRepository {
     await this.setStoredValue(subjectProfileKey(profile.subjectId), profile);
   }
 
+  async putAuthRefreshSession(session: AuthRefreshSession, ttlSeconds: number): Promise<void> {
+    await this.setStoredValue(authRefreshSessionKey(session.id), session, ttlSeconds);
+  }
+
+  async getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null> {
+    return this.getStoredValue<AuthRefreshSession>(authRefreshSessionKey(id));
+  }
+
+  async revokeAuthRefreshSession(id: string, revokedAt: string): Promise<void> {
+    const existing = await this.getAuthRefreshSession(id);
+    if (!existing) {
+      return;
+    }
+
+    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
+    if (ttlSeconds <= 0) {
+      await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [authRefreshSessionKey(id)]);
+      return;
+    }
+
+    await this.setStoredValue(
+      authRefreshSessionKey(id),
+      {
+        ...existing,
+        revokedAt,
+        updatedAt: revokedAt
+      },
+      ttlSeconds
+    );
+  }
+
   async createJob(job: ImageJobRecord): Promise<void> {
     await this.setStoredValue(jobKey(job.id), job);
   }
@@ -598,13 +793,62 @@ export class PostgresJobRepository implements JobRepository {
     return this.getStoredValue<BillingCheckoutSession>(billingCheckoutKey(id));
   }
 
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    await this.initialize();
+    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+      `
+        SELECT value, expires_at
+        FROM ${POSTGRES_KV_TABLE}
+        WHERE key LIKE $1
+        ORDER BY key DESC
+      `,
+      [`${BILLING_CHECKOUT_KEY_PREFIX}%`]
+    );
+
+    if (limit <= 0) {
+      return [];
+    }
+
+    const nowMs = this.now().getTime();
+    const sessions = result.rows
+      .filter((row) => !row.expires_at || row.expires_at.getTime() > nowMs)
+      .map((row) => row.value)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
+    return sessions.slice(-limit);
+  }
+
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    await this.initialize();
+    if (limit <= 0) {
+      return [];
+    }
+
+    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+      `
+        SELECT value, expires_at
+        FROM ${POSTGRES_KV_TABLE}
+        WHERE key LIKE $1
+          AND value->>'subjectId' = $2
+        ORDER BY (value->>'updatedAt')::timestamptz DESC NULLS LAST
+        LIMIT $3
+      `,
+      [`${BILLING_CHECKOUT_KEY_PREFIX}%`, subjectId, limit]
+    );
+
+    const nowMs = this.now().getTime();
+    return result.rows
+      .filter((row) => !row.expires_at || row.expires_at.getTime() > nowMs)
+      .map((row) => row.value);
+  }
+
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - Date.now()) / 1000));
+    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
     await this.setStoredValue(
       billingCheckoutKey(id),
       {
@@ -698,6 +942,7 @@ export class InMemoryJobRepository implements JobRepository {
   private readonly uploadCompletions = new Map<string, UploadCompletionRecord>();
   private readonly dedupByHash = new Map<string, DedupObjectRecord[]>();
   private readonly profiles = new Map<string, SubjectProfile>();
+  private readonly authRefreshSessions = new Map<string, AuthRefreshSession>();
   private readonly jobs = new Map<string, ImageJobRecord>();
   private readonly checkouts = new Map<string, BillingCheckoutSession>();
   private readonly billingEvents = new Map<string, BillingWebhookEvent>();
@@ -717,12 +962,20 @@ export class InMemoryJobRepository implements JobRepository {
     requestedImages: number;
     now: Date;
     job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
   }): Promise<QuotaResult> {
     const existing = this.quotas.get(input.subjectId) || {
       windowStartAt: input.now.toISOString(),
       usedCount: 0
     };
-    const quotaResult = applyQuota(existing, input.requestedImages, input.now);
+    const quotaResult = applyQuota(
+      existing,
+      input.requestedImages,
+      input.now,
+      input.quotaLimit,
+      input.quotaWindowHours
+    );
     if (!quotaResult.allowed) {
       return quotaResult;
     }
@@ -758,6 +1011,26 @@ export class InMemoryJobRepository implements JobRepository {
 
   async upsertSubjectProfile(profile: SubjectProfile): Promise<void> {
     this.profiles.set(profile.subjectId, profile);
+  }
+
+  async putAuthRefreshSession(session: AuthRefreshSession, _ttlSeconds: number): Promise<void> {
+    this.authRefreshSessions.set(session.id, session);
+  }
+
+  async getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null> {
+    return this.authRefreshSessions.get(id) || null;
+  }
+
+  async revokeAuthRefreshSession(id: string, revokedAt: string): Promise<void> {
+    const existing = this.authRefreshSessions.get(id);
+    if (!existing) {
+      return;
+    }
+    this.authRefreshSessions.set(id, {
+      ...existing,
+      revokedAt,
+      updatedAt: revokedAt
+    });
   }
 
   async createJob(job: ImageJobRecord): Promise<void> {
@@ -810,6 +1083,25 @@ export class InMemoryJobRepository implements JobRepository {
 
   async getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null> {
     return this.checkouts.get(id) || null;
+  }
+
+  async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+    const rows = Array.from(this.checkouts.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    return rows.slice(-limit);
+  }
+
+  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
+    return Array.from(this.checkouts.values())
+      .filter((session) => session.subjectId === subjectId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .slice(0, limit);
   }
 
   async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {

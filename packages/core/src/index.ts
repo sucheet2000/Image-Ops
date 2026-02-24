@@ -145,6 +145,18 @@ export type SubjectProfile = {
   updatedAt: string;
 };
 
+export type AuthRefreshSession = {
+  id: string;
+  subjectId: string;
+  plan: ImagePlan;
+  email?: string;
+  secretHash: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  revokedAt?: string;
+};
+
 export const BILLING_CHECKOUT_STATUSES = ["created", "paid", "canceled", "expired"] as const;
 export type BillingCheckoutStatus = (typeof BILLING_CHECKOUT_STATUSES)[number];
 
@@ -186,28 +198,40 @@ function addHours(date: Date, hours: number): Date {
 }
 
 /**
- * Determine whether the requested number of images can be consumed under the free-plan quota and return the updated quota window.
+ * Determine whether the requested number of images can be consumed under a rolling quota window and return the updated quota window.
  *
  * @param existing - The current quota window containing `windowStartAt` (ISO string) and `usedCount`
  * @param requestedImages - Number of images requested to consume from the quota
  * @param now - Reference time used to evaluate or reset the quota window
- * @returns A `QuotaResult` where `allowed` indicates if the request fits the free-plan limit and `window` is the updated quota window; when `allowed` is `false`, `nextWindowStartAt` is included indicating when the quota window will reset
+ * @param limit - Maximum images allowed in the rolling window; defaults to free-plan limit
+ * @param windowHours - Rolling window length in hours; defaults to free-plan window
+ * @returns A `QuotaResult` where `allowed` indicates if the request fits the limit and `window` is the updated quota window; when `allowed` is `false`, `nextWindowStartAt` is included indicating when the quota window will reset
  */
-export function applyQuota(existing: QuotaWindow, requestedImages: number, now: Date): QuotaResult {
+export function applyQuota(
+  existing: QuotaWindow,
+  requestedImages: number,
+  now: Date,
+  limit = FREE_PLAN_LIMIT,
+  windowHours = FREE_PLAN_WINDOW_HOURS
+): QuotaResult {
+  if (!Number.isInteger(requestedImages) || requestedImages < 0) {
+    throw new Error("requestedImages must be non-negative");
+  }
+
   const start = new Date(existing.windowStartAt);
   const current = { ...existing };
 
-  if (Number.isNaN(start.getTime()) || now > addHours(start, FREE_PLAN_WINDOW_HOURS)) {
+  if (Number.isNaN(start.getTime()) || now > addHours(start, windowHours)) {
     current.windowStartAt = now.toISOString();
     current.usedCount = 0;
   }
 
   const projected = current.usedCount + requestedImages;
-  if (projected > FREE_PLAN_LIMIT) {
+  if (projected > limit) {
     return {
       allowed: false,
       window: current,
-      nextWindowStartAt: addHours(new Date(current.windowStartAt), FREE_PLAN_WINDOW_HOURS).toISOString()
+      nextWindowStartAt: addHours(new Date(current.windowStartAt), windowHours).toISOString()
     };
   }
 
@@ -368,10 +392,11 @@ export function mimeToFormat(mime: string): ImageFormat | null {
  * Compute the ISO timestamp when a quota window expires.
  *
  * @param window - The quota window containing `windowStartAt`
- * @returns The ISO 8601 timestamp for `window.windowStartAt` advanced by the free-plan window duration
+ * @param windowHours - Rolling window length in hours; defaults to free-plan window
+ * @returns The ISO 8601 timestamp for `window.windowStartAt` advanced by `windowHours`
  */
-export function quotaWindowResetAt(window: QuotaWindow): string {
-  return addHours(new Date(window.windowStartAt), FREE_PLAN_WINDOW_HOURS).toISOString();
+export function quotaWindowResetAt(window: QuotaWindow, windowHours = FREE_PLAN_WINDOW_HOURS): string {
+  return addHours(new Date(window.windowStartAt), windowHours).toISOString();
 }
 
 /**

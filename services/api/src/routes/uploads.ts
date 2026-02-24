@@ -13,7 +13,9 @@ import { z } from "zod";
 import type { Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
+import { logError } from "../lib/log";
 import type { JobRepository } from "../services/job-repo";
+import type { MalwareScanService } from "../services/malware-scan";
 import type { ObjectStorageService } from "../services/storage";
 
 const SUPPORTED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -76,9 +78,64 @@ function buffersEqualByteByByte(left: Buffer, right: Buffer): boolean {
   return true;
 }
 
+function isStorageNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+  if (error.name === "NotFound" || statusCode === 404) {
+    return true;
+  }
+
+  return /not found/i.test(error.message);
+}
+
+function detectMimeFromBytes(bytes: Buffer): string | null {
+  if (
+    bytes.length >= 8
+    && bytes[0] === 0x89
+    && bytes[1] === 0x50
+    && bytes[2] === 0x4e
+    && bytes[3] === 0x47
+    && bytes[4] === 0x0d
+    && bytes[5] === 0x0a
+    && bytes[6] === 0x1a
+    && bytes[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+
+  if (
+    bytes.length >= 12
+    && bytes[0] === 0x52 // R
+    && bytes[1] === 0x49 // I
+    && bytes[2] === 0x46 // F
+    && bytes[3] === 0x46 // F
+    && bytes[8] === 0x57 // W
+    && bytes[9] === 0x45 // E
+    && bytes[10] === 0x42 // B
+    && bytes[11] === 0x50 // P
+  ) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
 export function registerUploadsRoutes(
   router: Router,
-  deps: { config: ApiConfig; storage: ObjectStorageService; jobRepo: JobRepository; now: () => Date }
+  deps: {
+    config: ApiConfig;
+    storage: ObjectStorageService;
+    jobRepo: JobRepository;
+    malwareScan: MalwareScanService;
+    now: () => Date;
+  }
 ): void {
   router.post("/api/uploads/init", asyncHandler(async (req, res) => {
     const parsed = uploadInitSchema.safeParse(req.body);
@@ -138,7 +195,8 @@ export function registerUploadsRoutes(
 
     const payload = parsed.data;
     const safeSubjectId = toSafeSubjectId(payload.subjectId);
-    if (!payload.objectKey.startsWith(`tmp/${safeSubjectId}/input/`)) {
+    const subjectUploadPrefix = `tmp/${safeSubjectId}/input/`;
+    if (!payload.objectKey.startsWith(subjectUploadPrefix)) {
       res.status(400).json({ error: "INVALID_OBJECT_KEY", message: "Object key does not match subject upload prefix." });
       return;
     }
@@ -149,11 +207,29 @@ export function registerUploadsRoutes(
       return;
     }
 
-    const object = await deps.storage.getObjectBuffer(payload.objectKey);
+    let object: { bytes: Buffer; contentType: string };
+    try {
+      object = await deps.storage.getObjectBuffer(payload.objectKey);
+    } catch (error) {
+      if (isStorageNotFoundError(error)) {
+        res.status(404).json({ error: "INPUT_OBJECT_NOT_FOUND", message: "Input object key is missing or expired." });
+        return;
+      }
+      throw error;
+    }
     if (object.bytes.length > deps.config.maxUploadBytes) {
       res.status(413).json({
         error: "FILE_TOO_LARGE",
         message: `Maximum upload size is ${deps.config.maxUploadBytes} bytes.`
+      });
+      return;
+    }
+
+    const detectedMime = detectMimeFromBytes(object.bytes);
+    if (!detectedMime || !SUPPORTED_MIME.has(detectedMime)) {
+      res.status(400).json({
+        error: "UNSUPPORTED_MIME",
+        message: "Uploaded object signature is not a supported image type."
       });
       return;
     }
@@ -164,13 +240,47 @@ export function registerUploadsRoutes(
       return;
     }
 
+    try {
+      const scan = await deps.malwareScan.scan({
+        objectKey: payload.objectKey,
+        subjectId: safeSubjectId,
+        contentType: detectedMime,
+        bytes: object.bytes
+      });
+      if (!scan.clean) {
+        res.status(422).json({
+          error: "MALWARE_DETECTED",
+          message: scan.reason || "Upload blocked by malware scan policy."
+        });
+        return;
+      }
+    } catch (error) {
+      if (deps.config.malwareScanFailClosed) {
+        res.status(503).json({
+          error: "MALWARE_SCAN_UNAVAILABLE",
+          message: "Unable to complete malware scan. Try again shortly."
+        });
+        return;
+      }
+
+      logError("upload.malware_scan.failed_open", {
+        objectKey: payload.objectKey,
+        subjectId: safeSubjectId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+
     const candidates = await deps.jobRepo.listDedupByHash(sha256);
 
     let canonicalObjectKey = payload.objectKey;
     let deduplicated = false;
 
     for (const candidate of candidates) {
-      if (candidate.objectKey === payload.objectKey || candidate.sizeBytes !== object.bytes.length) {
+      if (
+        !candidate.objectKey.startsWith(subjectUploadPrefix)
+        || candidate.objectKey === payload.objectKey
+        || candidate.sizeBytes !== object.bytes.length
+      ) {
         continue;
       }
 
@@ -194,7 +304,7 @@ export function registerUploadsRoutes(
       subjectId: safeSubjectId,
       sha256,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       deduplicated,
       createdAt: nowIso
     };
@@ -203,7 +313,7 @@ export function registerUploadsRoutes(
       sha256,
       objectKey: canonicalObjectKey,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       createdAt: nowIso
     };
 
@@ -218,7 +328,7 @@ export function registerUploadsRoutes(
       canonicalObjectKey,
       sha256,
       sizeBytes: object.bytes.length,
-      contentType: object.contentType,
+      contentType: detectedMime,
       deduplicated
     });
   }));

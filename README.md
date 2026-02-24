@@ -8,7 +8,7 @@ SEO-first image utility platform for marketplace sellers (Etsy/Amazon/Shopify), 
 
 ## Monorepo Structure
 - `apps/web`: Next.js frontend
-- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `webhooks/billing`)
+- `services/api`: API service (`uploads/init`, `auth/session`, `jobs`, `jobs/:id`, `cleanup`, `quota`, `billing/checkout`, `billing/reconcile`, `webhooks/billing`)
 - `services/mcp-gateway`: constrained MCP gateway (`search` + `execute`)
 - `services/worker`: BullMQ consumer and sharp-based image processing pipeline
 - `packages/core`: shared domain logic (quota rules, tool/job contracts, watermark policy)
@@ -39,11 +39,34 @@ Required variables are listed in `.env.example`.
 
 Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
-- Billing: `BILLING_PUBLIC_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`
+- API hardening: `API_WRITE_RATE_LIMIT_WINDOW_MS`, `API_WRITE_RATE_LIMIT_MAX`, `MALWARE_SCAN_API_URL`, `MALWARE_SCAN_TIMEOUT_MS`, `MALWARE_SCAN_FAIL_CLOSED`
+- Quota policy: `FREE_PLAN_LIMIT`, `FREE_PLAN_WINDOW_HOURS`, `PRO_PLAN_LIMIT`, `PRO_PLAN_WINDOW_HOURS`, `TEAM_PLAN_LIMIT`, `TEAM_PLAN_WINDOW_HOURS`
+- Auth: `API_AUTH_REQUIRED`, `GOOGLE_CLIENT_ID`, `AUTH_TOKEN_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TTL_SECONDS`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_SECURE`, `AUTH_REFRESH_COOKIE_SAMESITE`, `AUTH_REFRESH_COOKIE_DOMAIN`, `AUTH_REFRESH_COOKIE_PATH`
+- Billing: `BILLING_PROVIDER`, `BILLING_PUBLIC_BASE_URL`, `BILLING_PORTAL_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_TEAM`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
-- Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
-- Worker/background remove: `WORKER_CONCURRENCY`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+- Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
+- Worker/background remove: `WORKER_CONCURRENCY`, `WORKER_HEARTBEAT_INTERVAL_MS`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+
+## Observability
+- `GET /health`: basic liveness probe.
+- `GET /ready`: readiness probe that verifies storage and metadata repository connectivity.
+- `GET /metrics`: Prometheus-style metrics for uptime, in-flight requests, request counts/duration totals, and queue depth by state.
+- Worker emits `worker.ready`, `worker.completed`, `worker.failed`, and periodic `worker.heartbeat` structured log events.
+- Alert rules starter pack: `infra/observability/prometheus-alerts.yml`.
+- Dashboard/runbook notes: `docs/observability.md`.
+
+## Auth Session Strategy
+- `POST /api/auth/google` issues a short-lived bearer access token plus an HttpOnly refresh cookie.
+- `POST /api/auth/refresh` rotates refresh sessions (single-use refresh token semantics) and returns a new bearer token.
+- `POST /api/auth/logout` revokes the current refresh session and clears the cookie.
+- Web clients should use bearer headers for protected APIs and rely on refresh cookies for silent token renewal.
+
+## Billing Reconciliation
+- `POST /api/billing/reconcile` scans paid checkout sessions and repairs downgraded/missing subject plans.
+- Use this endpoint as a drift-recovery control when webhook delivery is delayed or partially failed.
+- `GET /api/billing/summary/:subjectId` returns lifecycle summary + available subscription actions.
+- `POST /api/billing/subscription` supports self-serve `cancel` and `reactivate` actions.
 
 ## Local Infrastructure
 Minimum local dependencies:
@@ -57,6 +80,62 @@ docker run --rm -p 9000:9000 -p 9001:9001 \
   -e MINIO_ROOT_PASSWORD=minioadmin \
   quay.io/minio/minio server /data --console-address \":9001\"
 ```
+
+## Containerized Staging Stack
+For a self-hosted staging-like stack (web + api + worker + redis + postgres + minio):
+```bash
+npm run infra:up:deploy
+```
+
+This uses `infra/docker-compose.deploy.yml` and builds:
+- `apps/web/Dockerfile`
+- `services/api/Dockerfile`
+- `services/worker/Dockerfile`
+
+After stack startup:
+```bash
+STAGING_API_BASE_URL=http://127.0.0.1:4000 npm run smoke:staging
+```
+
+Stop the stack:
+```bash
+npm run infra:down:deploy
+```
+
+Notes:
+- `infra/docker-compose.deploy.yml` is intended for staging/self-hosted environments.
+- For managed cloud production, keep the same images/env values and use managed Redis/Postgres/S3.
+
+## Release Images + Deploy
+Image publishing and deployment workflows:
+- `.github/workflows/publish-images.yml`
+  - builds and pushes `web`, `api`, and `worker` images to GHCR on `master`
+  - tags include `${GITHUB_SHA}` and `latest`
+- `.github/workflows/deploy-staging.yml`
+  - manual staging rollout using `infra/docker-compose.release.yml`
+  - requires staging SSH + GHCR pull secrets
+  - waits for `/ready` and runs `npm run smoke:staging`
+- `.github/workflows/release-preflight.yml`
+  - manual smoke contract against a target API URL
+  - reads optional bearer token from repository/environment secret `API_BEARER_TOKEN`
+
+Required staging secrets for `deploy-staging.yml`:
+- `STAGING_SSH_HOST`
+- `STAGING_SSH_USER`
+- `STAGING_SSH_KEY`
+- `STAGING_APP_DIR`
+- `GHCR_DEPLOY_USER`
+- `GHCR_DEPLOY_TOKEN`
+- `STAGING_API_BASE_URL`
+- `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
+
+Required secret for `release-preflight.yml` (optional when target API does not enforce auth):
+- `API_BEARER_TOKEN`
+
+## Render + Cloudflare + R2
+For managed production deployment on Render with Cloudflare DNS and Cloudflare R2 storage, use:
+- `render.yaml` (Blueprint at repo root)
+- `docs/deploy/render-cloudflare-r2.md` (step-by-step runbook)
 
 ## Test Commands
 From the project root:
@@ -111,6 +190,7 @@ RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run t
 This includes:
 - `health.integration.test.ts` (health smoke)
 - `workflow.integration.test.ts` (upload-init -> upload PUT -> jobs -> worker completion -> status -> cleanup)
+- `auth-billing-dedup.integration.test.ts` (session + billing webhook plan sync + dedup canonicalization)
 4. Tear down stack:
 ```bash
 npm run infra:down:integration
@@ -118,12 +198,39 @@ npm run infra:down:integration
 
 CI note:
 - Pull requests run an `integration` job in `.github/workflows/ci.yml` that brings up Redis + MinIO, starts API + worker, and executes `test:integration:api`.
+- Pushes to `master` also run the same integration gate before release promotion.
+- Production promotion can be gated through manual `Release Preflight` workflow (`.github/workflows/release-preflight.yml`) which executes the same smoke contract against a target API URL.
+
+## Staging Smoke Check
+After deploying API + worker to staging, run:
+```bash
+STAGING_API_BASE_URL=https://api-staging.example.com npm run smoke:staging
+```
+
+If staging enforces bearer auth on `/api/jobs` and `/api/cleanup`, pass a token:
+```bash
+STAGING_API_BASE_URL=https://api-staging.example.com \
+API_BEARER_TOKEN=your_token_here \
+npm run smoke:staging
+```
+
+The smoke script validates:
+- health endpoint
+- upload-init -> upload PUT -> upload complete
+- job create -> job completion -> download (when token is provided)
+- cleanup idempotency path (when token is provided)
 
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
-- Relational metadata schema exists in `infra/sql/001_initial_schema.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
-- Free plan quota is enforced as 6 images per rolling 10 hours at job creation.
+- Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
+- Quota is plan-aware at job creation (defaults: free 6/10h, pro 250/24h, team 1000/24h; configurable via env).
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
+- SEO page surfaces include `/tools/:tool`, `/use-cases/:slug`, `/for/:audience/:intent`, `/guides/:topic`, and `/compare/:slug`.
+- SEO inventory is expanded to ~50 dynamic pages across tools/use-cases/workflows/guides/comparisons.
+- Browser tool workflow is available at `/tools`: upload init -> upload PUT -> upload complete -> create job -> poll -> download -> cleanup.
+
+## Product Policy Locks
+- `docs/product-decisions.md` captures current V1 product defaults for ad network, background-remove provider, quota policy targets, and consent behavior.
 
 ## Parallel Development (Git Worktrees)
 - Team worktree workflow: `docs/git-worktree-plan.md`

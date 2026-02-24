@@ -13,6 +13,13 @@ afterEach(async () => {
   }
 });
 
+function fakeImageBytes(marker: string): Buffer {
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.from(marker, "utf8")
+  ]);
+}
+
 describe("GET /api/quota/:subjectId", () => {
   it("returns current usage for active window", async () => {
     let nowValue = new Date("2026-02-23T00:00:00.000Z");
@@ -21,7 +28,7 @@ describe("GET /api/quota/:subjectId", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig(), now });
     closers.push(server.close);
 
-    services.storage.setObject("tmp/seller_1/input/a.jpg", "image/jpeg", Buffer.from("quota-seller-1"));
+    services.storage.setObject("tmp/seller_1/input/a.jpg", "image/png", fakeImageBytes("quota-seller-1"));
 
     const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
@@ -48,6 +55,7 @@ describe("GET /api/quota/:subjectId", () => {
     const quota = await fetch(`${server.baseUrl}/api/quota/seller_1`);
     expect(quota.status).toBe(200);
     const payload = await quota.json();
+    expect(payload.plan).toBe("free");
     expect(payload.usedCount).toBe(1);
     expect(payload.limit).toBe(6);
 
@@ -55,5 +63,23 @@ describe("GET /api/quota/:subjectId", () => {
     const rolled = await fetch(`${server.baseUrl}/api/quota/seller_1`);
     const rolledPayload = await rolled.json();
     expect(rolledPayload.usedCount).toBe(0);
+  });
+
+  it("returns configured quota policy for requested plan", async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    config.teamPlanLimit = 4000;
+    config.teamPlanWindowHours = 48;
+
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/quota/seller_team?plan=team`);
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.plan).toBe("team");
+    expect(payload.limit).toBe(4000);
+    expect(payload.windowHours).toBe(48);
+    expect(payload.usedCount).toBe(0);
   });
 });

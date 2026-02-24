@@ -1,13 +1,37 @@
 import "./styles.css";
+import Link from "next/link";
 import type { Metadata } from "next";
+import { Cormorant_Garamond, Josefin_Sans, Playfair_Display } from "next/font/google";
+import { EditorialChrome } from "./components/editorial-chrome";
 import { getBaseUrl } from "./lib/seo-data";
 
 const baseUrl = getBaseUrl();
 
+const displayFont = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["700", "900"],
+  style: ["normal", "italic"],
+  variable: "--font-display"
+});
+
+const bodyFont = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400"],
+  style: ["normal", "italic"],
+  variable: "--font-body"
+});
+
+const uiFont = Josefin_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400"],
+  variable: "--font-ui"
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
-  title: "Image Ops | Fast image tools for sellers",
-  description: "Resize, compress, remove backgrounds, and optimize listing images with privacy-safe processing.",
+  title: "Image Ops | High-craft image processing for marketplace teams",
+  description:
+    "Editorial-grade image tools for resize, compression, conversion, and background cleanup workflows.",
   alternates: {
     canonical: "/"
   },
@@ -22,7 +46,22 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={`${displayFont.variable} ${bodyFont.variable} ${uiFont.variable}`}>
+        <EditorialChrome />
+        <main className="site-main">{children}</main>
+        <footer className="editorial-footer">
+          <div className="section-inner">
+            <span className="site-logo">ImageOps</span>
+            <div className="footer-links">
+              <Link href="/tools">Tools</Link>
+              <Link href="/upload">Upload</Link>
+              <Link href="/dashboard">Dashboard</Link>
+              <Link href="/billing">Billing</Link>
+              <Link href="/guides/prepare-amazon-main-images">Guides</Link>
+            </div>
+          </div>
+        </footer>
+      </body>
     </html>
   );
 }
