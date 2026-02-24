@@ -153,6 +153,7 @@ RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run t
 This includes:
 - `health.integration.test.ts` (health smoke)
 - `workflow.integration.test.ts` (upload-init -> upload PUT -> jobs -> worker completion -> status -> cleanup)
+- `auth-billing-dedup.integration.test.ts` (session + billing webhook plan sync + dedup canonicalization)
 4. Tear down stack:
 ```bash
 npm run infra:down:integration
