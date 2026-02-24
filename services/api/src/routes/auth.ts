@@ -37,7 +37,7 @@ function sameSiteCookieValue(value: ApiConfig["authRefreshCookieSameSite"]): "La
 
 function buildRefreshCookieParts(config: ApiConfig, value: string): string[] {
   const parts = [
-    `${config.authRefreshCookieName}=${rawValue}`,
+    `${config.authRefreshCookieName}=${encodeURIComponent(value)}`,
     `Path=${config.authRefreshCookiePath}`,
     "HttpOnly",
     `SameSite=${sameSiteCookieValue(config.authRefreshCookieSameSite)}`

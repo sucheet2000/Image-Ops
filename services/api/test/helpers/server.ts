@@ -54,24 +54,3 @@ export async function startApiTestServer(input: StartServerInput): Promise<{
       })
   };
 }
-
-/**
- * Starts the API application on an ephemeral port for use in tests.
- *
- * @param input - Test dependencies required to construct the API plus an optional `now` function to override the current time; when `now` is omitted it defaults to 2026-02-23T00:00:00.000Z
- * @returns An object containing `baseUrl` (the server URL, e.g. `http://127.0.0.1:<port>`) and `close` (a function that closes the server and completes once the server has shut down)
- */
-export async function startApiTestServer(input: TestServices & { now?: () => Date }): Promise<{
-  baseUrl: string;
-  close: () => Promise<void>;
-}> {
-  const app = createApiApp({
-    config: input.config,
-    storage: input.storage,
-    queue: input.queue,
-    jobRepo: input.jobRepo,
-    now: input.now || (() => new Date("2026-02-23T00:00:00.000Z"))
-  });
-
-  return startExpressTestServer(app);
-}

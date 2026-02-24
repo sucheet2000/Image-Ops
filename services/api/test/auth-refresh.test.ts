@@ -18,6 +18,8 @@ function cookieValue(setCookieHeader: string | null, cookieName: string): string
   if (!name || name !== cookieName || !value) {
     return null;
   }
+  return decodeURIComponent(value);
+}
 
 const closers: Array<() => Promise<void>> = [];
 
