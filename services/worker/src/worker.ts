@@ -2,6 +2,7 @@ import type { ImageJobQueuePayload } from "@image-ops/core";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadWorkerConfig } from "./config";
+import { startWorkerHeartbeat } from "./heartbeat";
 import { HttpBackgroundRemoveProvider } from "./providers/bg-remove-provider";
 import { processImageJob } from "./processor";
 import { RedisWorkerJobRepository } from "./services/job-repo";
@@ -57,6 +58,15 @@ worker.on("failed", (job, error) => {
   );
 });
 
+const stopHeartbeat = startWorkerHeartbeat({
+  queueName: config.queueName,
+  intervalMs: config.workerHeartbeatIntervalMs,
+  onHeartbeat: (payload) => {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify(payload));
+  }
+});
+
 let shuttingDown = false;
 
 async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
@@ -98,6 +108,7 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
   }
 
   try {
+    stopHeartbeat();
     await withShutdownTimeout(worker.close(), "worker.close");
     await withShutdownTimeout(connection.quit(), "connection.quit");
     // eslint-disable-next-line no-console

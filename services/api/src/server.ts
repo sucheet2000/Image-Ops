@@ -14,7 +14,7 @@ import { HmacBillingService, StripeBillingService, type BillingService } from ".
 import { GoogleTokenAuthService, type AuthService } from "./services/auth";
 import { createJobRepository, type JobRepository } from "./services/job-repo";
 import { BullMqJobQueueService, type JobQueueService } from "./services/queue";
-import { S3ObjectStorageService, type ObjectStorageService } from "./services/storage";
+import { S3ObjectStorageService, TMP_PREFIX, type ObjectStorageService } from "./services/storage";
 
 export type ApiDependencies = {
   config: ApiConfig;
@@ -32,6 +32,29 @@ export type ApiRuntime = {
 };
 
 const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
+const METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
+
+type ReadyCheck = {
+  status: "ok" | "error";
+  message?: string;
+};
+
+function formatReadinessCheck(result: PromiseSettledResult<unknown>): ReadyCheck {
+  if (result.status === "fulfilled") {
+    return { status: "ok" };
+  }
+
+  const reason = result.reason;
+  if (reason instanceof Error) {
+    return { status: "error", message: reason.message };
+  }
+
+  return { status: "error", message: String(reason) };
+}
+
+function escapeMetricLabelValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+}
 
 function formatErrorForLog(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
@@ -96,12 +119,94 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   }
 
   const app = express();
+  const requestMetrics = new Map<string, { count: number; durationSecondsTotal: number }>();
+  const metricsStartMs = Date.now();
+  let inflightRequests = 0;
+
+  const observeRequest = (method: string, path: string, statusCode: number, durationSeconds: number): void => {
+    const key = `${method}|${path}|${statusCode}`;
+    const existing = requestMetrics.get(key) || { count: 0, durationSecondsTotal: 0 };
+    existing.count += 1;
+    existing.durationSecondsTotal += durationSeconds;
+    requestMetrics.set(key, existing);
+  };
+
+  const renderMetrics = (): string => {
+    const lines: string[] = [];
+    lines.push("# HELP image_ops_up Service liveness state.");
+    lines.push("# TYPE image_ops_up gauge");
+    lines.push("image_ops_up 1");
+    lines.push("# HELP image_ops_uptime_seconds Service uptime in seconds.");
+    lines.push("# TYPE image_ops_uptime_seconds gauge");
+    lines.push(`image_ops_uptime_seconds ${((Date.now() - metricsStartMs) / 1000).toFixed(3)}`);
+    lines.push("# HELP image_ops_http_in_flight_requests Current in-flight HTTP requests.");
+    lines.push("# TYPE image_ops_http_in_flight_requests gauge");
+    lines.push(`image_ops_http_in_flight_requests ${inflightRequests}`);
+    lines.push("# HELP image_ops_http_requests_total Total HTTP requests handled.");
+    lines.push("# TYPE image_ops_http_requests_total counter");
+    lines.push("# HELP image_ops_http_request_duration_seconds_sum Total request duration in seconds.");
+    lines.push("# TYPE image_ops_http_request_duration_seconds_sum counter");
+
+    const sorted = [...requestMetrics.entries()].sort((left, right) => left[0].localeCompare(right[0]));
+    for (const [key, value] of sorted) {
+      const [method, path, statusCode] = key.split("|");
+      const labels = `method="${escapeMetricLabelValue(method)}",path="${escapeMetricLabelValue(path)}",status_code="${escapeMetricLabelValue(statusCode)}"`;
+      lines.push(`image_ops_http_requests_total{${labels}} ${value.count}`);
+      lines.push(`image_ops_http_request_duration_seconds_sum{${labels}} ${value.durationSecondsTotal.toFixed(6)}`);
+    }
+
+    return `${lines.join("\n")}\n`;
+  };
+
   app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
+  app.use((req, res, next) => {
+    const startedAtNs = process.hrtime.bigint();
+    inflightRequests += 1;
+
+    res.on("finish", () => {
+      inflightRequests = Math.max(0, inflightRequests - 1);
+      if (req.path === "/metrics") {
+        return;
+      }
+
+      const routePath = typeof (req.route as { path?: string } | undefined)?.path === "string"
+        ? String((req.route as { path?: string }).path)
+        : req.path;
+      const durationSeconds = Number(process.hrtime.bigint() - startedAtNs) / 1_000_000_000;
+      observeRequest(req.method, routePath, res.statusCode, durationSeconds);
+    });
+
+    next();
+  });
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get("/ready", async (_req, res) => {
+    const [storageResult, jobRepoResult] = await Promise.allSettled([
+      deps.storage.headObject(`${TMP_PREFIX}__ready_probe__`),
+      deps.jobRepo.getQuotaWindow("__ready_probe_subject__")
+    ]);
+
+    const checks = {
+      storage: formatReadinessCheck(storageResult),
+      jobRepo: formatReadinessCheck(jobRepoResult)
+    };
+    const isReady = checks.storage.status === "ok" && checks.jobRepo.status === "ok";
+
+    res.status(isReady ? 200 : 503).json({
+      status: isReady ? "ready" : "degraded",
+      checks,
+      timestamp: deps.now().toISOString()
+    });
+  });
+
+  app.get("/metrics", (_req, res) => {
+    res.setHeader("Content-Type", METRICS_CONTENT_TYPE);
+    res.send(renderMetrics());
   });
 
   if (deps.config.apiAuthRequired) {

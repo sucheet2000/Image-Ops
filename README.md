@@ -44,7 +44,13 @@ Key runtime groups:
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
 - Storage: `S3_REGION`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_FORCE_PATH_STYLE`
-- Worker/background remove: `WORKER_CONCURRENCY`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+- Worker/background remove: `WORKER_CONCURRENCY`, `WORKER_HEARTBEAT_INTERVAL_MS`, `BG_REMOVE_API_URL`, `BG_REMOVE_TIMEOUT_MS`, `BG_REMOVE_MAX_RETRIES`, `BG_REMOVE_BACKOFF_BASE_MS`, `BG_REMOVE_BACKOFF_MAX_MS`
+
+## Observability
+- `GET /health`: basic liveness probe.
+- `GET /ready`: readiness probe that verifies storage and metadata repository connectivity.
+- `GET /metrics`: Prometheus-style metrics for uptime, in-flight requests, request counts, and duration totals.
+- Worker emits `worker.ready`, `worker.completed`, `worker.failed`, and periodic `worker.heartbeat` structured log events.
 
 ## Auth Session Strategy
 - `POST /api/auth/google` issues a short-lived bearer access token plus an HttpOnly refresh cookie.

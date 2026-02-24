@@ -19,7 +19,8 @@ const envSchema = z.object({
   BG_REMOVE_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
   BG_REMOVE_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
   BG_REMOVE_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(250),
-  BG_REMOVE_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(1000)
+  BG_REMOVE_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(1000),
+  WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(30000)
 });
 
 export type WorkerConfig = {
@@ -39,6 +40,7 @@ export type WorkerConfig = {
   bgRemoveMaxRetries: number;
   bgRemoveBackoffBaseMs: number;
   bgRemoveBackoffMaxMs: number;
+  workerHeartbeatIntervalMs: number;
 };
 
 /**
@@ -66,6 +68,7 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     bgRemoveTimeoutMs: parsed.BG_REMOVE_TIMEOUT_MS,
     bgRemoveMaxRetries: parsed.BG_REMOVE_MAX_RETRIES,
     bgRemoveBackoffBaseMs: parsed.BG_REMOVE_BACKOFF_BASE_MS,
-    bgRemoveBackoffMaxMs: parsed.BG_REMOVE_BACKOFF_MAX_MS
+    bgRemoveBackoffMaxMs: parsed.BG_REMOVE_BACKOFF_MAX_MS,
+    workerHeartbeatIntervalMs: parsed.WORKER_HEARTBEAT_INTERVAL_MS
   };
 }
