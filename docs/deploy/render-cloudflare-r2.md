@@ -51,9 +51,15 @@ For all values marked `sync: false` in `render.yaml`, set the real values in Ren
 - `BILLING_PORTAL_BASE_URL=https://app.example.com/billing/manage`
 - `S3_BUCKET=<R2_BUCKET>`
 - `S3_ENDPOINT=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`
-- `S3_PUBLIC_ENDPOINT=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com`
+- `S3_PUBLIC_ENDPOINT=https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` (or `https://files.example.com`)
 - `S3_ACCESS_KEY=<R2_ACCESS_KEY_ID>`
 - `S3_SECRET_KEY=<R2_SECRET_ACCESS_KEY>`
+
+`S3_PUBLIC_ENDPOINT` controls the host/domain used in presigned upload/download URLs. The API signs with this endpoint for presign generation (see `/Users/sucheetboppana/Documents/New project/services/api/src/services/storage.ts` constructor and `getSignedUrl` calls). Set it to:
+- `https://files.example.com` if you want presigned URLs on your custom files domain.
+- `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` if you want raw R2 S3 endpoint URLs.
+
+If you choose a custom files domain, configure that domain in section 5 so it matches `S3_PUBLIC_ENDPOINT`.
 
 ### Worker service (`image-ops-worker`)
 
@@ -63,15 +69,23 @@ For all values marked `sync: false` in `render.yaml`, set the real values in Ren
 - `S3_SECRET_KEY=<R2_SECRET_ACCESS_KEY>`
 - `BG_REMOVE_API_URL=<your background removal provider endpoint>`
 
+Recommended provider timing defaults in `render.yaml`:
+- `BG_REMOVE_TIMEOUT_MS=15000`
+- `BG_REMOVE_MAX_RETRIES=1`
+- `BG_REMOVE_BACKOFF_BASE_MS=500`
+
+Worst-case elapsed time per request is about 30.5 seconds (`15000 + 500 + 15000`), which better matches typical background-removal provider SLA windows than a 5-second timeout.
+
 ### Web service (`image-ops-web`)
 
 - `NEXT_PUBLIC_API_BASE_URL=https://api.example.com`
 
-## 5. Add Custom Domains in Render
+## 5. Add Custom Domains (Render + R2)
 
 1. Add `app.example.com` to `image-ops-web`.
 2. Add `api.example.com` to `image-ops-api`.
 3. Copy the DNS targets Render provides for each service.
+4. If you use `S3_PUBLIC_ENDPOINT=https://files.example.com`, configure `files.example.com` as an R2 custom domain for your bucket in Cloudflare R2.
 
 ## 6. Configure Cloudflare DNS
 
@@ -112,6 +126,7 @@ npm run smoke:staging
 
 ## 8. Post-deploy Hardening
 
-- Rotate generated secrets (`AUTH_TOKEN_SECRET`, billing secrets) on a schedule.
+- Rotating `AUTH_TOKEN_SECRET` immediately invalidates all active access/refresh sessions. Treat this as scheduled maintenance with user communication, or implement a multi-key JWT/session rotation strategy before frequent rotation.
+- `BILLING_PROVIDER_SECRET` and `BILLING_WEBHOOK_SECRET` can be rotated more freely; they do not invalidate active auth sessions.
 - Switch `BILLING_PROVIDER=stripe` only after setting Stripe env vars.
 - Add uptime checks for `/ready` and alerting on `/metrics`.
