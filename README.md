@@ -162,6 +162,7 @@ npm run infra:down:integration
 CI note:
 - Pull requests run an `integration` job in `.github/workflows/ci.yml` that brings up Redis + MinIO, starts API + worker, and executes `test:integration:api`.
 - Pushes to `master` also run the same integration gate before release promotion.
+- Production promotion can be gated through manual `Release Preflight` workflow (`.github/workflows/release-preflight.yml`) which executes the same smoke contract against a target API URL.
 
 ## Staging Smoke Check
 After deploying API + worker to staging, run:
