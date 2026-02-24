@@ -76,6 +76,19 @@ function buffersEqualByteByByte(left: Buffer, right: Buffer): boolean {
   return true;
 }
 
+function isStorageNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const statusCode = (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode;
+  if (error.name === "NotFound" || statusCode === 404) {
+    return true;
+  }
+
+  return /not found/i.test(error.message);
+}
+
 export function registerUploadsRoutes(
   router: Router,
   deps: { config: ApiConfig; storage: ObjectStorageService; jobRepo: JobRepository; now: () => Date }
@@ -138,7 +151,8 @@ export function registerUploadsRoutes(
 
     const payload = parsed.data;
     const safeSubjectId = toSafeSubjectId(payload.subjectId);
-    if (!payload.objectKey.startsWith(`tmp/${safeSubjectId}/input/`)) {
+    const subjectUploadPrefix = `tmp/${safeSubjectId}/input/`;
+    if (!payload.objectKey.startsWith(subjectUploadPrefix)) {
       res.status(400).json({ error: "INVALID_OBJECT_KEY", message: "Object key does not match subject upload prefix." });
       return;
     }
@@ -149,7 +163,16 @@ export function registerUploadsRoutes(
       return;
     }
 
-    const object = await deps.storage.getObjectBuffer(payload.objectKey);
+    let object: { bytes: Buffer; contentType: string };
+    try {
+      object = await deps.storage.getObjectBuffer(payload.objectKey);
+    } catch (error) {
+      if (isStorageNotFoundError(error)) {
+        res.status(404).json({ error: "INPUT_OBJECT_NOT_FOUND", message: "Input object key is missing or expired." });
+        return;
+      }
+      throw error;
+    }
     if (object.bytes.length > deps.config.maxUploadBytes) {
       res.status(413).json({
         error: "FILE_TOO_LARGE",
@@ -170,7 +193,11 @@ export function registerUploadsRoutes(
     let deduplicated = false;
 
     for (const candidate of candidates) {
-      if (candidate.objectKey === payload.objectKey || candidate.sizeBytes !== object.bytes.length) {
+      if (
+        !candidate.objectKey.startsWith(subjectUploadPrefix)
+        || candidate.objectKey === payload.objectKey
+        || candidate.sizeBytes !== object.bytes.length
+      ) {
         continue;
       }
 
