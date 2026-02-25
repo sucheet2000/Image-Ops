@@ -661,7 +661,12 @@ return redis.call("GET", key)
   }
 
   async listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]> {
-    const rows = await this.redis.lrange(DELETION_AUDIT_LIST_KEY, Math.max(-limit, -1000), -1);
+    if (limit <= 0) {
+      return [];
+    }
+
+    const n = Math.min(limit, 1000);
+    const rows = await this.redis.lrange(DELETION_AUDIT_LIST_KEY, -n, -1);
     return rows.map((value) => JSON.parse(value) as DeletionAuditRecord);
   }
 
@@ -1139,7 +1144,7 @@ export class InMemoryJobRepository implements JobRepository {
   private readonly jobs = new Map<string, ImageJobRecord>();
   private readonly checkouts = new Map<string, BillingCheckoutSession>();
   private readonly billingEvents = new Map<string, BillingWebhookEvent>();
-  private readonly idempotency = new Map<string, CleanupIdempotencyRecord>();
+  private readonly idempotency = new Map<string, { record: CleanupIdempotencyRecord; expiresAtMs: number }>();
   private readonly deletionAudit: DeletionAuditRecord[] = [];
 
   async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
@@ -1327,11 +1332,24 @@ export class InMemoryJobRepository implements JobRepository {
   }
 
   async getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null> {
-    return this.idempotency.get(key) || null;
+    const entry = this.idempotency.get(key);
+    if (!entry) {
+      return null;
+    }
+
+    if (entry.expiresAtMs <= Date.now()) {
+      this.idempotency.delete(key);
+      return null;
+    }
+
+    return entry.record;
   }
 
-  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord): Promise<void> {
-    this.idempotency.set(key, record);
+  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void> {
+    this.idempotency.set(key, {
+      record,
+      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000
+    });
   }
 
   async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
@@ -1339,7 +1357,11 @@ export class InMemoryJobRepository implements JobRepository {
   }
 
   async listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]> {
-    return this.deletionAudit.slice(-limit);
+    if (limit <= 0) {
+      return [];
+    }
+    const n = Math.min(limit, 1000);
+    return this.deletionAudit.slice(-n);
   }
 
   async close(): Promise<void> {}
