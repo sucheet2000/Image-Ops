@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { AppError, ValidationError } from "@imageops/core";
 import IORedis from "ioredis";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
@@ -42,6 +42,8 @@ export type ApiRuntime = {
 
 const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
 const METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
+const REQUEST_ID_MAX_LENGTH = 128;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]+$/;
 
 type ReadyCheck = {
   status: "ok" | "error";
@@ -293,13 +295,21 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   };
 
   app.use((req, res, next) => {
-    const incomingRequestId = String(req.header("x-request-id") || "").trim();
-    const requestId = incomingRequestId.length > 0 ? incomingRequestId : randomUUID();
+    const incomingRequestId = req.header("x-request-id")?.trim();
+    const requestId = incomingRequestId
+      && incomingRequestId.length <= REQUEST_ID_MAX_LENGTH
+      && REQUEST_ID_PATTERN.test(incomingRequestId)
+      ? incomingRequestId
+      : randomUUID();
     res.setHeader("X-Request-ID", requestId);
     next();
   });
 
-  app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
+  app.use(cors({
+    origin: deps.config.webOrigin,
+    credentials: true,
+    exposedHeaders: ["X-Request-ID"]
+  }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 
@@ -421,7 +431,17 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     const providedToken = authorization?.startsWith("Bearer ")
       ? authorization.slice("Bearer ".length).trim()
       : undefined;
-    if (!metricsToken || !providedToken || providedToken !== metricsToken) {
+
+    const providedTokenBuffer = providedToken ? Buffer.from(providedToken, "utf8") : null;
+    const metricsTokenBuffer = metricsToken ? Buffer.from(metricsToken, "utf8") : null;
+    const isAuthorized = Boolean(
+      providedTokenBuffer
+      && metricsTokenBuffer
+      && providedTokenBuffer.length === metricsTokenBuffer.length
+      && timingSafeEqual(providedTokenBuffer, metricsTokenBuffer)
+    );
+    if (!isAuthorized) {
+      res.set("WWW-Authenticate", 'Bearer realm="metrics", error="invalid_token"');
       res.status(401).json({
         error: {
           code: "UNAUTHORIZED",

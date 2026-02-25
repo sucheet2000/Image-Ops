@@ -65,36 +65,41 @@ describe("observability routes", () => {
     const config = createTestConfig();
     const services = createFakeServices();
     const server = await startApiTestServer({ config, ...services });
-    const previousMetricsToken = process.env.METRICS_TOKEN;
-    process.env.METRICS_TOKEN = "test-metrics-token";
 
     try {
-      await fetch(`${server.baseUrl}/health`);
-      await fetch(`${server.baseUrl}/ready`);
+      const previousMetricsToken = process.env.METRICS_TOKEN;
+      try {
+        process.env.METRICS_TOKEN = "test-metrics-token";
 
-      const unauthorizedResponse = await fetch(`${server.baseUrl}/metrics`);
-      expect(unauthorizedResponse.status).toBe(401);
+        await fetch(`${server.baseUrl}/health`);
+        await fetch(`${server.baseUrl}/ready`);
 
-      const response = await fetch(`${server.baseUrl}/metrics`, {
-        headers: {
-          authorization: `Bearer ${process.env.METRICS_TOKEN}`
+        const unauthorizedResponse = await fetch(`${server.baseUrl}/metrics`);
+        expect(unauthorizedResponse.status).toBe(401);
+        expect(unauthorizedResponse.headers.get("www-authenticate")).toBe('Bearer realm="metrics", error="invalid_token"');
+
+        const response = await fetch(`${server.baseUrl}/metrics`, {
+          headers: {
+            authorization: `Bearer ${process.env.METRICS_TOKEN}`
+          }
+        });
+        expect(response.status).toBe(200);
+        expect(response.headers.get("content-type")).toContain("text/plain");
+
+        const metrics = await response.text();
+        expect(metrics).toContain("image_ops_up 1");
+        expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/health\",status_code=\"200\"} 1");
+        expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/ready\",status_code=\"200\"} 1");
+        expect(metrics).toMatch(/image_ops_http_in_flight_requests [1-9]\d*/);
+      } finally {
+        if (previousMetricsToken === undefined) {
+          delete process.env.METRICS_TOKEN;
+        } else {
+          process.env.METRICS_TOKEN = previousMetricsToken;
         }
-      });
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain("text/plain");
-
-      const metrics = await response.text();
-      expect(metrics).toContain("image_ops_up 1");
-      expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/health\",status_code=\"200\"} 1");
-      expect(metrics).toContain("image_ops_http_requests_total{method=\"GET\",path=\"/ready\",status_code=\"200\"} 1");
-      expect(metrics).toMatch(/image_ops_http_in_flight_requests [1-9]\d*/);
+      }
     } finally {
       await server.close();
-      if (previousMetricsToken === undefined) {
-        delete process.env.METRICS_TOKEN;
-      } else {
-        process.env.METRICS_TOKEN = previousMetricsToken;
-      }
     }
   });
 
