@@ -172,12 +172,10 @@ export function registerBillingRoutes(
         eventInput.checkoutSessionId
       );
       if (!checkoutSession) {
-        res
-          .status(404)
-          .json({
-            error: 'CHECKOUT_SESSION_NOT_FOUND',
-            message: 'Checkout session does not exist.',
-          });
+        res.status(404).json({
+          error: 'CHECKOUT_SESSION_NOT_FOUND',
+          message: 'Checkout session does not exist.',
+        });
         return;
       }
 
@@ -185,12 +183,10 @@ export function registerBillingRoutes(
         checkoutSession.subjectId !== toSafeSubjectId(eventInput.subjectId) ||
         checkoutSession.plan !== eventInput.plan
       ) {
-        res
-          .status(409)
-          .json({
-            error: 'CHECKOUT_SUBJECT_MISMATCH',
-            message: 'Webhook payload does not match checkout session.',
-          });
+        res.status(409).json({
+          error: 'CHECKOUT_SUBJECT_MISMATCH',
+          message: 'Webhook payload does not match checkout session.',
+        });
         return;
       }
 

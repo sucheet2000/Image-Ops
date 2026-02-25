@@ -1,49 +1,49 @@
-import "./styles.css";
-import Link from "next/link";
-import type { Metadata } from "next";
-import { Cormorant_Garamond, Josefin_Sans, Playfair_Display } from "next/font/google";
-import MagneticCursor from "../components/cursor/MagneticCursor";
-import SmoothScrollProvider from "../components/layout/SmoothScrollProvider";
-import { EditorialChrome } from "./components/editorial-chrome";
-import { AuthProvider } from "./components/providers/auth-provider";
-import { getBaseUrl } from "./lib/seo-data";
+import './styles.css';
+import Link from 'next/link';
+import type { Metadata } from 'next';
+import { Cormorant_Garamond, Josefin_Sans, Playfair_Display } from 'next/font/google';
+import MagneticCursor from '../components/cursor/MagneticCursor';
+import SmoothScrollProvider from '../components/layout/SmoothScrollProvider';
+import { EditorialChrome } from './components/editorial-chrome';
+import { AuthProvider } from './components/providers/auth-provider';
+import { getBaseUrl } from './lib/seo-data';
 
 const baseUrl = getBaseUrl();
 
 const displayFont = Playfair_Display({
-  subsets: ["latin"],
-  weight: ["700", "900"],
-  style: ["normal", "italic"],
-  variable: "--font-display"
+  subsets: ['latin'],
+  weight: ['700', '900'],
+  style: ['normal', 'italic'],
+  variable: '--font-display',
 });
 
 const bodyFont = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["300", "400"],
-  style: ["normal", "italic"],
-  variable: "--font-body"
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  style: ['normal', 'italic'],
+  variable: '--font-body',
 });
 
 const uiFont = Josefin_Sans({
-  subsets: ["latin"],
-  weight: ["300", "400"],
-  variable: "--font-ui"
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  variable: '--font-ui',
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
-  title: "Image Ops | High-craft image processing for marketplace teams",
+  title: 'Image Ops | High-craft image processing for marketplace teams',
   description:
-    "Editorial-grade image tools for resize, compression, conversion, and background cleanup workflows.",
+    'Editorial-grade image tools for resize, compression, conversion, and background cleanup workflows.',
   alternates: {
-    canonical: "/"
+    canonical: '/',
   },
   openGraph: {
-    title: "Image Ops",
-    description: "Marketplace image optimization platform",
-    type: "website",
-    url: baseUrl
-  }
+    title: 'Image Ops',
+    description: 'Marketplace image optimization platform',
+    type: 'website',
+    url: baseUrl,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

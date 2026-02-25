@@ -1,5 +1,5 @@
-import { mimeToFormat, type ResizeOptions } from "@imageops/core";
-import sharp from "sharp";
+import { mimeToFormat, type ResizeOptions } from '@imageops/core';
+import sharp from 'sharp';
 
 /**
  * Resize and re-encode an image buffer based on the input MIME type and resize options.
@@ -15,27 +15,29 @@ export async function runResize(input: {
   contentType: string;
   options: ResizeOptions;
 }): Promise<{ bytes: Buffer; contentType: string }> {
-  const format = mimeToFormat(input.contentType) || "jpeg";
+  const format = mimeToFormat(input.contentType) || 'jpeg';
   const hasDimensions = input.options.width !== undefined || input.options.height !== undefined;
   const transformer = hasDimensions
-    ? sharp(input.bytes).rotate().resize({
-      width: input.options.width,
-      height: input.options.height,
-      fit: input.options.fit || "inside",
-      withoutEnlargement: true
-    })
+    ? sharp(input.bytes)
+        .rotate()
+        .resize({
+          width: input.options.width,
+          height: input.options.height,
+          fit: input.options.fit || 'inside',
+          withoutEnlargement: true,
+        })
     : sharp(input.bytes).rotate();
 
   let output: Buffer;
-  if (format === "png") {
+  if (format === 'png') {
     output = await transformer.png().toBuffer();
-    return { bytes: output, contentType: "image/png" };
+    return { bytes: output, contentType: 'image/png' };
   }
-  if (format === "webp") {
+  if (format === 'webp') {
     output = await transformer.webp().toBuffer();
-    return { bytes: output, contentType: "image/webp" };
+    return { bytes: output, contentType: 'image/webp' };
   }
 
   output = await transformer.jpeg().toBuffer();
-  return { bytes: output, contentType: "image/jpeg" };
+  return { bytes: output, contentType: 'image/jpeg' };
 }

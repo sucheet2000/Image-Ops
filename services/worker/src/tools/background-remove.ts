@@ -1,6 +1,6 @@
-import { formatToMime, type BackgroundRemoveOptions } from "@imageops/core";
-import sharp from "sharp";
-import type { BackgroundRemoveProvider } from "../providers/bg-remove-provider";
+import { formatToMime, type BackgroundRemoveOptions } from '@imageops/core';
+import sharp from 'sharp';
+import type { BackgroundRemoveProvider } from '../providers/bg-remove-provider';
 
 /**
  * Remove the background from an image via the provided background-remove provider and encode the result in the requested output format.
@@ -20,27 +20,27 @@ export async function runBackgroundRemove(input: {
 }): Promise<{ bytes: Buffer; contentType: string }> {
   const removed = await input.provider.removeBackground({
     bytes: input.bytes,
-    contentType: input.contentType
+    contentType: input.contentType,
   });
 
-  const outputFormat = input.options.outputFormat || "png";
+  const outputFormat = input.options.outputFormat || 'png';
 
-  if (outputFormat === "png") {
+  if (outputFormat === 'png') {
     return {
       bytes: await sharp(removed.bytes).png().toBuffer(),
-      contentType: formatToMime("png")
+      contentType: formatToMime('png'),
     };
   }
 
-  if (outputFormat === "webp") {
+  if (outputFormat === 'webp') {
     return {
       bytes: await sharp(removed.bytes).webp({ quality: 90 }).toBuffer(),
-      contentType: formatToMime("webp")
+      contentType: formatToMime('webp'),
     };
   }
 
   return {
     bytes: await sharp(removed.bytes).jpeg({ quality: 90 }).toBuffer(),
-    contentType: formatToMime("jpeg")
+    contentType: formatToMime('jpeg'),
   };
 }

@@ -1,4 +1,5 @@
 # Image-Ops — Technical Remediation
+
 > Generated from audit: February 2026  
 > Drop this file in your repo at `docs/REMEDIATION.md` and tell Codex to follow it.
 
@@ -12,6 +13,7 @@ You are working on a production monorepo called **Image-Ops**.
 - **Structure:** `apps/web` (Next.js), `services/api`, `services/worker`, `services/mcp-gateway`, `packages/core`, `infra/sql`
 
 **Rules:**
+
 - Do NOT change any business logic
 - Do NOT touch the frontend design (colours, fonts, animations already implemented)
 - Fix ONLY the issues listed below, in the exact order given
@@ -40,31 +42,45 @@ export class AppError extends Error {
 }
 
 export class QuotaExceededError extends AppError {
-  constructor() { super('QUOTA_EXCEEDED', 429, 'Image quota exceeded for this period'); }
+  constructor() {
+    super('QUOTA_EXCEEDED', 429, 'Image quota exceeded for this period');
+  }
 }
 
 export class AuthError extends AppError {
-  constructor(msg = 'Unauthorized') { super('UNAUTHORIZED', 401, msg); }
+  constructor(msg = 'Unauthorized') {
+    super('UNAUTHORIZED', 401, msg);
+  }
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string) { super('NOT_FOUND', 404, `${resource} not found`); }
+  constructor(resource: string) {
+    super('NOT_FOUND', 404, `${resource} not found`);
+  }
 }
 
 export class ValidationError extends AppError {
-  constructor(msg: string) { super('VALIDATION_ERROR', 400, msg); }
+  constructor(msg: string) {
+    super('VALIDATION_ERROR', 400, msg);
+  }
 }
 
 export class BillingError extends AppError {
-  constructor(msg: string) { super('BILLING_ERROR', 402, msg); }
+  constructor(msg: string) {
+    super('BILLING_ERROR', 402, msg);
+  }
 }
 
 export class ConflictError extends AppError {
-  constructor(msg: string) { super('CONFLICT', 409, msg); }
+  constructor(msg: string) {
+    super('CONFLICT', 409, msg);
+  }
 }
 
 export class RateLimitError extends AppError {
-  constructor() { super('RATE_LIMITED', 429, 'Too many requests. Please wait and try again.'); }
+  constructor() {
+    super('RATE_LIMITED', 429, 'Too many requests. Please wait and try again.');
+  }
 }
 ```
 
@@ -92,13 +108,13 @@ import { AppError } from '@imageops/core';
 app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof AppError) {
     return res.status(err.status).json({
-      error: { code: err.code, message: err.message }
+      error: { code: err.code, message: err.message },
     });
   }
   // Unknown error — never expose internals
   logger.error({ err }, 'Unhandled error');
   return res.status(500).json({
-    error: { code: 'INTERNAL', message: 'An unexpected error occurred' }
+    error: { code: 'INTERNAL', message: 'An unexpected error occurred' },
   });
 });
 ```
@@ -119,7 +135,9 @@ app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
 function validateEnv() {
   const secret = process.env.AUTH_TOKEN_SECRET;
   if (!secret || Buffer.byteLength(secret, 'utf8') < 32) {
-    console.error('FATAL: AUTH_TOKEN_SECRET must be at least 32 bytes. Generate one with: openssl rand -base64 32');
+    console.error(
+      'FATAL: AUTH_TOKEN_SECRET must be at least 32 bytes. Generate one with: openssl rand -base64 32'
+    );
     process.exit(1);
   }
 
@@ -160,7 +178,7 @@ await redis.set(refreshTokenKey, tokenData);
 await redis.expire(refreshTokenKey, AUTH_REFRESH_TTL_SECONDS);
 ```
 
-   On refresh token **read**, check TTL. If TTL returns -1 (persisted with no expiry), delete the key and return 401:
+On refresh token **read**, check TTL. If TTL returns -1 (persisted with no expiry), delete the key and return 401:
 
 ```typescript
 const ttl = await redis.ttl(refreshTokenKey);
@@ -182,9 +200,10 @@ const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10,
   store: new RedisStore({ sendCommand: (...args) => redis.sendCommand(args) }),
-  handler: (req, res) => res.status(429).json({
-    error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please wait 15 minutes.' }
-  }),
+  handler: (req, res) =>
+    res.status(429).json({
+      error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please wait 15 minutes.' },
+    }),
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -202,9 +221,10 @@ const uploadLimiter = rateLimit({
   max: 30,
   keyGenerator: (req) => req.user?.id ?? req.ip, // use user ID not IP
   store: new RedisStore({ sendCommand: (...args) => redis.sendCommand(args) }),
-  handler: (req, res) => res.status(429).json({
-    error: { code: 'RATE_LIMITED', message: 'Upload rate limit exceeded. Please wait.' }
-  }),
+  handler: (req, res) =>
+    res.status(429).json({
+      error: { code: 'RATE_LIMITED', message: 'Upload rate limit exceeded. Please wait.' },
+    }),
 });
 
 app.post('/api/uploads/init', authenticate, uploadLimiter, uploadInitHandler);
@@ -242,13 +262,15 @@ let event: Stripe.Event;
 try {
   // req.body must be a Buffer here — not a parsed object
   event = stripe.webhooks.constructEvent(
-    req.body,           // Buffer
+    req.body, // Buffer
     sig,
     process.env.STRIPE_WEBHOOK_SECRET!
   );
 } catch (err) {
   logger.warn({ err }, 'Webhook signature verification failed');
-  return res.status(400).json({ error: { code: 'INVALID_SIGNATURE', message: 'Webhook signature invalid' } });
+  return res
+    .status(400)
+    .json({ error: { code: 'INVALID_SIGNATURE', message: 'Webhook signature invalid' } });
 }
 ```
 
@@ -337,7 +359,7 @@ export async function checkAndIncrementQuota(
 ): Promise<boolean> {
   const windowKey = Math.floor(Date.now() / (windowSeconds * 1000));
   const key = `quota:${userId}:${windowKey}`;
-  
+
   const result = await redis.evalsha(quotaScriptSha, 1, key, limit, windowSeconds);
   return result !== -1; // true = allowed, false = quota exceeded
 }
@@ -374,9 +396,9 @@ const defaultJobOptions = {
   removeOnFail: { count: 500 },
 };
 
-const fastQueue  = new Queue('image-ops-fast',  { connection, defaultJobOptions });
-const slowQueue  = new Queue('image-ops-slow',  { connection, defaultJobOptions });
-const bulkQueue  = new Queue('image-ops-bulk',  { connection, defaultJobOptions });
+const fastQueue = new Queue('image-ops-fast', { connection, defaultJobOptions });
+const slowQueue = new Queue('image-ops-slow', { connection, defaultJobOptions });
+const bulkQueue = new Queue('image-ops-bulk', { connection, defaultJobOptions });
 
 // Tools routed to each queue:
 // image-ops-fast:  compress, resize, convert, watermark
@@ -394,15 +416,18 @@ const bulkWorker = new Worker('image-ops-bulk', processor, { connection, concurr
 3. Add failed event listeners on all three workers:
 
 ```typescript
-[fastWorker, slowWorker, bulkWorker].forEach(worker => {
+[fastWorker, slowWorker, bulkWorker].forEach((worker) => {
   worker.on('failed', (job, err) => {
-    logger.error({
-      jobId: job?.id,
-      tool: job?.data?.toolId,
-      userId: job?.data?.userId,
-      attempts: job?.attemptsMade,
-      err,
-    }, 'Job failed permanently after all retries');
+    logger.error(
+      {
+        jobId: job?.id,
+        tool: job?.data?.toolId,
+        userId: job?.data?.userId,
+        attempts: job?.attemptsMade,
+        err,
+      },
+      'Job failed permanently after all retries'
+    );
   });
 });
 ```
@@ -456,6 +481,7 @@ if (heartbeatKeys.length === 0) {
 **Why:** No rollback scripts = unrecoverable database state on migration failure in production.
 
 1. Rename existing files to `.up.sql` suffix:
+
    ```
    001_initial_schema.sql         → 001_initial_schema.up.sql
    002_metadata_runtime_tables.sql → 002_metadata_runtime_tables.up.sql
@@ -467,28 +493,28 @@ if (heartbeatKeys.length === 0) {
 
 ```sql
 -- Jobs by user for dashboard queries
-CREATE INDEX IF NOT EXISTS idx_jobs_user_created 
+CREATE INDEX IF NOT EXISTS idx_jobs_user_created
   ON jobs(user_id, created_at DESC);
 
 -- Jobs by status for worker polling
-CREATE INDEX IF NOT EXISTS idx_jobs_status 
-  ON jobs(status) 
+CREATE INDEX IF NOT EXISTS idx_jobs_status
+  ON jobs(status)
   WHERE status IN ('pending', 'processing');
 
 -- Jobs by user + status for filtered dashboard views
-CREATE INDEX IF NOT EXISTS idx_jobs_user_status 
+CREATE INDEX IF NOT EXISTS idx_jobs_user_status
   ON jobs(user_id, status, created_at DESC);
 
 -- Billing sessions by subject for reconcile endpoint
-CREATE INDEX IF NOT EXISTS idx_billing_subject 
+CREATE INDEX IF NOT EXISTS idx_billing_subject
   ON checkout_sessions(subject_id, created_at DESC);
 
 -- Refresh sessions by token hash for auth refresh path
-CREATE INDEX IF NOT EXISTS idx_refresh_token 
+CREATE INDEX IF NOT EXISTS idx_refresh_token
   ON refresh_sessions(token_hash);
 
 -- Refresh sessions by user for logout (revoke all sessions)
-CREATE INDEX IF NOT EXISTS idx_refresh_user 
+CREATE INDEX IF NOT EXISTS idx_refresh_user
   ON refresh_sessions(user_id, created_at DESC);
 ```
 
@@ -502,6 +528,7 @@ CREATE INDEX IF NOT EXISTS idx_refresh_user
    - `npm run migrate:status` — lists applied and pending
 
 6. Add to `package.json` scripts:
+
    ```json
    "migrate:up": "tsx scripts/migrate.ts up",
    "migrate:down": "tsx scripts/migrate.ts down",
@@ -511,11 +538,13 @@ CREATE INDEX IF NOT EXISTS idx_refresh_user
 7. Document in `infra/README.md` — S3 lifecycle rule (add this to your bucket config):
    ```json
    {
-     "Rules": [{
-       "Filter": { "Prefix": "uploads/" },
-       "Expiration": { "Days": 1 },
-       "Status": "Enabled"
-     }]
+     "Rules": [
+       {
+         "Filter": { "Prefix": "uploads/" },
+         "Expiration": { "Days": 1 },
+         "Status": "Enabled"
+       }
+     ]
    }
    ```
    This enforces the privacy promise for abandoned uploads.
@@ -554,7 +583,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 }
 ```
 
-   Add `<AuthProvider>` inside `app/(app)/layout.tsx` wrapping all children. This fixes the page-refresh logout bug permanently.
+Add `<AuthProvider>` inside `app/(app)/layout.tsx` wrapping all children. This fixes the page-refresh logout bug permanently.
 
 2. Add security headers to `next.config.js`:
 
@@ -564,16 +593,18 @@ const nextConfig = {
   compress: true,
   productionBrowserSourceMaps: false,
   async headers() {
-    return [{
-      source: '/(.*)',
-      headers: [
-        { key: 'X-Frame-Options', value: 'DENY' },
-        { key: 'X-Content-Type-Options', value: 'nosniff' },
-        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-      ],
-    }];
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+        ],
+      },
+    ];
   },
 };
 ```
@@ -587,7 +618,7 @@ import piexif from 'piexifjs';
 
 async function stripExif(file: File): Promise<File> {
   if (file.type !== 'image/jpeg') return file; // only JPEG has EXIF
-  
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -629,10 +660,12 @@ async function fetchWithAuth(input: RequestInfo, init?: RequestInit): Promise<Re
   if (isRefreshing) {
     return new Promise((resolve) => {
       refreshQueue.push((newToken) => {
-        resolve(fetch(input, {
-          ...init,
-          headers: { ...init?.headers, Authorization: `Bearer ${newToken}` },
-        }));
+        resolve(
+          fetch(input, {
+            ...init,
+            headers: { ...init?.headers, Authorization: `Bearer ${newToken}` },
+          })
+        );
       });
     });
   }
@@ -641,7 +674,7 @@ async function fetchWithAuth(input: RequestInfo, init?: RequestInit): Promise<Re
   try {
     const { token: newToken } = await refreshToken();
     getAuthStore().setSession(newToken, getAuthStore().user!);
-    refreshQueue.forEach(cb => cb(newToken));
+    refreshQueue.forEach((cb) => cb(newToken));
     refreshQueue = [];
     return fetch(input, {
       ...init,
@@ -678,13 +711,19 @@ await sharp(inputBuffer)
 1. Add authentication to `GET /metrics`:
 
 ```typescript
-app.get('/metrics', (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (token !== process.env.METRICS_TOKEN) {
-    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid metrics token' } });
-  }
-  next();
-}, metricsHandler);
+app.get(
+  '/metrics',
+  (req, res, next) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token !== process.env.METRICS_TOKEN) {
+      return res
+        .status(401)
+        .json({ error: { code: 'UNAUTHORIZED', message: 'Invalid metrics token' } });
+    }
+    next();
+  },
+  metricsHandler
+);
 ```
 
 2. Install pino: `npm install pino pino-pretty` in all services.
@@ -696,9 +735,11 @@ import pino from 'pino';
 
 export const logger = pino({
   level: process.env.LOG_LEVEL ?? 'info',
-  ...(process.env.NODE_ENV !== 'production' ? {
-    transport: { target: 'pino-pretty', options: { colorize: true } }
-  } : {}),
+  ...(process.env.NODE_ENV !== 'production'
+    ? {
+        transport: { target: 'pino-pretty', options: { colorize: true } },
+      }
+    : {}),
 });
 
 export function childLogger(context: Record<string, unknown>) {
@@ -706,7 +747,7 @@ export function childLogger(context: Record<string, unknown>) {
 }
 ```
 
-   Replace all `console.log`, `console.error`, `console.warn` calls in all services with `logger.info`, `logger.error`, `logger.warn`.
+Replace all `console.log`, `console.error`, `console.warn` calls in all services with `logger.info`, `logger.error`, `logger.warn`.
 
 3. Add request ID middleware to `services/api` (register as first middleware):
 
@@ -714,7 +755,7 @@ export function childLogger(context: Record<string, unknown>) {
 import { randomUUID } from 'crypto';
 
 app.use((req, res, next) => {
-  const requestId = req.headers['x-request-id'] as string ?? randomUUID();
+  const requestId = (req.headers['x-request-id'] as string) ?? randomUUID();
   req.requestId = requestId;
   res.setHeader('X-Request-ID', requestId);
   req.log = logger.child({ requestId, path: req.path, method: req.method });
@@ -752,7 +793,7 @@ module.exports = {
 };
 ```
 
-   Install: `npm install -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint-plugin-security`
+Install: `npm install -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint-plugin-security`
 
 2. Add `.prettierrc` at monorepo root:
 
@@ -767,17 +808,20 @@ module.exports = {
 ```
 
 3. Add husky + lint-staged:
+
    ```bash
    npm install -D husky lint-staged
    npx husky init
    ```
-   
+
    `.husky/pre-commit`:
+
    ```sh
    npx lint-staged
    ```
-   
+
    Add to root `package.json`:
+
    ```json
    "lint-staged": {
      "**/*.{ts,tsx}": ["eslint --fix", "prettier --write"]
@@ -785,6 +829,7 @@ module.exports = {
    ```
 
 4. Add to `package.json` root scripts:
+
    ```json
    "lint": "eslint . --ext .ts,.tsx",
    "format": "prettier --write .",
@@ -793,6 +838,7 @@ module.exports = {
    ```
 
 5. Add to `.github/workflows/ci.yml` — before integration tests:
+
    ```yaml
    - name: Type Check
      run: npm run typecheck
@@ -807,19 +853,19 @@ module.exports = {
 ```typescript
 app.post('/api/billing/reconcile', authenticate, async (req, res) => {
   const idempotencyKey = req.headers['idempotency-key'] as string;
-  
+
   if (idempotencyKey) {
     const cacheKey = `reconcile:${idempotencyKey}`;
     const cached = await redis.get(cacheKey);
     if (cached) return res.json(JSON.parse(cached));
   }
-  
+
   const result = await reconcileBilling();
-  
+
   if (idempotencyKey) {
     await redis.set(`reconcile:${idempotencyKey}`, JSON.stringify(result), 'EX', 86400);
   }
-  
+
   return res.json(result);
 });
 ```
@@ -845,7 +891,9 @@ if (!MCP_GATEWAY_SECRET || Buffer.byteLength(MCP_GATEWAY_SECRET, 'utf8') < 32) {
 app.use((req, res, next) => {
   const token = req.headers['x-internal-token'];
   if (token !== MCP_GATEWAY_SECRET) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Invalid internal token' } });
+    return res
+      .status(403)
+      .json({ error: { code: 'FORBIDDEN', message: 'Invalid internal token' } });
   }
   next();
 });
@@ -859,7 +907,9 @@ import { TOOL_IDS } from '@imageops/core'; // the ToolId type values as array
 app.post('/execute', internalAuth, (req, res) => {
   const { toolId } = req.body;
   if (!TOOL_IDS.includes(toolId)) {
-    return res.status(403).json({ error: { code: 'FORBIDDEN', message: `Tool '${toolId}' is not permitted` } });
+    return res
+      .status(403)
+      .json({ error: { code: 'FORBIDDEN', message: `Tool '${toolId}' is not permitted` } });
   }
   // proceed with execution
 });
@@ -890,8 +940,9 @@ export const revalidate = 86400; // ISR — rebuild every 24h
 export async function generateStaticParams() {
   // Return all valid param combinations
   // e.g. for tools:
-  return ['background-remove', 'resize', 'compress', 'convert', 'watermark', 'bulk-export']
-    .map(tool => ({ tool }));
+  return ['background-remove', 'resize', 'compress', 'convert', 'watermark', 'bulk-export'].map(
+    (tool) => ({ tool })
+  );
 }
 ```
 
@@ -903,21 +954,21 @@ const nextConfig = {
   compress: true,
   productionBrowserSourceMaps: false,
   images: {
-    remotePatterns: [
-      { protocol: 'https', hostname: '*.cloudfront.net' },
-    ],
+    remotePatterns: [{ protocol: 'https', hostname: '*.cloudfront.net' }],
   },
   async headers() {
-    return [{
-      source: '/(.*)',
-      headers: [
-        { key: 'X-Frame-Options', value: 'DENY' },
-        { key: 'X-Content-Type-Options', value: 'nosniff' },
-        { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-        { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-        { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-      ],
-    }];
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+        ],
+      },
+    ];
   },
 };
 
@@ -938,7 +989,7 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 module.exports = withBundleAnalyzer(nextConfig);
 ```
 
-   Add to `apps/web/package.json`: `"analyze": "ANALYZE=true next build"`
+Add to `apps/web/package.json`: `"analyze": "ANALYZE=true next build"`
 
 **Commit message:** `fix(web): static generation for SEO pages, ISR, security headers, bundle analyser`
 
@@ -985,6 +1036,7 @@ npm run infra:down:deploy
 - [ ] Worker heartbeat: kill the worker process, wait 90s, call `GET /ready` on API → must get `503`
 
 **Final commit:**
+
 ```bash
 git add .
 git commit -m "fix: complete security, reliability, and code quality remediation — see docs/REMEDIATION.md"
@@ -995,21 +1047,21 @@ git push origin master
 
 ## Summary
 
-| Step | Area | Time | Priority |
-|------|------|------|----------|
-| 1 | Shared Error Hierarchy | 2h | Foundation |
-| 2 | Auth Hardening | 3h | 🔴 Critical |
-| 3 | Webhook Integrity | 1h | 🔴 Critical |
-| 4 | S3 Upload Security | 2h | 🔴 Critical |
-| 5 | Quota Race Condition | 2h | 🟠 High |
-| 6 | Worker Reliability | 4h | 🔴 Critical |
-| 7 | Database Migrations | 2h | 🔴 Critical |
-| 8 | Frontend Security | 3h | 🟠 High |
-| 9 | Observability | 2h | 🟡 Medium |
-| 10 | Code Quality | 2h | 🟡 Medium |
-| 11 | MCP Gateway | 1h | 🟠 High |
-| 12 | Next.js Performance | 2h | 🟡 Medium |
-| 13 | Final Validation | 2h | Required |
+| Step | Area                   | Time | Priority    |
+| ---- | ---------------------- | ---- | ----------- |
+| 1    | Shared Error Hierarchy | 2h   | Foundation  |
+| 2    | Auth Hardening         | 3h   | 🔴 Critical |
+| 3    | Webhook Integrity      | 1h   | 🔴 Critical |
+| 4    | S3 Upload Security     | 2h   | 🔴 Critical |
+| 5    | Quota Race Condition   | 2h   | 🟠 High     |
+| 6    | Worker Reliability     | 4h   | 🔴 Critical |
+| 7    | Database Migrations    | 2h   | 🔴 Critical |
+| 8    | Frontend Security      | 3h   | 🟠 High     |
+| 9    | Observability          | 2h   | 🟡 Medium   |
+| 10   | Code Quality           | 2h   | 🟡 Medium   |
+| 11   | MCP Gateway            | 1h   | 🟠 High     |
+| 12   | Next.js Performance    | 2h   | 🟡 Medium   |
+| 13   | Final Validation       | 2h   | Required    |
 
 **Total: ~28 hours of engineering work.**
 

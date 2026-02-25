@@ -1,21 +1,21 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import FadeReveal from "../../components/animation/FadeReveal";
-import WipeText from "../../components/animation/WipeText";
-import { TOOL_PAGES, getBaseUrl } from "../lib/seo-data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import FadeReveal from '../../components/animation/FadeReveal';
+import WipeText from '../../components/animation/WipeText';
+import { TOOL_PAGES, getBaseUrl } from '../lib/seo-data';
 
 export const metadata: Metadata = {
-  title: "Image Tools | Image Ops",
-  description: "Run resize, compress, convert, and background-remove workflows from one place.",
+  title: 'Image Tools | Image Ops',
+  description: 'Run resize, compress, convert, and background-remove workflows from one place.',
   alternates: {
-    canonical: `${getBaseUrl()}/tools`
-  }
+    canonical: `${getBaseUrl()}/tools`,
+  },
 };
 
 export default function ToolsIndexPage() {
   return (
     <>
-      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "62vh" }}>
+      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: '62vh' }}>
         <div className="section-inner">
           <FadeReveal as="span" className="section-label" delay={0}>
             Tool Catalog
@@ -24,7 +24,10 @@ export default function ToolsIndexPage() {
             Every workflow. <span className="accent-italic">One studio.</span>
           </WipeText>
           <FadeReveal delay={180}>
-            <p className="section-lead">Select a tool and execute a full upload, process, download, and cleanup loop in-browser.</p>
+            <p className="section-lead">
+              Select a tool and execute a full upload, process, download, and cleanup loop
+              in-browser.
+            </p>
           </FadeReveal>
         </div>
       </section>
@@ -34,11 +37,13 @@ export default function ToolsIndexPage() {
           <div className="tools-grid">
             {TOOL_PAGES.map((tool, index) => (
               <article key={tool.slug} className="tool-cell tool-card">
-                <span className={`badge ${tool.slug === "background-remove" ? "pro" : "free"} tool-cell-badge`}>
-                  {tool.slug === "background-remove" ? "pro" : "free"}
+                <span
+                  className={`badge ${tool.slug === 'background-remove' ? 'pro' : 'free'} tool-cell-badge`}
+                >
+                  {tool.slug === 'background-remove' ? 'pro' : 'free'}
                 </span>
                 <FadeReveal as="span" className="tool-cell-number" delay={index * 80}>
-                  {String(index + 1).padStart(2, "0")}
+                  {String(index + 1).padStart(2, '0')}
                 </FadeReveal>
                 <WipeText as="h2" className="tool-cell-title" delay={80 + index * 80}>
                   {tool.name}
@@ -64,10 +69,16 @@ export default function ToolsIndexPage() {
             Launch the unified <span className="accent-italic">upload studio.</span>
           </WipeText>
           <FadeReveal className="cta-actions" delay={180}>
-            <Link href="/upload" className="editorial-button accent editorial-button-large btn-primary">
+            <Link
+              href="/upload"
+              className="editorial-button accent editorial-button-large btn-primary"
+            >
               <span>Open Upload</span>
             </Link>
-            <Link href="/dashboard" className="editorial-button ghost editorial-button-large btn-cream">
+            <Link
+              href="/dashboard"
+              className="editorial-button ghost editorial-button-large btn-cream"
+            >
               <span>View Dashboard</span>
             </Link>
           </FadeReveal>

@@ -1,7 +1,7 @@
-import type { ImageJobRecord } from "@imageops/core";
-import type IORedis from "ioredis";
-import { describe, expect, it } from "vitest";
-import { RedisJobRepository } from "../src/services/job-repo";
+import type { ImageJobRecord } from '@imageops/core';
+import type IORedis from 'ioredis';
+import { describe, expect, it } from 'vitest';
+import { RedisJobRepository } from '../src/services/job-repo';
 
 class FakeRedisMulti {
   private readonly operations: Array<{ key: string; value: string }> = [];
@@ -13,7 +13,7 @@ class FakeRedisMulti {
     return this;
   }
 
-  async exec(): Promise<["OK"][] | null> {
+  async exec(): Promise<['OK'][] | null> {
     if (this.redis.execConflictCount > 0) {
       this.redis.execConflictCount -= 1;
       return null;
@@ -22,7 +22,7 @@ class FakeRedisMulti {
     for (const operation of this.operations) {
       this.redis.store.set(operation.key, operation.value);
     }
-    return this.operations.map(() => ["OK"]);
+    return this.operations.map(() => ['OK']);
   }
 }
 
@@ -32,21 +32,21 @@ class FakeRedisClient {
   public luaUnavailable = false;
   public evalReplyOverride: unknown = undefined;
 
-  async watch(..._keys: string[]): Promise<"OK"> {
-    return "OK";
+  async watch(..._keys: string[]): Promise<'OK'> {
+    return 'OK';
   }
 
-  async unwatch(): Promise<"OK"> {
-    return "OK";
+  async unwatch(): Promise<'OK'> {
+    return 'OK';
   }
 
   async get(key: string): Promise<string | null> {
     return this.store.get(key) || null;
   }
 
-  async set(key: string, value: string): Promise<"OK"> {
+  async set(key: string, value: string): Promise<'OK'> {
     this.store.set(key, value);
-    return "OK";
+    return 'OK';
   }
 
   async eval(
@@ -62,7 +62,7 @@ class FakeRedisClient {
     jobJson: string
   ): Promise<[number, string, string, string] | unknown> {
     if (this.luaUnavailable) {
-      throw new Error("NOSCRIPT No matching script. Please use EVAL.");
+      throw new Error('NOSCRIPT No matching script. Please use EVAL.');
     }
 
     if (this.evalReplyOverride !== undefined) {
@@ -77,7 +77,11 @@ class FakeRedisClient {
 
     const existingRaw = this.store.get(quotaKey);
     const existing = existingRaw
-      ? (JSON.parse(existingRaw) as { windowStartAt?: string; windowStartAtEpochMs?: number; usedCount?: number })
+      ? (JSON.parse(existingRaw) as {
+          windowStartAt?: string;
+          windowStartAtEpochMs?: number;
+          usedCount?: number;
+        })
       : undefined;
 
     let windowStartAt = existing?.windowStartAt || nowIso;
@@ -95,21 +99,24 @@ class FakeRedisClient {
       return [0, windowStartAt, String(usedCount), String(windowStartAtEpochMs + quotaWindowMs)];
     }
 
-    this.store.set(quotaKey, JSON.stringify({
-      windowStartAt,
-      windowStartAtEpochMs,
-      usedCount: nextUsedCount
-    }));
+    this.store.set(
+      quotaKey,
+      JSON.stringify({
+        windowStartAt,
+        windowStartAtEpochMs,
+        usedCount: nextUsedCount,
+      })
+    );
     this.store.set(jobKey, jobJson);
-    return [1, windowStartAt, String(nextUsedCount), ""];
+    return [1, windowStartAt, String(nextUsedCount), ''];
   }
 
   multi(): FakeRedisMulti {
     return new FakeRedisMulti(this);
   }
 
-  async quit(): Promise<"OK"> {
-    return "OK";
+  async quit(): Promise<'OK'> {
+    return 'OK';
   }
 
   disconnect(): void {}
@@ -119,94 +126,100 @@ function buildJob(id: string, subjectId: string): ImageJobRecord {
   return {
     id,
     subjectId,
-    tool: "compress",
-    plan: "free",
+    tool: 'compress',
+    plan: 'free',
     isAdvanced: false,
     watermarkRequired: false,
     inputObjectKey: `tmp/${subjectId}/input/2026/02/24/compress/${id}.jpg`,
     outputObjectKey: `tmp/${subjectId}/output/2026/02/24/compress/${id}.jpg`,
-    inputMime: "image/jpeg",
-    outputMime: "image/jpeg",
+    inputMime: 'image/jpeg',
+    outputMime: 'image/jpeg',
     options: { quality: 80 },
-    status: "queued",
-    createdAt: "2026-02-24T00:00:00.000Z",
-    updatedAt: "2026-02-24T00:00:00.000Z"
+    status: 'queued',
+    createdAt: '2026-02-24T00:00:00.000Z',
+    updatedAt: '2026-02-24T00:00:00.000Z',
   };
 }
 
-describe("RedisJobRepository optimistic atomic operations", () => {
-  it("retries quota+job reservation when transaction conflicts", async () => {
+describe('RedisJobRepository optimistic atomic operations', () => {
+  it('retries quota+job reservation when transaction conflicts', async () => {
     const redis = new FakeRedisClient();
     redis.execConflictCount = 1;
     redis.luaUnavailable = true;
     const repo = new RedisJobRepository({
       redisClient: redis as unknown as IORedis,
-      clock: () => new Date("2026-02-24T00:00:00.000Z")
+      clock: () => new Date('2026-02-24T00:00:00.000Z'),
     });
 
     const result = await repo.reserveQuotaAndCreateJob({
-      subjectId: "seller_retry",
+      subjectId: 'seller_retry',
       requestedImages: 1,
-      now: new Date("2026-02-24T00:00:00.000Z"),
-      job: buildJob("job_retry", "seller_retry")
+      now: new Date('2026-02-24T00:00:00.000Z'),
+      job: buildJob('job_retry', 'seller_retry'),
     });
 
     expect(result.allowed).toBe(true);
     expect(result.window.usedCount).toBe(1);
 
-    const stored = await repo.getJob("job_retry");
-    expect(stored?.id).toBe("job_retry");
+    const stored = await repo.getJob('job_retry');
+    expect(stored?.id).toBe('job_retry');
   });
 
-  it("throws when lua script returns an unexpected reply shape", async () => {
+  it('throws when lua script returns an unexpected reply shape', async () => {
     const redis = new FakeRedisClient();
-    redis.evalReplyOverride = "unexpected-reply";
+    redis.evalReplyOverride = 'unexpected-reply';
     const repo = new RedisJobRepository({
       redisClient: redis as unknown as IORedis,
-      clock: () => new Date("2026-02-24T00:00:00.000Z")
+      clock: () => new Date('2026-02-24T00:00:00.000Z'),
     });
 
-    await expect(repo.reserveQuotaAndCreateJob({
-      subjectId: "seller_bad_reply",
-      requestedImages: 1,
-      now: new Date("2026-02-24T00:00:00.000Z"),
-      job: buildJob("job_bad_reply", "seller_bad_reply")
-    })).rejects.toThrow(/Unexpected Lua quota response/i);
+    await expect(
+      repo.reserveQuotaAndCreateJob({
+        subjectId: 'seller_bad_reply',
+        requestedImages: 1,
+        now: new Date('2026-02-24T00:00:00.000Z'),
+        job: buildJob('job_bad_reply', 'seller_bad_reply'),
+      })
+    ).rejects.toThrow(/Unexpected Lua quota response/i);
   });
 
-  it("retries dedup completion writes when transaction conflicts", async () => {
+  it('retries dedup completion writes when transaction conflicts', async () => {
     const redis = new FakeRedisClient();
     redis.execConflictCount = 1;
     const repo = new RedisJobRepository({
       redisClient: redis as unknown as IORedis,
-      clock: () => new Date("2026-02-24T00:00:00.000Z")
+      clock: () => new Date('2026-02-24T00:00:00.000Z'),
     });
 
     await repo.finalizeUploadCompletion({
       completion: {
-        objectKey: "tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg",
-        canonicalObjectKey: "tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg",
-        subjectId: "seller_dedup",
-        sha256: "8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1",
+        objectKey: 'tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg',
+        canonicalObjectKey: 'tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg',
+        subjectId: 'seller_dedup',
+        sha256: '8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1',
         sizeBytes: 123,
-        contentType: "image/jpeg",
+        contentType: 'image/jpeg',
         deduplicated: false,
-        createdAt: "2026-02-24T00:00:00.000Z"
+        createdAt: '2026-02-24T00:00:00.000Z',
       },
       dedupRecord: {
-        sha256: "8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1",
-        objectKey: "tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg",
+        sha256: '8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1',
+        objectKey: 'tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg',
         sizeBytes: 123,
-        contentType: "image/jpeg",
-        createdAt: "2026-02-24T00:00:00.000Z"
-      }
+        contentType: 'image/jpeg',
+        createdAt: '2026-02-24T00:00:00.000Z',
+      },
     });
 
-    const completion = await repo.getUploadCompletion("tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg");
-    expect(completion?.subjectId).toBe("seller_dedup");
+    const completion = await repo.getUploadCompletion(
+      'tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg'
+    );
+    expect(completion?.subjectId).toBe('seller_dedup');
 
-    const dedup = await repo.listDedupByHash("8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1");
+    const dedup = await repo.listDedupByHash(
+      '8c501ad4f25799dbf4d93e6ef6f0a147f6f9e3db7f4f4e4af6a1a4d8d2f662f1'
+    );
     expect(dedup).toHaveLength(1);
-    expect(dedup[0].objectKey).toBe("tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg");
+    expect(dedup[0].objectKey).toBe('tmp/seller_dedup/input/2026/02/24/compress/upload_a.jpg');
   });
 });

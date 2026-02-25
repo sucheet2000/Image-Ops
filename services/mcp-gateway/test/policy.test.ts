@@ -1,28 +1,28 @@
-import { describe, expect, it } from "vitest";
-import { validateExecuteRequest } from "../src/policy";
+import { describe, expect, it } from 'vitest';
+import { validateExecuteRequest } from '../src/policy';
 
-describe("validateExecuteRequest", () => {
-  it("accepts valid read-only request", () => {
+describe('validateExecuteRequest', () => {
+  it('accepts valid read-only request', () => {
     expect(() => {
       validateExecuteRequest({
-        steps: [{ operationId: "jobs_get", params: { id: "job_1" } }]
+        steps: [{ operationId: 'jobs_get', params: { id: 'job_1' } }],
       });
     }).not.toThrow();
   });
 
-  it("requires idempotency key for mutating operations", () => {
+  it('requires idempotency key for mutating operations', () => {
     expect(() => {
       validateExecuteRequest({
-        steps: [{ operationId: "jobs_create", params: { tool: "resize" } }]
+        steps: [{ operationId: 'jobs_create', params: { tool: 'resize' } }],
       });
-    }).toThrow("idempotency key");
+    }).toThrow('idempotency key');
   });
 
-  it("rejects unknown operations", () => {
+  it('rejects unknown operations', () => {
     expect(() => {
       validateExecuteRequest({
-        steps: [{ operationId: "billing_admin_delete_all" }]
+        steps: [{ operationId: 'billing_admin_delete_all' }],
       });
-    }).toThrow("Operation not allowed");
+    }).toThrow('Operation not allowed');
   });
 });

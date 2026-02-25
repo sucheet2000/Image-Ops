@@ -1,11 +1,11 @@
-import type { DeletionAuditRecord, ImageJobRecord, JobStatus } from "@imageops/core";
-import IORedis from "ioredis";
-import { Pool } from "pg";
+import type { DeletionAuditRecord, ImageJobRecord, JobStatus } from '@imageops/core';
+import IORedis from 'ioredis';
+import { Pool } from 'pg';
 
-const JOB_KEY_PREFIX = "imageops:job:";
-const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
-const POSTGRES_KV_TABLE = "imageops_metadata_kv";
-const POSTGRES_AUDIT_TABLE = "imageops_deletion_audit";
+const JOB_KEY_PREFIX = 'imageops:job:';
+const DELETION_AUDIT_LIST_KEY = 'imageops:deletion-audit';
+const POSTGRES_KV_TABLE = 'imageops_metadata_kv';
+const POSTGRES_AUDIT_TABLE = 'imageops_deletion_audit';
 
 /**
  * Builds the Redis key for a job identifier.
@@ -66,7 +66,7 @@ export class RedisWorkerJobRepository implements WorkerJobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {
@@ -135,7 +135,7 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {
@@ -243,7 +243,7 @@ export class PostgresWorkerJobRepository implements WorkerJobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {

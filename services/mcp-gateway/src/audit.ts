@@ -9,10 +9,10 @@ export function redact(value: unknown): unknown {
     return value.map((item) => redact(item));
   }
 
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>).map(([key, field]) => {
       if (shouldRedact(key)) {
-        return [key, "[REDACTED]"];
+        return [key, '[REDACTED]'];
       }
       return [key, redact(field)];
     });

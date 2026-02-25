@@ -1,12 +1,16 @@
-import { JOB_QUEUE_NAMES, type ImageJobQueuePayload } from "@imageops/core";
-import { Worker } from "bullmq";
-import IORedis from "ioredis";
-import { loadWorkerConfig } from "./config";
-import { startWorkerHeartbeat } from "./heartbeat";
-import { HttpBackgroundRemoveProvider } from "./providers/bg-remove-provider";
-import { processImageJob } from "./processor";
-import { PostgresWorkerJobRepository, RedisWorkerJobRepository, type WorkerJobRepository } from "./services/job-repo";
-import { S3WorkerStorageService } from "./services/storage";
+import { JOB_QUEUE_NAMES, type ImageJobQueuePayload } from '@imageops/core';
+import { Worker } from 'bullmq';
+import IORedis from 'ioredis';
+import { loadWorkerConfig } from './config';
+import { startWorkerHeartbeat } from './heartbeat';
+import { HttpBackgroundRemoveProvider } from './providers/bg-remove-provider';
+import { processImageJob } from './processor';
+import {
+  PostgresWorkerJobRepository,
+  RedisWorkerJobRepository,
+  type WorkerJobRepository,
+} from './services/job-repo';
+import { S3WorkerStorageService } from './services/storage';
 
 const config = loadWorkerConfig();
 const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
@@ -15,9 +19,10 @@ const WORKER_ID = process.env.HOSTNAME ?? `worker-${process.pid}`;
 const HEARTBEAT_TTL_SECONDS = Math.max(2, Math.ceil((config.workerHeartbeatIntervalMs / 1000) * 2));
 
 const storage = new S3WorkerStorageService(config);
-const jobRepo: WorkerJobRepository = config.jobRepoDriver === "postgres"
-  ? new PostgresWorkerJobRepository({ connectionString: config.postgresUrl! })
-  : new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
+const jobRepo: WorkerJobRepository =
+  config.jobRepoDriver === 'postgres'
+    ? new PostgresWorkerJobRepository({ connectionString: config.postgresUrl! })
+    : new RedisWorkerJobRepository({ redisUrl: config.redisUrl });
 const bgRemoveProvider = new HttpBackgroundRemoveProvider({
   endpointUrl: config.bgRemoveApiUrl,
   apiKey: config.bgRemoveApiKey,
@@ -25,7 +30,7 @@ const bgRemoveProvider = new HttpBackgroundRemoveProvider({
   maxRetries: config.bgRemoveMaxRetries,
   onCircuitStateChange: (state) => {
     const event = `worker.bg_remove_breaker.${state}`;
-    if (state === "open") {
+    if (state === 'open') {
       // eslint-disable-next-line no-console
       console.error(JSON.stringify({ event, workerId: WORKER_ID }));
       return;
@@ -35,32 +40,39 @@ const bgRemoveProvider = new HttpBackgroundRemoveProvider({
   },
   onCircuitOpen: ({ reason }) => {
     // eslint-disable-next-line no-console
-    console.error(JSON.stringify({ event: "worker.bg_remove_breaker.precheck_open", workerId: WORKER_ID, reason }));
-  }
+    console.error(
+      JSON.stringify({
+        event: 'worker.bg_remove_breaker.precheck_open',
+        workerId: WORKER_ID,
+        reason,
+      })
+    );
+  },
 });
 
 const workerDefinitions = [
   { queueName: JOB_QUEUE_NAMES.fast, concurrency: config.fastConcurrency },
   { queueName: JOB_QUEUE_NAMES.slow, concurrency: config.slowConcurrency },
-  { queueName: JOB_QUEUE_NAMES.bulk, concurrency: config.bulkConcurrency }
+  { queueName: JOB_QUEUE_NAMES.bulk, concurrency: config.bulkConcurrency },
 ] as const;
 
-const workers = workerDefinitions.map(({ queueName, concurrency }) =>
-  new Worker<ImageJobQueuePayload>(
-    queueName,
-    async (job) => {
-      await processImageJob(job.data, {
-        storage,
-        jobRepo,
-        bgRemoveProvider,
-        now: () => new Date()
-      });
-    },
-    {
-      connection,
-      concurrency
-    }
-  )
+const workers = workerDefinitions.map(
+  ({ queueName, concurrency }) =>
+    new Worker<ImageJobQueuePayload>(
+      queueName,
+      async (job) => {
+        await processImageJob(job.data, {
+          storage,
+          jobRepo,
+          bgRemoveProvider,
+          now: () => new Date(),
+        });
+      },
+      {
+        connection,
+        concurrency,
+      }
+    )
 );
 
 const readyQueues = new Set<string>();
@@ -68,9 +80,11 @@ let bootLogged = false;
 
 workers.forEach((worker, index) => {
   const { queueName, concurrency } = workerDefinitions[index];
-  worker.on("ready", () => {
+  worker.on('ready', () => {
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "worker.ready", workerId: WORKER_ID, queue: queueName, concurrency }));
+    console.log(
+      JSON.stringify({ event: 'worker.ready', workerId: WORKER_ID, queue: queueName, concurrency })
+    );
 
     readyQueues.add(queueName);
     if (!bootLogged && readyQueues.size === workerDefinitions.length) {
@@ -78,31 +92,41 @@ workers.forEach((worker, index) => {
       // eslint-disable-next-line no-console
       console.log(
         JSON.stringify({
-          event: "worker.boot",
+          event: 'worker.boot',
           workerId: WORKER_ID,
-          queues: workerDefinitions.map((entry) => ({ queue: entry.queueName, concurrency: entry.concurrency }))
+          queues: workerDefinitions.map((entry) => ({
+            queue: entry.queueName,
+            concurrency: entry.concurrency,
+          })),
         })
       );
     }
   });
 
-  worker.on("completed", (job) => {
+  worker.on('completed', (job) => {
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "worker.completed", workerId: WORKER_ID, queue: queueName, jobId: job.id }));
+    console.log(
+      JSON.stringify({
+        event: 'worker.completed',
+        workerId: WORKER_ID,
+        queue: queueName,
+        jobId: job.id,
+      })
+    );
   });
 
-  worker.on("failed", (job, error) => {
+  worker.on('failed', (job, error) => {
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
-        event: "worker.failed",
+        event: 'worker.failed',
         workerId: WORKER_ID,
         queue: queueName,
         jobId: job?.id,
         tool: job?.data?.tool,
         subjectId: job?.data?.subjectId,
         attempts: job?.attemptsMade,
-        message: error.message
+        message: error.message,
       })
     );
   });
@@ -111,13 +135,13 @@ workers.forEach((worker, index) => {
 const stopHeartbeat = startWorkerHeartbeat({
   redis: connection,
   workerId: WORKER_ID,
-  queueName: "multi",
+  queueName: 'multi',
   intervalMs: config.workerHeartbeatIntervalMs,
   ttlSeconds: HEARTBEAT_TTL_SECONDS,
   onHeartbeat: (payload) => {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify(payload));
-  }
+  },
 });
 
 async function closeWorkers(): Promise<void> {
@@ -133,7 +157,7 @@ async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): P
         timer = setTimeout(() => {
           reject(new Error(`${operation} timed out after ${SHUTDOWN_TIMEOUT_MS}ms`));
         }, SHUTDOWN_TIMEOUT_MS);
-      })
+      }),
     ]);
   } finally {
     if (timer) {
@@ -151,44 +175,44 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
 
   shuttingDown = true;
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "worker.shutdown.start", workerId: WORKER_ID, reason }));
+  console.log(JSON.stringify({ event: 'worker.shutdown.start', workerId: WORKER_ID, reason }));
 
   if (error) {
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
-        event: "worker.shutdown.error_context",
+        event: 'worker.shutdown.error_context',
         workerId: WORKER_ID,
         reason,
-        message: error instanceof Error ? error.message : String(error)
+        message: error instanceof Error ? error.message : String(error),
       })
     );
   }
 
   try {
     stopHeartbeat();
-    await withShutdownTimeout(closeWorkers(), "workers.close");
-    await withShutdownTimeout(jobRepo.close(), "jobRepo.close");
-    await withShutdownTimeout(connection.quit(), "connection.quit");
+    await withShutdownTimeout(closeWorkers(), 'workers.close');
+    await withShutdownTimeout(jobRepo.close(), 'jobRepo.close');
+    await withShutdownTimeout(connection.quit(), 'connection.quit');
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "worker.shutdown.complete", workerId: WORKER_ID, reason }));
+    console.log(JSON.stringify({ event: 'worker.shutdown.complete', workerId: WORKER_ID, reason }));
   } catch (closeError) {
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
-        event: "worker.shutdown.failed",
+        event: 'worker.shutdown.failed',
         workerId: WORKER_ID,
         reason,
-        message: closeError instanceof Error ? closeError.message : String(closeError)
+        message: closeError instanceof Error ? closeError.message : String(closeError),
       })
     );
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
-        event: "worker.shutdown.force_exit",
+        event: 'worker.shutdown.force_exit',
         workerId: WORKER_ID,
         reason,
-        timeoutMs: SHUTDOWN_TIMEOUT_MS
+        timeoutMs: SHUTDOWN_TIMEOUT_MS,
       })
     );
 
@@ -199,18 +223,18 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
   process.exit(exitCode);
 }
 
-process.on("SIGINT", () => {
-  void shutdown("SIGINT", 0);
+process.on('SIGINT', () => {
+  void shutdown('SIGINT', 0);
 });
 
-process.on("SIGTERM", () => {
-  void shutdown("SIGTERM", 0);
+process.on('SIGTERM', () => {
+  void shutdown('SIGTERM', 0);
 });
 
-process.on("uncaughtException", (error) => {
-  void shutdown("uncaughtException", 1, error);
+process.on('uncaughtException', (error) => {
+  void shutdown('uncaughtException', 1, error);
 });
 
-process.on("unhandledRejection", (reason) => {
-  void shutdown("unhandledRejection", 1, reason);
+process.on('unhandledRejection', (reason) => {
+  void shutdown('unhandledRejection', 1, reason);
 });

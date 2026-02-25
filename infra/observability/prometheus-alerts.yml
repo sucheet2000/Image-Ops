@@ -13,8 +13,8 @@ groups:
           severity: warning
           service: image-ops-api
         annotations:
-          summary: "Image Ops API average latency is high"
-          description: "Average HTTP latency has exceeded 2 seconds for 10 minutes."
+          summary: 'Image Ops API average latency is high'
+          description: 'Average HTTP latency has exceeded 2 seconds for 10 minutes.'
 
       - alert: ImageOpsCleanupErrorRate
         expr: |
@@ -27,8 +27,8 @@ groups:
           severity: warning
           service: image-ops-api
         annotations:
-          summary: "Image Ops cleanup route error ratio is elevated"
-          description: "/api/cleanup 5xx/conflict ratio is above 5% for 10 minutes."
+          summary: 'Image Ops cleanup route error ratio is elevated'
+          description: '/api/cleanup 5xx/conflict ratio is above 5% for 10 minutes.'
 
       - alert: ImageOpsQueueDepthHigh
         expr: image_ops_queue_jobs{state="waiting"} > 50
@@ -37,8 +37,8 @@ groups:
           severity: warning
           service: image-ops-api
         annotations:
-          summary: "Image Ops queue waiting depth is high"
-          description: "Queue waiting depth has been above 50 for at least 10 minutes."
+          summary: 'Image Ops queue waiting depth is high'
+          description: 'Queue waiting depth has been above 50 for at least 10 minutes.'
 
       - alert: ImageOpsQueueFailuresBacklog
         expr: increase(image_ops_queue_jobs{state="failed"}[5m]) > 5
@@ -47,5 +47,5 @@ groups:
           severity: critical
           service: image-ops-api
         annotations:
-          summary: "Image Ops failed jobs backlog detected"
-          description: "Failed queue backlog is above 5 jobs for 5 minutes."
+          summary: 'Image Ops failed jobs backlog detected'
+          description: 'Failed queue backlog is above 5 jobs for 5 minutes.'

@@ -30,7 +30,7 @@ Branch: `codex/agent-core-postgres`
 
 # Agent Ownership: Integration Test Harness
 
-Branch: `codex/v1-processing-backend`
+Branch: `codex/agent-integration-tests`
 
 ## Scope
 

@@ -1,8 +1,8 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { isPlan, type ImagePlan } from "@imageops/core";
-import { OAuth2Client } from "google-auth-library";
-import jwt from "jsonwebtoken";
-import { ulid } from "ulid";
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { isPlan, type ImagePlan } from '@imageops/core';
+import { OAuth2Client } from 'google-auth-library';
+import jwt from 'jsonwebtoken';
+import { ulid } from 'ulid';
 
 export type ApiTokenClaims = {
   sub: string;
@@ -33,30 +33,30 @@ export interface AuthService {
 export class GoogleTokenVerificationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "GoogleTokenVerificationError";
+    this.name = 'GoogleTokenVerificationError';
   }
 }
 
 function hashSecret(input: string): string {
-  return createHash("sha256").update(input, "utf8").digest("hex");
+  return createHash('sha256').update(input, 'utf8').digest('hex');
 }
 
 function isImagePlan(value: unknown): value is ImagePlan {
-  return typeof value === "string" && isPlan(value);
+  return typeof value === 'string' && isPlan(value);
 }
 
 export function issueRefreshToken(now: Date): RefreshTokenIssueResult {
   const sessionId = ulid(now.getTime());
-  const secret = randomBytes(32).toString("base64url");
+  const secret = randomBytes(32).toString('base64url');
   return {
     sessionId,
     token: `${sessionId}.${secret}`,
-    secretHash: hashSecret(secret)
+    secretHash: hashSecret(secret),
   };
 }
 
 export function parseRefreshToken(token: string): { sessionId: string; secret: string } | null {
-  const [sessionId, secret, ...rest] = token.split(".");
+  const [sessionId, secret, ...rest] = token.split('.');
   if (!sessionId || !secret || rest.length > 0) {
     return null;
   }
@@ -68,7 +68,7 @@ export function verifyRefreshTokenSecret(secret: string, secretHash: string): bo
   if (candidate.length !== secretHash.length) {
     return false;
   }
-  return timingSafeEqual(Buffer.from(candidate, "utf8"), Buffer.from(secretHash, "utf8"));
+  return timingSafeEqual(Buffer.from(candidate, 'utf8'), Buffer.from(secretHash, 'utf8'));
 }
 
 export class GoogleTokenAuthService implements AuthService {
@@ -104,41 +104,43 @@ export class GoogleTokenAuthService implements AuthService {
     try {
       const ticket = await this.oauthClient.verifyIdToken({
         idToken,
-        audience: this.googleClientId
+        audience: this.googleClientId,
       });
       payload = ticket.getPayload();
     } catch {
-      throw new GoogleTokenVerificationError("Invalid Google ID token.");
+      throw new GoogleTokenVerificationError('Invalid Google ID token.');
     }
 
     if (!payload) {
-      throw new GoogleTokenVerificationError("Invalid Google ID token.");
+      throw new GoogleTokenVerificationError('Invalid Google ID token.');
     }
 
     const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
-    if (!audiences.some((audience) => String(audience || "") === this.googleClientId)) {
-      throw new GoogleTokenVerificationError("Google token audience mismatch.");
+    if (!audiences.some((audience) => String(audience || '') === this.googleClientId)) {
+      throw new GoogleTokenVerificationError('Google token audience mismatch.');
     }
 
-    const issuer = String(payload.iss || "");
-    if (issuer !== "accounts.google.com" && issuer !== "https://accounts.google.com") {
-      throw new GoogleTokenVerificationError("Google token issuer mismatch.");
+    const issuer = String(payload.iss || '');
+    if (issuer !== 'accounts.google.com' && issuer !== 'https://accounts.google.com') {
+      throw new GoogleTokenVerificationError('Google token issuer mismatch.');
     }
 
     const exp = Number(payload.exp || 0);
     if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) {
-      throw new GoogleTokenVerificationError("Google token expired.");
+      throw new GoogleTokenVerificationError('Google token expired.');
     }
 
-    const sub = String(payload.sub || "").trim();
+    const sub = String(payload.sub || '').trim();
     if (!sub) {
-      throw new GoogleTokenVerificationError("Google token missing subject.");
+      throw new GoogleTokenVerificationError('Google token missing subject.');
     }
 
     return {
       sub,
       email: payload.email ? String(payload.email) : undefined,
-      emailVerified: payload.email_verified === true || String(payload.email_verified || "").toLowerCase() === "true"
+      emailVerified:
+        payload.email_verified === true ||
+        String(payload.email_verified || '').toLowerCase() === 'true',
     };
   }
 
@@ -149,26 +151,26 @@ export class GoogleTokenAuthService implements AuthService {
       plan: input.plan,
       email: input.email,
       iat,
-      exp: iat + this.authTokenTtlSeconds
+      exp: iat + this.authTokenTtlSeconds,
     };
     return jwt.sign(payloadClaims, this.authTokenSecret, {
-      algorithm: "HS256",
-      noTimestamp: true
+      algorithm: 'HS256',
+      noTimestamp: true,
     });
   }
 
   verifyApiToken(token: string): ApiTokenClaims | null {
     try {
       const payload = jwt.verify(token, this.authTokenSecret, {
-        algorithms: ["HS256"]
+        algorithms: ['HS256'],
       });
-      if (!payload || typeof payload !== "object") {
+      if (!payload || typeof payload !== 'object') {
         return null;
       }
 
-      const sub = typeof payload.sub === "string" ? payload.sub : "";
+      const sub = typeof payload.sub === 'string' ? payload.sub : '';
       const plan = payload.plan;
-      const exp = typeof payload.exp === "number" ? payload.exp : 0;
+      const exp = typeof payload.exp === 'number' ? payload.exp : 0;
       const nowUnix = Math.floor(Date.now() / 1000);
       if (!sub || !isImagePlan(plan) || exp <= nowUnix) {
         return null;
@@ -177,9 +179,9 @@ export class GoogleTokenAuthService implements AuthService {
       return {
         sub,
         plan,
-        email: typeof payload.email === "string" ? payload.email : undefined,
-        iat: typeof payload.iat === "number" ? payload.iat : nowUnix,
-        exp
+        email: typeof payload.email === 'string' ? payload.email : undefined,
+        iat: typeof payload.iat === 'number' ? payload.iat : nowUnix,
+        exp,
       };
     } catch {
       return null;
@@ -190,23 +192,23 @@ export class GoogleTokenAuthService implements AuthService {
 export class InMemoryAuthService implements AuthService {
   private readonly delegate: GoogleTokenAuthService;
 
-  constructor(secret = "test-auth-secret") {
+  constructor(secret = 'test-auth-secret') {
     this.delegate = new GoogleTokenAuthService({
-      googleClientId: "test-google-client",
+      googleClientId: 'test-google-client',
       authTokenSecret: secret,
-      authTokenTtlSeconds: 3600
+      authTokenTtlSeconds: 3600,
     });
   }
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
     if (!idToken) {
-      throw new GoogleTokenVerificationError("Invalid Google ID token.");
+      throw new GoogleTokenVerificationError('Invalid Google ID token.');
     }
 
     return {
       sub: `google_${idToken.slice(0, 8)}`,
-      email: "tester@example.com",
-      emailVerified: true
+      email: 'tester@example.com',
+      emailVerified: true,
     };
   }
 

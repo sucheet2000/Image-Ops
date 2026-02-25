@@ -1,17 +1,19 @@
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { getApiBaseUrl, refreshApiToken } from "../../lib/api-client";
-import { setViewerPlan, setViewerSubjectId } from "../../lib/session";
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { getApiBaseUrl, refreshApiToken } from '../../lib/api-client';
+import { setViewerPlan, setViewerSubjectId } from '../../lib/session';
 
-const GUARDED_PATH_PREFIXES = ["/upload", "/dashboard", "/billing"];
+const GUARDED_PATH_PREFIXES = ['/upload', '/dashboard', '/billing'];
 
 function shouldGuardPath(pathname: string | null): boolean {
   if (!pathname) {
     return false;
   }
-  return GUARDED_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return GUARDED_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -41,8 +43,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (!payload) {
-          setViewerPlan("free");
-          router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+          setViewerPlan('free');
+          router.replace(`/login?next=${encodeURIComponent(pathname || '/')}`);
           return;
         }
 
@@ -69,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <main className="app-page">
         <section className="page-shell">
-          <p className="workbench-meta">{guarded ? "Restoring secure session..." : "Loading..."}</p>
+          <p className="workbench-meta">{guarded ? 'Restoring secure session...' : 'Loading...'}</p>
         </section>
       </main>
     );

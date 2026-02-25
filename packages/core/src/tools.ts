@@ -24,5 +24,5 @@ export {
   inferUploadObjectKeyPrefix,
   inferOutputObjectKeyPrefix,
   classifyProcessingError,
-  toStructuredLog
-} from "./types";
+  toStructuredLog,
+} from './types';

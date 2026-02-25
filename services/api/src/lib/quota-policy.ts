@@ -1,5 +1,5 @@
-import type { ImagePlan } from "@imageops/core";
-import type { ApiConfig } from "../config";
+import type { ImagePlan } from '@imageops/core';
+import type { ApiConfig } from '../config';
 
 export type QuotaPolicy = {
   limit: number;
@@ -7,22 +7,22 @@ export type QuotaPolicy = {
 };
 
 export function quotaPolicyForPlan(config: ApiConfig, plan: ImagePlan): QuotaPolicy {
-  if (plan === "pro") {
+  if (plan === 'pro') {
     return {
       limit: config.proPlanLimit,
-      windowHours: config.proPlanWindowHours
+      windowHours: config.proPlanWindowHours,
     };
   }
 
-  if (plan === "team") {
+  if (plan === 'team') {
     return {
       limit: config.teamPlanLimit,
-      windowHours: config.teamPlanWindowHours
+      windowHours: config.teamPlanWindowHours,
     };
   }
 
   return {
     limit: config.freePlanLimit,
-    windowHours: config.freePlanWindowHours
+    windowHours: config.freePlanWindowHours,
   };
 }

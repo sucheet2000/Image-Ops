@@ -1,17 +1,17 @@
 module.exports = {
   root: true,
-  parser: "@typescript-eslint/parser",
-  plugins: ["@typescript-eslint", "security"],
+  parser: '@typescript-eslint/parser',
+  plugins: ['@typescript-eslint', 'security'],
   extends: [
-    "eslint:recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:security/recommended"
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:security/recommended',
   ],
   rules: {
-    "no-console": "warn",
-    "@typescript-eslint/no-explicit-any": "error",
-    "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-    "@typescript-eslint/explicit-function-return-type": "off"
+    'no-console': 'warn',
+    '@typescript-eslint/no-explicit-any': 'error',
+    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/explicit-function-return-type': 'off',
   },
-  ignorePatterns: ["node_modules/", "dist/", ".next/"]
+  ignorePatterns: ['node_modules/', 'dist/', '.next/'],
 };

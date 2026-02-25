@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       target_api_base_url:
-        description: "Target API base URL (for example: https://api-staging.example.com)"
+        description: 'Target API base URL (for example: https://api-staging.example.com)'
         required: true
         type: string
 

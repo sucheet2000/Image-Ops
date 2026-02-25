@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import FadeReveal from "../../../components/animation/FadeReveal";
-import WipeText from "../../../components/animation/WipeText";
-import { JsonLd } from "../../components/json-ld";
-import { findUseCase, getBaseUrl, USE_CASE_PAGES } from "../../lib/seo-data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import FadeReveal from '../../../components/animation/FadeReveal';
+import WipeText from '../../../components/animation/WipeText';
+import { JsonLd } from '../../components/json-ld';
+import { findUseCase, getBaseUrl, USE_CASE_PAGES } from '../../lib/seo-data';
 
 type UseCasePageProps = {
   params: Promise<{ slug: string }>;
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: UseCasePageProps): Promise<Me
   const resolved = await params;
   const useCase = findUseCase(resolved.slug);
   if (!useCase) {
-    return { title: "Use Case Not Found | Image Ops" };
+    return { title: 'Use Case Not Found | Image Ops' };
   }
 
   const baseUrl = getBaseUrl();
@@ -28,14 +28,14 @@ export async function generateMetadata({ params }: UseCasePageProps): Promise<Me
     title,
     description: useCase.summary,
     alternates: {
-      canonical: `${baseUrl}/use-cases/${useCase.slug}`
+      canonical: `${baseUrl}/use-cases/${useCase.slug}`,
     },
     openGraph: {
       title,
       description: useCase.summary,
-      type: "article",
-      url: `${baseUrl}/use-cases/${useCase.slug}`
-    }
+      type: 'article',
+      url: `${baseUrl}/use-cases/${useCase.slug}`,
+    },
   };
 }
 
@@ -48,21 +48,21 @@ export default async function UseCasePage({ params }: UseCasePageProps) {
 
   const baseUrl = getBaseUrl();
   const schema = {
-    "@context": "https://schema.org",
-    "@type": "HowTo",
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
     name: useCase.title,
     description: useCase.summary,
     url: `${baseUrl}/use-cases/${useCase.slug}`,
     step: useCase.recommendedTools.map((tool, index) => ({
-      "@type": "HowToStep",
+      '@type': 'HowToStep',
       position: index + 1,
-      name: `Run ${tool}`
-    }))
+      name: `Run ${tool}`,
+    })),
   };
 
   return (
     <>
-      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "58vh" }}>
+      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: '58vh' }}>
         <div className="section-inner">
           <FadeReveal as="span" className="section-label" delay={0}>
             Use Case
@@ -82,10 +82,10 @@ export default async function UseCasePage({ params }: UseCasePageProps) {
             Recommended Sequence
           </FadeReveal>
           <WipeText as="h2">Execute in this order.</WipeText>
-          <ol className="editorial-list" style={{ marginTop: "1rem" }}>
+          <ol className="editorial-list" style={{ marginTop: '1rem' }}>
             {useCase.recommendedTools.map((tool, index) => (
               <FadeReveal key={tool} as="li" delay={200 + index * 80} y={10}>
-                <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="editorial-list-number">{String(index + 1).padStart(2, '0')}</span>
                 <span>
                   <Link href={`/tools/${tool}`}>{tool}</Link>
                 </span>
@@ -112,7 +112,12 @@ export default async function UseCasePage({ params }: UseCasePageProps) {
 
           {useCase.relatedComparisons.length > 0 ? (
             <>
-              <FadeReveal as="span" className="section-label" delay={160} style={{ marginTop: "1.1rem" }}>
+              <FadeReveal
+                as="span"
+                className="section-label"
+                delay={160}
+                style={{ marginTop: '1.1rem' }}
+              >
                 Format References
               </FadeReveal>
               <ul className="editorial-page-list">

@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useRef } from "react";
-import FadeReveal from "../../components/animation/FadeReveal";
-import HorizontalScroll from "../../components/animation/HorizontalScroll";
-import ScrambleNumber from "../../components/animation/ScrambleNumber";
-import WipeText from "../../components/animation/WipeText";
-import { useMagnetic } from "../../components/cursor/useMagnetic";
-import { onScroll } from "../../lib/lenis";
+import Link from 'next/link';
+import { useEffect, useRef } from 'react';
+import FadeReveal from '../../components/animation/FadeReveal';
+import HorizontalScroll from '../../components/animation/HorizontalScroll';
+import ScrambleNumber from '../../components/animation/ScrambleNumber';
+import WipeText from '../../components/animation/WipeText';
+import { useMagnetic } from '../../components/cursor/useMagnetic';
+import { onScroll } from '../../lib/lenis';
 
 type EditorialPanel = {
   id: string;
@@ -23,7 +23,7 @@ type EditorialPanel = {
   statDecimals: number;
   statCaption: string;
   mediaTag: string;
-  mediaVariant?: "alt-green" | "alt-violet";
+  mediaVariant?: 'alt-green' | 'alt-violet';
   flip?: boolean;
 };
 
@@ -32,7 +32,7 @@ type ToolCell = {
   name: string;
   summary: string;
   href: string;
-  plan: "free" | "pro";
+  plan: 'free' | 'pro';
 };
 
 type StatRow = {
@@ -44,196 +44,206 @@ type StatRow = {
 };
 
 const marqueeItems = [
-  "Background Removal",
-  "Lossless Compression",
-  "Smart Resize",
-  "Format Conversion",
-  "Marketplace Presets",
-  "Batch Exports"
+  'Background Removal',
+  'Lossless Compression',
+  'Smart Resize',
+  'Format Conversion',
+  'Marketplace Presets',
+  'Batch Exports',
 ];
 
 const editorialPanels: EditorialPanel[] = [
   {
-    id: "background",
-    number: "01",
-    label: "Remove Backgrounds",
-    title: "Clean cuts.",
-    accent: "Every time.",
-    body: "Detect edges, isolate products, and deliver transparent outputs tuned for marketplace standards.",
+    id: 'background',
+    number: '01',
+    label: 'Remove Backgrounds',
+    title: 'Clean cuts.',
+    accent: 'Every time.',
+    body: 'Detect edges, isolate products, and deliver transparent outputs tuned for marketplace standards.',
     features: [
-      "AI-powered edge detection with transparent or custom background output",
-      "Fine-detail treatment for product outlines, straps, and soft edges",
-      "Consistent cutout quality across large catalog batches"
+      'AI-powered edge detection with transparent or custom background output',
+      'Fine-detail treatment for product outlines, straps, and soft edges',
+      'Consistent cutout quality across large catalog batches',
     ],
-    statLabel: "Processing Time",
+    statLabel: 'Processing Time',
     statValue: 3.2,
-    statUnit: "S",
+    statUnit: 'S',
     statDecimals: 1,
-    statCaption: "Average per image",
-    mediaTag: "Smart Cutout"
+    statCaption: 'Average per image',
+    mediaTag: 'Smart Cutout',
   },
   {
-    id: "compression",
-    number: "02",
-    label: "Compress Images",
-    title: "Smaller files.",
-    accent: "Faster stores.",
-    body: "Perceptual compression removes wasted bytes while preserving the look that converts on listing pages.",
+    id: 'compression',
+    number: '02',
+    label: 'Compress Images',
+    title: 'Smaller files.',
+    accent: 'Faster stores.',
+    body: 'Perceptual compression removes wasted bytes while preserving the look that converts on listing pages.',
     features: [
-      "Perceptual quality algorithm, not blind bitrate crushing",
-      "Supports JPG, PNG, and WEBP output targets",
-      "Side-by-side quality review before publishing"
+      'Perceptual quality algorithm, not blind bitrate crushing',
+      'Supports JPG, PNG, and WEBP output targets',
+      'Side-by-side quality review before publishing',
     ],
-    statLabel: "Average Size Reduction",
+    statLabel: 'Average Size Reduction',
     statValue: 84,
-    statUnit: "%",
+    statUnit: '%',
     statDecimals: 0,
-    statCaption: "Without visible quality loss",
-    mediaTag: "Smart Compression",
-    mediaVariant: "alt-green",
-    flip: true
+    statCaption: 'Without visible quality loss',
+    mediaTag: 'Smart Compression',
+    mediaVariant: 'alt-green',
+    flip: true,
   },
   {
-    id: "resize",
-    number: "03",
-    label: "Resize & Reformat",
-    title: "Every platform.",
-    accent: "Perfect fit.",
-    body: "Apply one trusted preset and ship dimensions for Etsy, Amazon, Shopify, and social channels without rework.",
+    id: 'resize',
+    number: '03',
+    label: 'Resize & Reformat',
+    title: 'Every platform.',
+    accent: 'Perfect fit.',
+    body: 'Apply one trusted preset and ship dimensions for Etsy, Amazon, Shopify, and social channels without rework.',
     features: [
-      "40+ marketplace-ready size presets across major channels",
-      "Smart crop options keep the product centered",
-      "Preserve metadata when needed, or strip it for privacy"
+      '40+ marketplace-ready size presets across major channels',
+      'Smart crop options keep the product centered',
+      'Preserve metadata when needed, or strip it for privacy',
     ],
-    statLabel: "Platform Presets",
+    statLabel: 'Platform Presets',
     statValue: 40,
-    statUnit: "+",
+    statUnit: '+',
     statDecimals: 0,
-    statCaption: "Etsy, Amazon, Shopify & more",
-    mediaTag: "Smart Resize",
-    mediaVariant: "alt-violet"
-  }
+    statCaption: 'Etsy, Amazon, Shopify & more',
+    mediaTag: 'Smart Resize',
+    mediaVariant: 'alt-violet',
+  },
 ];
 
 const toolCells: ToolCell[] = [
   {
-    number: "01",
-    name: "Background Removal",
-    summary: "AI-powered edge detection with transparent or custom background output.",
-    href: "/tools/background-remove",
-    plan: "free"
+    number: '01',
+    name: 'Background Removal',
+    summary: 'AI-powered edge detection with transparent or custom background output.',
+    href: '/tools/background-remove',
+    plan: 'free',
   },
   {
-    number: "02",
-    name: "Smart Compress",
-    summary: "Perceptual compression tuned for quality-retaining size reduction.",
-    href: "/tools/compress",
-    plan: "free"
+    number: '02',
+    name: 'Smart Compress',
+    summary: 'Perceptual compression tuned for quality-retaining size reduction.',
+    href: '/tools/compress',
+    plan: 'free',
   },
   {
-    number: "03",
-    name: "Platform Resize",
-    summary: "Channel-safe dimensions and framing for marketplace catalogs.",
-    href: "/tools/resize",
-    plan: "free"
+    number: '03',
+    name: 'Platform Resize',
+    summary: 'Channel-safe dimensions and framing for marketplace catalogs.',
+    href: '/tools/resize',
+    plan: 'free',
   },
   {
-    number: "04",
-    name: "Format Convert",
-    summary: "Convert JPG, PNG, and WEBP for compatibility without loss of control.",
-    href: "/tools/convert",
-    plan: "free"
+    number: '04',
+    name: 'Format Convert',
+    summary: 'Convert JPG, PNG, and WEBP for compatibility without loss of control.',
+    href: '/tools/convert',
+    plan: 'free',
   },
   {
-    number: "05",
-    name: "Brand Watermark",
-    summary: "Protect creative assets with repeatable watermark overlays and brand marks.",
-    href: "/upload",
-    plan: "pro"
+    number: '05',
+    name: 'Brand Watermark',
+    summary: 'Protect creative assets with repeatable watermark overlays and brand marks.',
+    href: '/upload',
+    plan: 'pro',
   },
   {
-    number: "06",
-    name: "Bulk Export",
-    summary: "Run high-volume transformations and grouped downloads in one queue.",
-    href: "/upload",
-    plan: "pro"
-  }
+    number: '06',
+    name: 'Bulk Export',
+    summary: 'Run high-volume transformations and grouped downloads in one queue.',
+    href: '/upload',
+    plan: 'pro',
+  },
 ];
 
 const stats: StatRow[] = [
   {
     value: 12,
-    suffix: "K+",
+    suffix: 'K+',
     decimals: 0,
-    label: "Active Sellers",
-    desc: "Marketplace sellers across Etsy, Amazon, and Shopify trust ImageOps daily."
+    label: 'Active Sellers',
+    desc: 'Marketplace sellers across Etsy, Amazon, and Shopify trust ImageOps daily.',
   },
   {
     value: 2.4,
-    suffix: "M",
+    suffix: 'M',
     decimals: 1,
-    label: "Images Processed",
-    desc: "Over 2.4 million product images processed in the last 90 days."
+    label: 'Images Processed',
+    desc: 'Over 2.4 million product images processed in the last 90 days.',
   },
   {
     value: 84,
-    suffix: "%",
+    suffix: '%',
     decimals: 0,
-    label: "Avg Size Reduction",
-    desc: "Average file size reduction without any perceptible quality loss."
+    label: 'Avg Size Reduction',
+    desc: 'Average file size reduction without any perceptible quality loss.',
   },
   {
     value: 3.2,
-    suffix: "s",
+    suffix: 's',
     decimals: 1,
-    label: "Processing Time",
-    desc: "Average time from upload to download, including background removal."
+    label: 'Processing Time',
+    desc: 'Average time from upload to download, including background removal.',
   },
   {
     value: 40,
-    suffix: "+",
+    suffix: '+',
     decimals: 0,
-    label: "Platform Presets",
-    desc: "Ready-to-use dimensions for every major marketplace and social platform."
+    label: 'Platform Presets',
+    desc: 'Ready-to-use dimensions for every major marketplace and social platform.',
   },
   {
     value: 99.9,
-    suffix: "%",
+    suffix: '%',
     decimals: 1,
-    label: "Uptime SLA",
-    desc: "Enterprise-grade infrastructure. We do not go down when you need us."
-  }
+    label: 'Uptime SLA',
+    desc: 'Enterprise-grade infrastructure. We do not go down when you need us.',
+  },
 ];
 
 const pricingTiers = [
   {
-    name: "Free Forever",
-    price: "$0",
-    cycle: "",
-    summary: "6 images per rolling 10 hours. Perfect for occasional use.",
-    features: ["All 4 core tools", "6 images / 10 hours", "PNG & JPG output", "Watermark on advanced tools"],
-    cta: "Start Free",
-    href: "/upload"
+    name: 'Free Forever',
+    price: '$0',
+    cycle: '',
+    summary: '6 images per rolling 10 hours. Perfect for occasional use.',
+    features: [
+      'All 4 core tools',
+      '6 images / 10 hours',
+      'PNG & JPG output',
+      'Watermark on advanced tools',
+    ],
+    cta: 'Start Free',
+    href: '/upload',
   },
   {
-    name: "Pro",
-    price: "$12",
-    cycle: "/mo",
-    summary: "Unlimited images, all tools, and no watermarking for serious sellers.",
-    features: ["All tools including batch workflows", "Unlimited image processing", "No watermark overlays", "Priority processing"],
-    cta: "Upgrade to Pro",
-    href: "/billing",
-    highlight: true
+    name: 'Pro',
+    price: '$12',
+    cycle: '/mo',
+    summary: 'Unlimited images, all tools, and no watermarking for serious sellers.',
+    features: [
+      'All tools including batch workflows',
+      'Unlimited image processing',
+      'No watermark overlays',
+      'Priority processing',
+    ],
+    cta: 'Upgrade to Pro',
+    href: '/billing',
+    highlight: true,
   },
   {
-    name: "Team",
-    price: "$29",
-    cycle: "/mo",
-    summary: "5 seats, governance controls, and API access for growing teams.",
-    features: ["Everything in Pro", "5 team seats", "REST API access", "Dedicated support"],
-    cta: "Start Team Trial",
-    href: "/billing"
-  }
+    name: 'Team',
+    price: '$29',
+    cycle: '/mo',
+    summary: '5 seats, governance controls, and API access for growing teams.',
+    features: ['Everything in Pro', '5 team seats', 'REST API access', 'Dedicated support'],
+    cta: 'Start Team Trial',
+    href: '/billing',
+  },
 ];
 
 function HomeToolCard({ tool, index }: { tool: ToolCell; index: number }) {
@@ -265,7 +275,7 @@ function EditorialMediaPanel({ panel }: { panel: EditorialPanel }) {
   const innerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReduced) {
       return;
     }
@@ -286,8 +296,8 @@ function EditorialMediaPanel({ panel }: { panel: EditorialPanel }) {
     <div className="editorial-media" ref={wrapperRef}>
       <div
         ref={innerRef}
-        className={`editorial-media-inner${panel.mediaVariant ? ` ${panel.mediaVariant}` : ""}`}
-        style={{ willChange: "transform" }}
+        className={`editorial-media-inner${panel.mediaVariant ? ` ${panel.mediaVariant}` : ''}`}
+        style={{ willChange: 'transform' }}
       />
       <span className="vertical-tag">{panel.mediaTag}</span>
       <FadeReveal delay={400} y={20}>
@@ -322,7 +332,7 @@ function EditorialStoryPanel({ panel }: { panel: EditorialPanel }) {
       <ol className="editorial-list">
         {panel.features.map((feature, index) => (
           <FadeReveal key={feature} as="li" delay={index * 80} y={10}>
-            <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+            <span className="editorial-list-number">{String(index + 1).padStart(2, '0')}</span>
             <span>{feature}</span>
           </FadeReveal>
         ))}
@@ -355,7 +365,7 @@ export function HomeShell() {
   const heroSecondaryCtaRef = useMagnetic(0.3);
 
   useEffect(() => {
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReduced) {
       return;
     }
@@ -395,8 +405,8 @@ export function HomeShell() {
             <div>
               <FadeReveal delay={700}>
                 <p className="hero-copy">
-                  Remove backgrounds, resize, compress, and convert product images with deliberate precision. Built for
-                  sellers who care how every listing looks before first click.
+                  Remove backgrounds, resize, compress, and convert product images with deliberate
+                  precision. Built for sellers who care how every listing looks before first click.
                 </p>
               </FadeReveal>
               <FadeReveal className="hero-actions" delay={900}>
@@ -424,7 +434,10 @@ export function HomeShell() {
         <div className="marquee-track" aria-hidden="true">
           {duplicatedMarquee.map((item, index) => (
             <span key={`${item}-${index}`} className="marquee-item">
-              {item} {index !== duplicatedMarquee.length - 1 ? <span className="marquee-dot">•</span> : null}
+              {item}{' '}
+              {index !== duplicatedMarquee.length - 1 ? (
+                <span className="marquee-dot">•</span>
+              ) : null}
             </span>
           ))}
         </div>
@@ -435,8 +448,8 @@ export function HomeShell() {
           <FadeReveal delay={0}>
             <p className="pull-quote">
               <span className="pull-quote-mark">“</span>
-              My product photos went from amateur to professional in seconds. My Etsy conversion rate jumped 34% in the
-              first month.
+              My product photos went from amateur to professional in seconds. My Etsy conversion
+              rate jumped 34% in the first month.
               <span className="pull-quote-mark">”</span>
             </p>
           </FadeReveal>
@@ -456,11 +469,15 @@ export function HomeShell() {
             {stats.map((stat, index) => (
               <article key={stat.label} className="hstat-card">
                 <p className="hstat-num">
-                  <ScrambleNumber value={stat.value} suffix={stat.suffix} decimals={stat.decimals} />
+                  <ScrambleNumber
+                    value={stat.value}
+                    suffix={stat.suffix}
+                    decimals={stat.decimals}
+                  />
                 </p>
                 <p className="hstat-label">{stat.label}</p>
                 <p className="hstat-desc">{stat.desc}</p>
-                <span className="hstat-index">{String(index + 1).padStart(2, "0")}</span>
+                <span className="hstat-index">{String(index + 1).padStart(2, '0')}</span>
               </article>
             ))}
           </HorizontalScroll>
@@ -475,7 +492,8 @@ export function HomeShell() {
             </WipeText>
             <FadeReveal delay={100}>
               <p className="section-lead">
-                Six professional-grade workflows built for the demands of marketplace selling at scale.
+                Six professional-grade workflows built for the demands of marketplace selling at
+                scale.
               </p>
             </FadeReveal>
           </div>
@@ -495,20 +513,24 @@ export function HomeShell() {
             </WipeText>
             <FadeReveal delay={100}>
               <p className="section-lead">
-                Start free. Upgrade when ready. No hidden fees and no locked features that disappear.
+                Start free. Upgrade when ready. No hidden fees and no locked features that
+                disappear.
               </p>
             </FadeReveal>
           </div>
           <div className="pricing-grid">
             {pricingTiers.map((tier, index) => (
-              <article key={tier.name} className={`pricing-card${tier.highlight ? " highlight" : ""}`}>
+              <article
+                key={tier.name}
+                className={`pricing-card${tier.highlight ? ' highlight' : ''}`}
+              >
                 {tier.highlight ? <span className="popular-tag">Most Popular</span> : null}
                 <FadeReveal as="span" className="section-label" delay={index * 80}>
                   {tier.name}
                 </FadeReveal>
                 <FadeReveal as="p" className="price" delay={80 + index * 80}>
                   <span className="price-currency">$</span>
-                  {tier.price.replace("$", "")}
+                  {tier.price.replace('$', '')}
                   {tier.cycle ? <span className="price-cycle">{tier.cycle}</span> : null}
                 </FadeReveal>
                 <FadeReveal delay={140 + index * 80}>
@@ -516,13 +538,21 @@ export function HomeShell() {
                 </FadeReveal>
                 <ul>
                   {tier.features.map((feature, featureIndex) => (
-                    <FadeReveal as="li" key={feature} delay={200 + featureIndex * 60 + index * 40} y={8}>
+                    <FadeReveal
+                      as="li"
+                      key={feature}
+                      delay={200 + featureIndex * 60 + index * 40}
+                      y={8}
+                    >
                       {feature}
                     </FadeReveal>
                   ))}
                 </ul>
                 <FadeReveal delay={220 + index * 80}>
-                  <Link href={tier.href} className={`editorial-button ${tier.highlight ? "accent" : "primary"} plan-btn`}>
+                  <Link
+                    href={tier.href}
+                    className={`editorial-button ${tier.highlight ? 'accent' : 'primary'} plan-btn`}
+                  >
                     <span>{tier.cta}</span>
                   </Link>
                 </FadeReveal>
@@ -541,10 +571,16 @@ export function HomeShell() {
             Your first 6 images are <span className="accent-italic">on us.</span>
           </WipeText>
           <FadeReveal className="cta-actions" delay={200}>
-            <Link href="/upload" className="editorial-button accent editorial-button-large btn-primary">
+            <Link
+              href="/upload"
+              className="editorial-button accent editorial-button-large btn-primary"
+            >
               <span>Upload Your First Image</span>
             </Link>
-            <Link href="/billing" className="editorial-button ghost editorial-button-large btn-cream">
+            <Link
+              href="/billing"
+              className="editorial-button ghost editorial-button-large btn-cream"
+            >
               <span>See Pricing →</span>
             </Link>
           </FadeReveal>

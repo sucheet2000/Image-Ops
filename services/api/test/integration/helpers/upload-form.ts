@@ -8,9 +8,9 @@ export function buildUploadFormData(
   for (const [key, value] of Object.entries(fields || {})) {
     formData.append(key, value);
   }
-  if (!fields?.["Content-Type"]) {
-    formData.append("Content-Type", mimeType);
+  if (!fields?.['Content-Type']) {
+    formData.append('Content-Type', mimeType);
   }
-  formData.append("file", new Blob([fileBytes], { type: mimeType }), filename);
+  formData.append('file', new Blob([fileBytes], { type: mimeType }), filename);
   return formData;
 }

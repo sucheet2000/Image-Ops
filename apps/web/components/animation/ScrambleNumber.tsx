@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useScramble } from "../../hooks/useScramble";
+import { useScramble } from '../../hooks/useScramble';
 
 type ScrambleNumberProps = {
   value: number;
@@ -12,10 +12,10 @@ type ScrambleNumberProps = {
 
 export default function ScrambleNumber({
   value,
-  suffix = "",
+  suffix = '',
   decimals = 0,
   duration = 1400,
-  className = ""
+  className = '',
 }: ScrambleNumberProps) {
   const { display, ref } = useScramble(value, suffix, { duration, decimals });
   return (

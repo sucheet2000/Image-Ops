@@ -1,6 +1,6 @@
-import { z } from "zod";
-import { AppError } from "@imageops/core";
-import CircuitBreaker from "opossum";
+import { z } from 'zod';
+import { AppError } from '@imageops/core';
+import CircuitBreaker from 'opossum';
 
 export type BackgroundRemoveResult = {
   bytes: Buffer;
@@ -14,12 +14,12 @@ export interface BackgroundRemoveProvider {
 export class NonRetryableProviderError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "NonRetryableProviderError";
+    this.name = 'NonRetryableProviderError';
   }
 }
 
 const responseSchema = z.object({
-  contentType: z.string().min(1)
+  contentType: z.string().min(1),
 });
 
 export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
@@ -35,7 +35,7 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
       backoffMaxMs?: number;
       onRetry?: (payload: { attempt: number; maxRetries: number; reason: string }) => void;
       onCircuitOpen?: (payload: { reason: string }) => void;
-      onCircuitStateChange?: (state: "open" | "halfOpen" | "close") => void;
+      onCircuitStateChange?: (state: 'open' | 'halfOpen' | 'close') => void;
     }
   ) {
     this.breaker = new CircuitBreaker<[Buffer, string], BackgroundRemoveResult>(
@@ -44,60 +44,65 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
         timeout: false,
         errorThresholdPercentage: 50,
         resetTimeout: 60000,
-        volumeThreshold: 5
+        volumeThreshold: 5,
       }
     );
-    this.breaker.on("open", () => this.config.onCircuitStateChange?.("open"));
-    this.breaker.on("halfOpen", () => this.config.onCircuitStateChange?.("halfOpen"));
-    this.breaker.on("close", () => this.config.onCircuitStateChange?.("close"));
+    this.breaker.on('open', () => this.config.onCircuitStateChange?.('open'));
+    this.breaker.on('halfOpen', () => this.config.onCircuitStateChange?.('halfOpen'));
+    this.breaker.on('close', () => this.config.onCircuitStateChange?.('close'));
   }
 
   private async callProvider(bytes: Buffer, contentType: string): Promise<BackgroundRemoveResult> {
     const response = await fetch(this.config.endpointUrl, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "content-type": contentType,
-        ...(this.config.apiKey ? { authorization: `Bearer ${this.config.apiKey}` } : {})
+        'content-type': contentType,
+        ...(this.config.apiKey ? { authorization: `Bearer ${this.config.apiKey}` } : {}),
       },
       body: bytes,
-      signal: AbortSignal.timeout(this.config.timeoutMs)
+      signal: AbortSignal.timeout(this.config.timeoutMs),
     });
 
     if (!response.ok) {
       if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw new NonRetryableProviderError(`Background remove provider rejected request with status ${response.status}`);
+        throw new NonRetryableProviderError(
+          `Background remove provider rejected request with status ${response.status}`
+        );
       }
       throw new AppError(
-        "BACKGROUND_REMOVE_PROVIDER_ERROR",
+        'BACKGROUND_REMOVE_PROVIDER_ERROR',
         502,
         `Background remove provider returned status ${response.status}`
       );
     }
 
-    const parsedContentType = response.headers.get("content-type") || "image/png";
+    const parsedContentType = response.headers.get('content-type') || 'image/png';
     const checked = responseSchema.parse({ contentType: parsedContentType });
     const arrayBuffer = await response.arrayBuffer();
 
     return {
       bytes: Buffer.from(arrayBuffer),
-      contentType: checked.contentType
+      contentType: checked.contentType,
     };
   }
 
-  async removeBackground(input: { bytes: Buffer; contentType: string }): Promise<BackgroundRemoveResult> {
+  async removeBackground(input: {
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<BackgroundRemoveResult> {
     let attempt = 0;
     let lastError: unknown = null;
 
     while (attempt <= this.config.maxRetries) {
       if (this.breaker.opened) {
-        const reason = "circuit open";
+        const reason = 'circuit open';
         if (this.config.onCircuitOpen) {
           this.config.onCircuitOpen({ reason });
         } else {
           this.config.onRetry?.({
             attempt: 0,
             maxRetries: this.config.maxRetries,
-            reason
+            reason,
           });
         }
         lastError = reason;
@@ -123,12 +128,16 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
         this.config.onRetry?.({
           attempt,
           maxRetries: this.config.maxRetries,
-          reason: error instanceof Error ? error.message : String(error)
+          reason: error instanceof Error ? error.message : String(error),
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
-    throw new AppError("BACKGROUND_REMOVE_FAILED", 502, `Background remove failed after retries: ${String(lastError)}`);
+    throw new AppError(
+      'BACKGROUND_REMOVE_FAILED',
+      502,
+      `Background remove failed after retries: ${String(lastError)}`
+    );
   }
 }

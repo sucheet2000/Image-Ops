@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import FadeReveal from "../../../../components/animation/FadeReveal";
-import WipeText from "../../../../components/animation/WipeText";
-import { JsonLd } from "../../../components/json-ld";
-import { AUDIENCE_INTENT_PAGES, findAudienceIntent, getBaseUrl } from "../../../lib/seo-data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import FadeReveal from '../../../../components/animation/FadeReveal';
+import WipeText from '../../../../components/animation/WipeText';
+import { JsonLd } from '../../../components/json-ld';
+import { AUDIENCE_INTENT_PAGES, findAudienceIntent, getBaseUrl } from '../../../lib/seo-data';
 
 type AudienceIntentPageProps = {
   params: Promise<{ audience: string; intent: string }>;
@@ -13,7 +13,7 @@ type AudienceIntentPageProps = {
 export function generateStaticParams() {
   return AUDIENCE_INTENT_PAGES.map((item) => ({
     audience: item.audience,
-    intent: item.intent
+    intent: item.intent,
   }));
 }
 
@@ -21,7 +21,7 @@ export async function generateMetadata({ params }: AudienceIntentPageProps): Pro
   const resolved = await params;
   const page = findAudienceIntent(resolved.audience, resolved.intent);
   if (!page) {
-    return { title: "Workflow Not Found | Image Ops" };
+    return { title: 'Workflow Not Found | Image Ops' };
   }
 
   const baseUrl = getBaseUrl();
@@ -34,9 +34,9 @@ export async function generateMetadata({ params }: AudienceIntentPageProps): Pro
     openGraph: {
       title: `${page.title} | Image Ops`,
       description: page.summary,
-      type: "article",
-      url
-    }
+      type: 'article',
+      url,
+    },
   };
 }
 
@@ -51,35 +51,35 @@ export default async function AudienceIntentPage({ params }: AudienceIntentPageP
   const url = `${baseUrl}/for/${page.audience}/${page.intent}`;
 
   const faqSchema = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
     mainEntity: page.faq.map((item) => ({
-      "@type": "Question",
+      '@type': 'Question',
       name: item.question,
       acceptedAnswer: {
-        "@type": "Answer",
-        text: item.answer
-      }
-    }))
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
   };
 
   const howToSchema = {
-    "@context": "https://schema.org",
-    "@type": "HowTo",
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
     name: page.title,
     description: page.summary,
     url,
     step: page.recommendedTools.map((tool, index) => ({
-      "@type": "HowToStep",
+      '@type': 'HowToStep',
       position: index + 1,
       name: `Run ${tool}`,
-      url: `${baseUrl}/tools/${tool}`
-    }))
+      url: `${baseUrl}/tools/${tool}`,
+    })),
   };
 
   return (
     <>
-      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: "56vh" }}>
+      <section className="full-bleed-section editorial-page-hero" style={{ minHeight: '56vh' }}>
         <div className="section-inner">
           <FadeReveal as="span" className="section-label" delay={0}>
             Workflow / {page.audience}
@@ -99,10 +99,10 @@ export default async function AudienceIntentPage({ params }: AudienceIntentPageP
             Recommended Flow
           </FadeReveal>
           <WipeText as="h2">Execute this sequence.</WipeText>
-          <ol className="editorial-list" style={{ marginTop: "1rem" }}>
+          <ol className="editorial-list" style={{ marginTop: '1rem' }}>
             {page.recommendedTools.map((tool, index) => (
               <FadeReveal key={tool} as="li" delay={200 + index * 80} y={10}>
-                <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="editorial-list-number">{String(index + 1).padStart(2, '0')}</span>
                 <span>
                   <Link href={`/tools/${tool}`}>{tool}</Link>
                 </span>
@@ -115,21 +115,29 @@ export default async function AudienceIntentPage({ params }: AudienceIntentPageP
           <FadeReveal as="span" className="section-label" delay={80}>
             FAQ
           </FadeReveal>
-          <div className="editorial-card-row" style={{ marginTop: "0.8rem" }}>
+          <div className="editorial-card-row" style={{ marginTop: '0.8rem' }}>
             {page.faq.map((item, index) => (
               <FadeReveal key={item.question} delay={120 + index * 80}>
                 <article className="editorial-card">
-                <h3>{item.question}</h3>
-                <p style={{ marginTop: "0.45rem", color: "var(--muted)" }}>{item.answer}</p>
+                  <h3>{item.question}</h3>
+                  <p style={{ marginTop: '0.45rem', color: 'var(--muted)' }}>{item.answer}</p>
                 </article>
               </FadeReveal>
             ))}
           </div>
-          <div className="editorial-card" style={{ marginTop: "1rem" }}>
+          <div className="editorial-card" style={{ marginTop: '1rem' }}>
             <p className="section-label">More SEO Pages</p>
-            <p style={{ marginTop: "0.5rem" }}><Link href="/guides/prepare-amazon-main-images">Guide: Prepare Amazon Main Images</Link></p>
-            <p><Link href="/use-cases/amazon-listings">Use case: Amazon Listings</Link></p>
-            <p><Link href="/compare/jpg-vs-png">Compare: JPG vs PNG</Link></p>
+            <p style={{ marginTop: '0.5rem' }}>
+              <Link href="/guides/prepare-amazon-main-images">
+                Guide: Prepare Amazon Main Images
+              </Link>
+            </p>
+            <p>
+              <Link href="/use-cases/amazon-listings">Use case: Amazon Listings</Link>
+            </p>
+            <p>
+              <Link href="/compare/jpg-vs-png">Compare: JPG vs PNG</Link>
+            </p>
           </div>
         </aside>
       </section>

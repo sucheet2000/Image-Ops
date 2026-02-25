@@ -1,11 +1,11 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { BillingError } from "@imageops/core";
-import { ulid } from "ulid";
-import { z } from "zod";
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { BillingError } from '@imageops/core';
+import { ulid } from 'ulid';
+import { z } from 'zod';
 
 export type BillingCheckoutInput = {
   subjectId: string;
-  plan: "pro" | "team";
+  plan: 'pro' | 'team';
   successUrl: string;
   cancelUrl: string;
   now: Date;
@@ -22,8 +22,8 @@ export type ParsedBillingWebhook = {
   eventId: string;
   checkoutSessionId: string;
   subjectId: string;
-  plan: "pro" | "team";
-  status: "paid" | "canceled" | "expired";
+  plan: 'pro' | 'team';
+  status: 'paid' | 'canceled' | 'expired';
 };
 
 export interface BillingService {
@@ -37,21 +37,21 @@ const hmacWebhookSchema = z.object({
   eventId: z.string().min(1),
   checkoutSessionId: z.string().min(1),
   subjectId: z.string().min(1),
-  plan: z.enum(["pro", "team"]),
-  status: z.enum(["paid", "canceled", "expired"])
+  plan: z.enum(['pro', 'team']),
+  status: z.enum(['paid', 'canceled', 'expired']),
 });
 
-const STRIPE_WEBHOOK_STATUS_BY_TYPE: Record<string, ParsedBillingWebhook["status"]> = {
-  "checkout.session.completed": "paid",
-  "checkout.session.expired": "expired",
-  "checkout.session.async_payment_failed": "canceled"
+const STRIPE_WEBHOOK_STATUS_BY_TYPE: Record<string, ParsedBillingWebhook['status']> = {
+  'checkout.session.completed': 'paid',
+  'checkout.session.expired': 'expired',
+  'checkout.session.async_payment_failed': 'canceled',
 };
 
 function safeEqualHex(left: string, right: string): boolean {
   if (left.length !== right.length) {
     return false;
   }
-  return timingSafeEqual(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+  return timingSafeEqual(Buffer.from(left, 'utf8'), Buffer.from(right, 'utf8'));
 }
 
 export class HmacBillingService implements BillingService {
@@ -69,25 +69,25 @@ export class HmacBillingService implements BillingService {
     const providerSessionId = `chk_${ulid(input.now.getTime())}`;
     const expiresAt = new Date(input.now.getTime() + input.ttlSeconds * 1000).toISOString();
     const tokenPayload = `${providerSessionId}:${input.subjectId}:${input.plan}:${expiresAt}`;
-    const token = createHmac("sha256", this.providerSecret).update(tokenPayload).digest("hex");
+    const token = createHmac('sha256', this.providerSecret).update(tokenPayload).digest('hex');
 
-    const url = new URL(`${this.publicBaseUrl.replace(/\/$/, "")}/billing/checkout`);
-    url.searchParams.set("session", providerSessionId);
-    url.searchParams.set("subject", input.subjectId);
-    url.searchParams.set("plan", input.plan);
-    url.searchParams.set("token", token);
-    url.searchParams.set("success_url", input.successUrl);
-    url.searchParams.set("cancel_url", input.cancelUrl);
+    const url = new URL(`${this.publicBaseUrl.replace(/\/$/, '')}/billing/checkout`);
+    url.searchParams.set('session', providerSessionId);
+    url.searchParams.set('subject', input.subjectId);
+    url.searchParams.set('plan', input.plan);
+    url.searchParams.set('token', token);
+    url.searchParams.set('success_url', input.successUrl);
+    url.searchParams.set('cancel_url', input.cancelUrl);
 
     return {
       providerSessionId,
       checkoutUrl: url.toString(),
-      expiresAt
+      expiresAt,
     };
   }
 
   signWebhookPayload(payload: string): string {
-    return createHmac("sha256", this.webhookSecret).update(payload).digest("hex");
+    return createHmac('sha256', this.webhookSecret).update(payload).digest('hex');
   }
 
   verifyWebhookSignature(payload: string, signature: string): boolean {
@@ -113,7 +113,7 @@ export class HmacBillingService implements BillingService {
       checkoutSessionId: parsed.data.checkoutSessionId,
       subjectId: parsed.data.subjectId,
       plan: parsed.data.plan,
-      status: parsed.data.status
+      status: parsed.data.status,
     };
   }
 }
@@ -122,7 +122,7 @@ export class StripeBillingService implements BillingService {
   private readonly secretKey: string;
   private readonly webhookSecret: string;
   private readonly webhookToleranceSeconds: number;
-  private readonly priceIdByPlan: Record<"pro" | "team", string>;
+  private readonly priceIdByPlan: Record<'pro' | 'team', string>;
   private readonly fetchImpl: typeof fetch;
   private readonly nowProvider: () => number;
 
@@ -130,7 +130,7 @@ export class StripeBillingService implements BillingService {
     secretKey: string;
     webhookSecret: string;
     webhookToleranceSeconds?: number;
-    priceIdByPlan: Record<"pro" | "team", string>;
+    priceIdByPlan: Record<'pro' | 'team', string>;
     fetchImpl?: typeof fetch;
     nowProvider?: () => number;
   }) {
@@ -144,21 +144,21 @@ export class StripeBillingService implements BillingService {
 
   async createCheckoutSession(input: BillingCheckoutInput): Promise<BillingCheckoutOutput> {
     const form = new URLSearchParams();
-    form.set("mode", "subscription");
-    form.set("success_url", input.successUrl);
-    form.set("cancel_url", input.cancelUrl);
-    form.set("line_items[0][price]", this.priceIdByPlan[input.plan]);
-    form.set("line_items[0][quantity]", "1");
-    form.set("metadata[subjectId]", input.subjectId);
-    form.set("metadata[plan]", input.plan);
+    form.set('mode', 'subscription');
+    form.set('success_url', input.successUrl);
+    form.set('cancel_url', input.cancelUrl);
+    form.set('line_items[0][price]', this.priceIdByPlan[input.plan]);
+    form.set('line_items[0][quantity]', '1');
+    form.set('metadata[subjectId]', input.subjectId);
+    form.set('metadata[plan]', input.plan);
 
-    const response = await this.fetchImpl("https://api.stripe.com/v1/checkout/sessions", {
-      method: "POST",
+    const response = await this.fetchImpl('https://api.stripe.com/v1/checkout/sessions', {
+      method: 'POST',
       headers: {
         authorization: `Bearer ${this.secretKey}`,
-        "content-type": "application/x-www-form-urlencoded"
+        'content-type': 'application/x-www-form-urlencoded',
       },
-      body: form.toString()
+      body: form.toString(),
     });
 
     if (!response.ok) {
@@ -167,36 +167,37 @@ export class StripeBillingService implements BillingService {
     }
 
     const payload = (await response.json()) as Record<string, unknown>;
-    const sessionId = String(payload.id || "").trim();
-    const checkoutUrl = String(payload.url || "").trim();
+    const sessionId = String(payload.id || '').trim();
+    const checkoutUrl = String(payload.url || '').trim();
     if (!sessionId || !checkoutUrl) {
-      throw new BillingError("Stripe checkout response missing id/url.");
+      throw new BillingError('Stripe checkout response missing id/url.');
     }
 
     const expiresAtUnix = Number(payload.expires_at || 0);
-    const expiresAt = Number.isFinite(expiresAtUnix) && expiresAtUnix > 0
-      ? new Date(expiresAtUnix * 1000).toISOString()
-      : new Date(input.now.getTime() + input.ttlSeconds * 1000).toISOString();
+    const expiresAt =
+      Number.isFinite(expiresAtUnix) && expiresAtUnix > 0
+        ? new Date(expiresAtUnix * 1000).toISOString()
+        : new Date(input.now.getTime() + input.ttlSeconds * 1000).toISOString();
 
     return {
       providerSessionId: sessionId,
       checkoutUrl,
-      expiresAt
+      expiresAt,
     };
   }
 
   signWebhookPayload(payload: string): string {
     const timestamp = Math.floor(this.nowProvider() / 1000);
-    const signed = createHmac("sha256", this.webhookSecret)
+    const signed = createHmac('sha256', this.webhookSecret)
       .update(`${timestamp}.${payload}`)
-      .digest("hex");
+      .digest('hex');
     return `t=${timestamp},v1=${signed}`;
   }
 
   verifyWebhookSignature(payload: string, signature: string): boolean {
-    const pieces = signature.split(",").map((part) => part.trim());
-    const timestampPart = pieces.find((part) => part.startsWith("t="));
-    const signatures = pieces.filter((part) => part.startsWith("v1=")).map((part) => part.slice(3));
+    const pieces = signature.split(',').map((part) => part.trim());
+    const timestampPart = pieces.find((part) => part.startsWith('t='));
+    const signatures = pieces.filter((part) => part.startsWith('v1=')).map((part) => part.slice(3));
 
     if (!timestampPart || signatures.length === 0) {
       return false;
@@ -212,9 +213,9 @@ export class StripeBillingService implements BillingService {
       return false;
     }
 
-    const expected = createHmac("sha256", this.webhookSecret)
+    const expected = createHmac('sha256', this.webhookSecret)
       .update(`${timestamp}.${payload}`)
-      .digest("hex");
+      .digest('hex');
 
     return signatures.some((candidate) => safeEqualHex(candidate, expected));
   }
@@ -226,30 +227,32 @@ export class StripeBillingService implements BillingService {
     } catch {
       return null;
     }
-    const eventId = String(raw.id || "").trim();
-    const eventType = String(raw.type || "").trim();
+    const eventId = String(raw.id || '').trim();
+    const eventType = String(raw.type || '').trim();
     const status = STRIPE_WEBHOOK_STATUS_BY_TYPE[eventType];
 
     if (!eventId || !status) {
       return null;
     }
 
-    const dataObject = raw.data && typeof raw.data === "object"
-      ? (raw.data as { object?: Record<string, unknown> }).object
-      : undefined;
-    if (!dataObject || typeof dataObject !== "object") {
+    const dataObject =
+      raw.data && typeof raw.data === 'object'
+        ? (raw.data as { object?: Record<string, unknown> }).object
+        : undefined;
+    if (!dataObject || typeof dataObject !== 'object') {
       return null;
     }
 
-    const checkoutSessionId = String(dataObject.id || "").trim();
-    const metadata = dataObject.metadata && typeof dataObject.metadata === "object"
-      ? (dataObject.metadata as Record<string, unknown>)
-      : {};
+    const checkoutSessionId = String(dataObject.id || '').trim();
+    const metadata =
+      dataObject.metadata && typeof dataObject.metadata === 'object'
+        ? (dataObject.metadata as Record<string, unknown>)
+        : {};
 
-    const subjectId = String(metadata.subjectId || metadata.subject_id || "").trim();
-    const plan = String(metadata.plan || "").trim();
+    const subjectId = String(metadata.subjectId || metadata.subject_id || '').trim();
+    const plan = String(metadata.plan || '').trim();
 
-    if (!checkoutSessionId || !subjectId || (plan !== "pro" && plan !== "team")) {
+    if (!checkoutSessionId || !subjectId || (plan !== 'pro' && plan !== 'team')) {
       return null;
     }
 
@@ -258,7 +261,7 @@ export class StripeBillingService implements BillingService {
       checkoutSessionId,
       subjectId,
       plan,
-      status
+      status,
     };
   }
 }

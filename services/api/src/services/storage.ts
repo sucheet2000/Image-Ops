@@ -2,14 +2,14 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  S3Client
-} from "@aws-sdk/client-s3";
-import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { AppError, NotFoundError, ValidationError } from "@imageops/core";
-import type { ApiConfig } from "../config";
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { AppError, NotFoundError, ValidationError } from '@imageops/core';
+import type { ApiConfig } from '../config';
 
-export const TMP_PREFIX = "tmp/";
+export const TMP_PREFIX = 'tmp/';
 
 export type StorageHeadResult = {
   exists: boolean;
@@ -34,7 +34,10 @@ export interface ObjectStorageService {
     expiresInSeconds: number;
     maxSizeBytes: number;
   }): Promise<PresignedUploadPost>;
-  createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string>;
+  createPresignedDownloadUrl(input: {
+    objectKey: string;
+    expiresInSeconds: number;
+  }): Promise<string>;
   getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
   deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult>;
@@ -54,8 +57,8 @@ export class S3ObjectStorageService implements ObjectStorageService {
       forcePathStyle: config.s3ForcePathStyle,
       credentials: {
         accessKeyId: config.s3AccessKey,
-        secretAccessKey: config.s3SecretKey
-      }
+        secretAccessKey: config.s3SecretKey,
+      },
     });
     this.presignClient = config.s3PublicEndpoint
       ? new S3Client({
@@ -64,8 +67,8 @@ export class S3ObjectStorageService implements ObjectStorageService {
           forcePathStyle: config.s3ForcePathStyle,
           credentials: {
             accessKeyId: config.s3AccessKey,
-            secretAccessKey: config.s3SecretKey
-          }
+            secretAccessKey: config.s3SecretKey,
+          },
         })
       : this.client;
   }
@@ -80,45 +83,50 @@ export class S3ObjectStorageService implements ObjectStorageService {
       Bucket: this.bucket,
       Key: input.objectKey,
       Fields: {
-        "Content-Type": input.contentType
+        'Content-Type': input.contentType,
       },
       Conditions: [
-        ["content-length-range", 1, input.maxSizeBytes],
-        { "Content-Type": input.contentType }
+        ['content-length-range', 1, input.maxSizeBytes],
+        { 'Content-Type': input.contentType },
       ],
-      Expires: input.expiresInSeconds
+      Expires: input.expiresInSeconds,
     });
 
     return {
       url: presigned.url,
-      fields: presigned.fields
+      fields: presigned.fields,
     };
   }
 
-  async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
+  async createPresignedDownloadUrl(input: {
+    objectKey: string;
+    expiresInSeconds: number;
+  }): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
-      Key: input.objectKey
+      Key: input.objectKey,
     });
 
     return getSignedUrl(this.presignClient, command, { expiresIn: input.expiresInSeconds });
   }
 
   async getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }> {
-    const response = await this.client.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: objectKey
-    }));
+    const response = await this.client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+      })
+    );
 
     const body = response.Body as { transformToByteArray?: () => Promise<Uint8Array> } | undefined;
     if (!body?.transformToByteArray) {
-      throw new AppError("STORAGE_ERROR", 500, "S3 getObject response body is missing bytes.");
+      throw new AppError('STORAGE_ERROR', 500, 'S3 getObject response body is missing bytes.');
     }
 
     const bytes = Buffer.from(await body.transformToByteArray());
     return {
       bytes,
-      contentType: String(response.ContentType || "application/octet-stream")
+      contentType: String(response.ContentType || 'application/octet-stream'),
     };
   }
 
@@ -127,18 +135,19 @@ export class S3ObjectStorageService implements ObjectStorageService {
       const response = await this.client.send(
         new HeadObjectCommand({
           Bucket: this.bucket,
-          Key: objectKey
+          Key: objectKey,
         })
       );
 
       return {
         exists: true,
         contentType: response.ContentType,
-        contentLength: response.ContentLength
+        contentLength: response.ContentLength,
       };
     } catch (error) {
-      const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
-      if ((error instanceof Error && error.name === "NotFound") || statusCode === 404) {
+      const statusCode = (error as { $metadata?: { httpStatusCode?: number } })?.$metadata
+        ?.httpStatusCode;
+      if ((error instanceof Error && error.name === 'NotFound') || statusCode === 404) {
         return { exists: false };
       }
       throw error;
@@ -152,7 +161,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
 
     const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
     if (invalid.length > 0) {
-      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(', ')}`);
     }
 
     const response = await this.client.send(
@@ -160,12 +169,12 @@ export class S3ObjectStorageService implements ObjectStorageService {
         Bucket: this.bucket,
         Delete: {
           Objects: objectKeys.map((key) => ({ Key: key })),
-          Quiet: false
-        }
+          Quiet: false,
+        },
       })
     );
 
-    const deleted = (response.Deleted || []).map((item) => item.Key || "").filter(Boolean);
+    const deleted = (response.Deleted || []).map((item) => item.Key || '').filter(Boolean);
     const deletedSet = new Set(deleted);
     const notFound = objectKeys.filter((key) => !deletedSet.has(key));
 
@@ -193,12 +202,15 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
       url: `https://memory.storage/upload/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}&maxSizeBytes=${input.maxSizeBytes}`,
       fields: {
         key: input.objectKey,
-        "Content-Type": input.contentType
-      }
+        'Content-Type': input.contentType,
+      },
     };
   }
 
-  async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
+  async createPresignedDownloadUrl(input: {
+    objectKey: string;
+    expiresInSeconds: number;
+  }): Promise<string> {
     return `https://memory.storage/download/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}`;
   }
 
@@ -210,7 +222,7 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
 
     return {
       bytes: Buffer.from(object.bytes),
-      contentType: object.contentType
+      contentType: object.contentType,
     };
   }
 
@@ -223,14 +235,14 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
     return {
       exists: true,
       contentType: object.contentType,
-      contentLength: object.bytes.length
+      contentLength: object.bytes.length,
     };
   }
 
   async deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult> {
     const invalid = objectKeys.filter((key) => !key.startsWith(TMP_PREFIX));
     if (invalid.length > 0) {
-      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(", ")}`);
+      throw new ValidationError(`Invalid object key prefix for deletion: ${invalid.join(', ')}`);
     }
 
     const deleted: string[] = [];
@@ -247,7 +259,7 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
     return { deleted, notFound };
   }
 
-  setObject(objectKey: string, contentType: string, bytes: Buffer = Buffer.from("test")): void {
+  setObject(objectKey: string, contentType: string, bytes: Buffer = Buffer.from('test')): void {
     this.objects.set(objectKey, { contentType, bytes });
   }
 

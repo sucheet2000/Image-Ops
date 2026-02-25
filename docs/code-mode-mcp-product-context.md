@@ -6,12 +6,14 @@ Status: Proposed (build-ready context)
 ## 1) Why this exists
 
 Our Image Ops product already has a clear core architecture:
+
 - Next.js frontend
 - Node/TypeScript API
 - Worker-based image processing
 - Queue + temp object storage + Postgres metadata
 
 Code-Mode MCP is not a replacement for that stack. It is an agent integration layer that lets an AI assistant safely discover and orchestrate existing API operations using:
+
 - `search` (find capabilities)
 - `execute` (run constrained code against approved endpoints)
 
@@ -20,10 +22,12 @@ This gives us an assistant-friendly control plane without exposing hundreds of f
 ## 2) Product decision (high level)
 
 Use Code-Mode MCP for:
+
 - Internal operations copilot (support/ops workflows)
 - Future guided assistant UX for multi-step tasks
 
 Do not use Code-Mode MCP for:
+
 - Core upload/process/download runtime path
 - Replacing backend business logic
 
@@ -32,6 +36,7 @@ The main app continues to serve end users directly. MCP sits beside it for agent
 ## 3) Concrete V1 scope for Image Ops
 
 Expose only these existing API capabilities through MCP:
+
 - `POST /api/uploads/init` (`uploads_init`)
 - `POST /api/jobs` (`jobs_create`)
 - `GET /api/jobs/{id}` (`jobs_get`)
@@ -39,6 +44,7 @@ Expose only these existing API capabilities through MCP:
 - `GET /api/quota` (`quota_get`)
 
 Keep out of MCP V1:
+
 - Billing webhooks and sensitive admin routes
 - Direct DB access
 - Raw object-store operations
@@ -48,6 +54,7 @@ Keep out of MCP V1:
 ### 4.1 `search`
 
 `search` returns a compact list of supported operations from a reduced OpenAPI index:
+
 - operation ID
 - HTTP method
 - route
@@ -59,6 +66,7 @@ Design target: keep context small and predictable so model tokens are spent on t
 ### 4.2 `execute`
 
 `execute` runs model-generated TypeScript in a sandbox with hard limits:
+
 - time limit per execution
 - max API calls per execution
 - allowed host list (staging API domain only during pilot)
@@ -71,6 +79,7 @@ Design target: keep context small and predictable so model tokens are spent on t
 Treat model-generated code as untrusted input.
 
 Required controls:
+
 - OAuth/JWT validation (issuer, audience, expiration)
 - Per-operation scope checks
 - Endpoint allowlist enforcement
@@ -80,6 +89,7 @@ Required controls:
 - Kill switch to disable `execute` quickly
 
 Minimum scope mapping:
+
 - `uploads_init` -> `image.upload`
 - `jobs_create` -> `image.jobs.write`
 - `jobs_get` -> `image.jobs.read`
@@ -91,6 +101,7 @@ Minimum scope mapping:
 Our product promise is temporary processing + automatic deletion. MCP must not weaken this.
 
 MCP requirements:
+
 - No image bytes stored in MCP logs/state
 - Redact signed URLs/tokens from logs
 - Preserve existing cleanup and TTL semantics
@@ -99,16 +110,19 @@ MCP requirements:
 ## 7) Recommended rollout
 
 ### Phase 1: Staging-only internal pilot
+
 - Enable `search` + `execute` for engineering/support users
 - Start with read-heavy paths (`jobs_get`, `quota_get`)
 - Add write operations after policy tests pass
 
 ### Phase 2: Controlled write access
+
 - Add `uploads_init`, `jobs_create`, `cleanup_create`
 - Enforce tighter rate and call-count caps
 - Monitor blocked-attempt metrics and auth failures
 
 ### Phase 3: Production canary
+
 - Small percent of traffic/users
 - Instant rollback path (feature flag + route disable)
 - Incident playbook ready before expansion

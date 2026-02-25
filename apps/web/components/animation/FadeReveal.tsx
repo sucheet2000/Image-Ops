@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import type { CSSProperties, ElementType, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, ElementType, ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type FadeRevealProps = {
   children: ReactNode;
@@ -21,8 +21,8 @@ export default function FadeReveal({
   y = 20,
   x = 0,
   duration = 700,
-  className = "",
-  as: Tag = "div",
+  className = '',
+  as: Tag = 'div',
   once = true,
   style,
   ...rest
@@ -32,8 +32,8 @@ export default function FadeReveal({
 
   useEffect(() => {
     const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReduced) {
       setVisible(true);
@@ -69,9 +69,9 @@ export default function FadeReveal({
       {...rest}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? "translate(0,0)" : `translate(${x}px, ${y}px)`,
+        transform: visible ? 'translate(0,0)' : `translate(${x}px, ${y}px)`,
         transition: `opacity ${duration}ms ${delay}ms ease, transform ${duration}ms ${delay}ms cubic-bezier(0.16, 1, 0.3, 1)`,
-        ...style
+        ...style,
       }}
     >
       {children}

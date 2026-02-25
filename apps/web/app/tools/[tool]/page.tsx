@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import FadeReveal from "../../../components/animation/FadeReveal";
-import ScrambleNumber from "../../../components/animation/ScrambleNumber";
-import WipeText from "../../../components/animation/WipeText";
-import { JsonLd } from "../../components/json-ld";
-import { ToolWorkbench } from "../../components/tool-workbench";
-import { findTool, getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from "../../lib/seo-data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import FadeReveal from '../../../components/animation/FadeReveal';
+import ScrambleNumber from '../../../components/animation/ScrambleNumber';
+import WipeText from '../../../components/animation/WipeText';
+import { JsonLd } from '../../components/json-ld';
+import { ToolWorkbench } from '../../components/tool-workbench';
+import { findTool, getBaseUrl, TOOL_PAGES, USE_CASE_PAGES } from '../../lib/seo-data';
 
 type ToolPageProps = {
   params: Promise<{ tool: string }>;
@@ -22,49 +22,52 @@ type ToolNarrative = {
 
 const narrativeByTool: Record<string, ToolNarrative> = {
   resize: {
-    beforeTitle: "Before: platform mismatch",
-    beforeCopy: "Different channels require different dimensions, crops, and frame proportions.",
-    afterTitle: "After: one preset, exact fit",
-    afterCopy: "Apply platform-safe dimensions and preserve composition with predictable fit modes.",
+    beforeTitle: 'Before: platform mismatch',
+    beforeCopy: 'Different channels require different dimensions, crops, and frame proportions.',
+    afterTitle: 'After: one preset, exact fit',
+    afterCopy:
+      'Apply platform-safe dimensions and preserve composition with predictable fit modes.',
     numberedFeatures: [
-      "Preset dimensions for Amazon, Etsy, Shopify, and social catalogs",
-      "Aspect-ratio aware fit modes: contain, cover, fill, inside, outside",
-      "Consistent output across repeated batch operations"
-    ]
+      'Preset dimensions for Amazon, Etsy, Shopify, and social catalogs',
+      'Aspect-ratio aware fit modes: contain, cover, fill, inside, outside',
+      'Consistent output across repeated batch operations',
+    ],
   },
   compress: {
-    beforeTitle: "Before: heavy image payloads",
-    beforeCopy: "Large files slow listing pages, strain mobile users, and hurt conversion rate.",
-    afterTitle: "After: perceptual lightweight outputs",
-    afterCopy: "Reduce file size while preserving texture and detail where buyers focus most.",
+    beforeTitle: 'Before: heavy image payloads',
+    beforeCopy: 'Large files slow listing pages, strain mobile users, and hurt conversion rate.',
+    afterTitle: 'After: perceptual lightweight outputs',
+    afterCopy: 'Reduce file size while preserving texture and detail where buyers focus most.',
     numberedFeatures: [
-      "Perceptual quality tuning instead of naive byte reduction",
-      "Configurable quality controls for storefront-specific targets",
-      "Predictable tradeoff between visual detail and payload size"
-    ]
+      'Perceptual quality tuning instead of naive byte reduction',
+      'Configurable quality controls for storefront-specific targets',
+      'Predictable tradeoff between visual detail and payload size',
+    ],
   },
   convert: {
-    beforeTitle: "Before: incompatible formats",
-    beforeCopy: "One platform expects JPG while another needs PNG or WEBP constraints.",
-    afterTitle: "After: channel-ready exports",
-    afterCopy: "Convert format without losing dimensions, then deliver exactly what each channel needs.",
+    beforeTitle: 'Before: incompatible formats',
+    beforeCopy: 'One platform expects JPG while another needs PNG or WEBP constraints.',
+    afterTitle: 'After: channel-ready exports',
+    afterCopy:
+      'Convert format without losing dimensions, then deliver exactly what each channel needs.',
     numberedFeatures: [
-      "JPG, PNG, and WEBP conversion with output-quality control",
-      "Dimension-preserving format changes for reliable listing QA",
-      "Simple route to create fallback assets for mixed compatibility"
-    ]
+      'JPG, PNG, and WEBP conversion with output-quality control',
+      'Dimension-preserving format changes for reliable listing QA',
+      'Simple route to create fallback assets for mixed compatibility',
+    ],
   },
-  "background-remove": {
-    beforeTitle: "Before: distracting product scenes",
-    beforeCopy: "Busy backgrounds weaken product focus and add friction to listing approvals.",
-    afterTitle: "After: clean isolated subjects",
-    afterCopy: "Generate transparent cutouts for cleaner thumbnails, ads, and marketplace hero shots.",
+  'background-remove': {
+    beforeTitle: 'Before: distracting product scenes',
+    beforeCopy: 'Busy backgrounds weaken product focus and add friction to listing approvals.',
+    afterTitle: 'After: clean isolated subjects',
+    afterCopy:
+      'Generate transparent cutouts for cleaner thumbnails, ads, and marketplace hero shots.',
     numberedFeatures: [
-      "Edge-aware subject extraction for common ecommerce product shapes",
-      "Transparent PNG/WEBP outputs for design reuse",
-      "Advanced workflow designed for high-impact visual assets"
-    ]
-  }
+      'Edge-aware subject extraction for common ecommerce product shapes',
+      'Transparent PNG/WEBP outputs for design reuse',
+      'Advanced workflow designed for high-impact visual assets',
+    ],
+  },
 };
 
 export function generateStaticParams() {
@@ -75,7 +78,7 @@ export async function generateMetadata({ params }: ToolPageProps): Promise<Metad
   const resolved = await params;
   const tool = findTool(resolved.tool);
   if (!tool) {
-    return { title: "Tool Not Found | Image Ops" };
+    return { title: 'Tool Not Found | Image Ops' };
   }
 
   const baseUrl = getBaseUrl();
@@ -87,14 +90,14 @@ export async function generateMetadata({ params }: ToolPageProps): Promise<Metad
     description,
     keywords: tool.keywords,
     alternates: {
-      canonical: `${baseUrl}/tools/${tool.slug}`
+      canonical: `${baseUrl}/tools/${tool.slug}`,
     },
     openGraph: {
       title,
       description,
-      type: "website",
-      url: `${baseUrl}/tools/${tool.slug}`
-    }
+      type: 'website',
+      url: `${baseUrl}/tools/${tool.slug}`,
+    },
   };
 }
 
@@ -106,33 +109,36 @@ export default async function ToolPage({ params }: ToolPageProps) {
   }
 
   const narrative = narrativeByTool[tool.slug] || narrativeByTool.resize;
-  const whenToUse = tool.whenToUse || "Use this tool when you need predictable, marketplace-safe outputs.";
+  const whenToUse =
+    tool.whenToUse || 'Use this tool when you need predictable, marketplace-safe outputs.';
   const baseUrl = getBaseUrl();
 
   const softwareSchema = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
     name: `Image Ops ${tool.name}`,
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
     url: `${baseUrl}/tools/${tool.slug}`,
-    description: tool.summary
+    description: tool.summary,
   };
 
   const faqSchema = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
     mainEntity: tool.faq.map((item) => ({
-      "@type": "Question",
+      '@type': 'Question',
       name: item.question,
       acceptedAnswer: {
-        "@type": "Answer",
-        text: item.answer
-      }
-    }))
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
   };
 
-  const relatedUseCases = USE_CASE_PAGES.filter((item) => item.recommendedTools.includes(tool.slug)).slice(0, 3);
+  const relatedUseCases = USE_CASE_PAGES.filter((item) =>
+    item.recommendedTools.includes(tool.slug)
+  ).slice(0, 3);
 
   return (
     <>
@@ -142,9 +148,14 @@ export default async function ToolPage({ params }: ToolPageProps) {
             Tool / {tool.slug}
           </FadeReveal>
           <WipeText as="h1" triggerOnMount>
-            {tool.name.split(" ").map((word, index) => (
-              <span key={word + index} style={index === tool.name.split(" ").length - 1 ? { fontStyle: "italic" } : undefined}>
-                {word}{" "}
+            {tool.name.split(' ').map((word, index) => (
+              <span
+                key={word + index}
+                style={
+                  index === tool.name.split(' ').length - 1 ? { fontStyle: 'italic' } : undefined
+                }
+              >
+                {word}{' '}
               </span>
             ))}
           </WipeText>
@@ -183,7 +194,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
         </div>
       </section>
 
-      <section className="full-bleed-section" style={{ background: "var(--cream)" }}>
+      <section className="full-bleed-section" style={{ background: 'var(--cream)' }}>
         <div className="section-inner">
           <FadeReveal as="span" className="section-label" delay={0}>
             Feature List
@@ -195,7 +206,7 @@ export default async function ToolPage({ params }: ToolPageProps) {
           <ol className="editorial-list">
             {narrative.numberedFeatures.map((feature, index) => (
               <FadeReveal key={feature} as="li" delay={220 + index * 80} y={10}>
-                <span className="editorial-list-number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="editorial-list-number">{String(index + 1).padStart(2, '0')}</span>
                 <span>{feature}</span>
               </FadeReveal>
             ))}
@@ -203,40 +214,61 @@ export default async function ToolPage({ params }: ToolPageProps) {
         </div>
       </section>
 
-      <ToolWorkbench tool={tool.slug} title={`Run ${tool.name}`} intro="Execute the complete upload-to-download pipeline directly in this page." />
+      <ToolWorkbench
+        tool={tool.slug}
+        title={`Run ${tool.name}`}
+        intro="Execute the complete upload-to-download pipeline directly in this page."
+      />
 
-      <section className="full-bleed-section" style={{ background: "var(--parchment)" }}>
+      <section className="full-bleed-section" style={{ background: 'var(--parchment)' }}>
         <div className="section-inner editorial-card-row">
           {tool.faq.map((item, index) => (
             <FadeReveal key={item.question} delay={index * 80}>
               <article className="editorial-card">
-              <span className="section-label">FAQ</span>
-              <h3 style={{ marginTop: "0.5rem" }}>{item.question}</h3>
-              <p style={{ marginTop: "0.45rem", color: "var(--muted)" }}>{item.answer}</p>
+                <span className="section-label">FAQ</span>
+                <h3 style={{ marginTop: '0.5rem' }}>{item.question}</h3>
+                <p style={{ marginTop: '0.45rem', color: 'var(--muted)' }}>{item.answer}</p>
               </article>
             </FadeReveal>
           ))}
         </div>
       </section>
 
-      <section className="full-bleed-section" style={{ background: "var(--terracotta)", color: "var(--white)" }}>
-        <div className="section-inner" style={{ display: "grid", gap: "1rem", alignItems: "center", gridTemplateColumns: "1fr auto" }}>
+      <section
+        className="full-bleed-section"
+        style={{ background: 'var(--terracotta)', color: 'var(--white)' }}
+      >
+        <div
+          className="section-inner"
+          style={{
+            display: 'grid',
+            gap: '1rem',
+            alignItems: 'center',
+            gridTemplateColumns: '1fr auto',
+          }}
+        >
           <div>
-            <span className="section-label" style={{ color: "var(--white)" }}>Continue Workflow</span>
-            <div style={{ color: "var(--white)" }}>
+            <span className="section-label" style={{ color: 'var(--white)' }}>
+              Continue Workflow
+            </span>
+            <div style={{ color: 'var(--white)' }}>
               <WipeText as="h2" wipeColor="rgba(255,255,255,0.3)">
                 Need a full sequence? Build your image run now.
               </WipeText>
             </div>
           </div>
-          <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <FadeReveal delay={120}>
               <Link href="/upload" className="editorial-button primary btn-primary">
                 <span>Open Upload Studio</span>
               </Link>
             </FadeReveal>
             <FadeReveal delay={200}>
-              <Link href="/tools" className="editorial-button ghost btn-cream" style={{ borderColor: "rgba(250,250,247,0.35)", color: "var(--white)" }}>
+              <Link
+                href="/tools"
+                className="editorial-button ghost btn-cream"
+                style={{ borderColor: 'rgba(250,250,247,0.35)', color: 'var(--white)' }}
+              >
                 <span>All Tools</span>
               </Link>
             </FadeReveal>
@@ -244,18 +276,22 @@ export default async function ToolPage({ params }: ToolPageProps) {
         </div>
       </section>
 
-      <section className="full-bleed-section" style={{ background: "var(--cream)" }}>
+      <section className="full-bleed-section" style={{ background: 'var(--cream)' }}>
         <div className="section-inner">
           <span className="section-label">Related Use Cases</span>
-          <div className="editorial-card-row" style={{ marginTop: "1rem" }}>
+          <div className="editorial-card-row" style={{ marginTop: '1rem' }}>
             {relatedUseCases.map((item, index) => (
               <FadeReveal key={item.slug} delay={index * 80}>
                 <article className="editorial-card">
-                <h3>{item.title}</h3>
-                <p style={{ marginTop: "0.5rem", color: "var(--muted)" }}>{item.summary}</p>
-                <Link href={`/use-cases/${item.slug}`} className="ui-link" style={{ marginTop: "0.9rem" }}>
-                  Open Use Case →
-                </Link>
+                  <h3>{item.title}</h3>
+                  <p style={{ marginTop: '0.5rem', color: 'var(--muted)' }}>{item.summary}</p>
+                  <Link
+                    href={`/use-cases/${item.slug}`}
+                    className="ui-link"
+                    style={{ marginTop: '0.9rem' }}
+                  >
+                    Open Use Case →
+                  </Link>
                 </article>
               </FadeReveal>
             ))}
