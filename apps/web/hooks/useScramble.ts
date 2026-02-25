@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from 'react';
 
-const CHARS = "0123456789";
+const CHARS = '0123456789';
 
 export function useScramble(
   finalValue: number,
-  suffix = "",
+  suffix = '',
   options: { duration?: number; decimals?: number } = {}
 ) {
   const { duration = 1400, decimals = 0 } = options;
@@ -16,8 +16,8 @@ export function useScramble(
 
   useEffect(() => {
     const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReduced) {
       setTriggered(true);
@@ -48,8 +48,8 @@ export function useScramble(
     }
 
     const prefersReduced =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReduced) {
       setDisplay(`${decimals > 0 ? finalValue.toFixed(decimals) : finalValue}${suffix}`);
@@ -64,8 +64,8 @@ export function useScramble(
       const eased = 1 - (1 - progress) ** 3;
 
       if (progress < 0.65) {
-        const len = String(finalValue).replace(".", "").length;
-        let scrambled = "";
+        const len = String(finalValue).replace('.', '').length;
+        let scrambled = '';
         for (let index = 0; index < len; index += 1) {
           scrambled += CHARS[Math.floor(Math.random() * CHARS.length)];
         }

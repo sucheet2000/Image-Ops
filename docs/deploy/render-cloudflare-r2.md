@@ -1,6 +1,7 @@
 # Render + Cloudflare DNS + R2 Deployment Runbook
 
 This runbook deploys Image Ops with:
+
 - Render managed services (`web`, `api`, `worker`, Postgres, Redis)
 - Cloudflare DNS + TLS for custom domains
 - Cloudflare R2 as S3-compatible object storage
@@ -17,6 +18,7 @@ This runbook deploys Image Ops with:
 1. In Cloudflare, create bucket `image-ops-temp` (or your preferred bucket name).
 2. Create R2 API token with read/write on that bucket.
 3. Record:
+
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
@@ -33,6 +35,7 @@ https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com
 1. In Render, create a new Blueprint from this repository.
 2. Use `render.yaml` at repo root.
 3. Render provisions:
+
 - `image-ops-postgres` (managed Postgres)
 - `image-ops-redis` (managed Key Value/Redis-compatible)
 - `image-ops-api` (Docker web service)
@@ -56,6 +59,7 @@ For all values marked `sync: false` in `render.yaml`, set the real values in Ren
 - `S3_SECRET_KEY=<R2_SECRET_ACCESS_KEY>`
 
 `S3_PUBLIC_ENDPOINT` controls the host/domain used in presigned upload/download URLs. The API signs with this endpoint for presign generation (see `services/api/src/services/storage.ts` constructor and `getSignedUrl` calls). Set it to:
+
 - `https://files.example.com` if you want presigned URLs on your custom files domain.
 - `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` if you want raw R2 S3 endpoint URLs.
 
@@ -70,6 +74,7 @@ If you choose a custom files domain, configure that domain in section 5 so it ma
 - `BG_REMOVE_API_URL=<your background removal provider endpoint>`
 
 Recommended provider timing defaults in `render.yaml`:
+
 - `BG_REMOVE_TIMEOUT_MS=15000`
 - `BG_REMOVE_MAX_RETRIES=1`
 - `BG_REMOVE_BACKOFF_MAX_MS=1000`
@@ -95,11 +100,13 @@ Create CNAME records:
 - `api` -> `<render-api-target>`
 
 Recommendations:
+
 - Start with Cloudflare proxy disabled (DNS only) until Render certificates are issued.
 - After cert issuance and healthy traffic, optionally enable proxy.
 - SSL/TLS mode: `Full (strict)`.
 
 Optional apex redirect:
+
 - Use Cloudflare redirect rules to send `example.com` -> `https://app.example.com`.
 
 ## 7. Production Sanity Checks

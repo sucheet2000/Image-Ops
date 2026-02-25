@@ -1,6 +1,6 @@
-import { config } from "./config";
-import { executeStep } from "./client";
-import type { ExecuteRequest, ExecuteResult } from "./types";
+import { config } from './config';
+import { executeStep } from './client';
+import type { ExecuteRequest, ExecuteResult } from './types';
 
 export async function executePlan(
   input: ExecuteRequest,
@@ -18,7 +18,7 @@ export async function executePlan(
     const result = await executeStep(step, {
       token: authToken,
       idempotencyKey: input.idempotencyKey,
-      timeoutMs: config.executeTimeoutMs
+      timeoutMs: config.executeTimeoutMs,
     });
 
     results.push(result);
@@ -29,16 +29,16 @@ export async function executePlan(
 
 function scopeFor(operationId: string): string {
   switch (operationId) {
-    case "uploads_init":
-      return "image.upload";
-    case "jobs_create":
-      return "image.jobs.write";
-    case "jobs_get":
-      return "image.jobs.read";
-    case "cleanup_create":
-      return "image.cleanup";
-    case "quota_get":
-      return "image.quota.read";
+    case 'uploads_init':
+      return 'image.upload';
+    case 'jobs_create':
+      return 'image.jobs.write';
+    case 'jobs_get':
+      return 'image.jobs.read';
+    case 'cleanup_create':
+      return 'image.cleanup';
+    case 'quota_get':
+      return 'image.quota.read';
     default:
       throw new Error(`No scope mapping for operation ${operationId}`);
   }

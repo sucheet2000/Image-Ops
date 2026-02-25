@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Container image tag to deploy (commit SHA or latest)"
+        description: 'Container image tag to deploy (commit SHA or latest)'
         required: true
-        default: "latest"
+        default: 'latest'
         type: string
 
 concurrency:

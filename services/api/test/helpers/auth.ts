@@ -1,16 +1,19 @@
-import type { ImagePlan } from "@imageops/core";
-import { InMemoryAuthService } from "../../src/services/auth";
-import { createTestConfig } from "./fakes";
+import type { ImagePlan } from '@imageops/core';
+import { InMemoryAuthService } from '../../src/services/auth';
+import { createTestConfig } from './fakes';
 
-export function bearerAuthHeaders(subjectId: string, plan: ImagePlan = "free"): Record<string, string> {
+export function bearerAuthHeaders(
+  subjectId: string,
+  plan: ImagePlan = 'free'
+): Record<string, string> {
   const auth = new InMemoryAuthService(createTestConfig().authTokenSecret);
   const token = auth.issueApiToken({
     sub: subjectId,
     plan,
-    now: new Date()
+    now: new Date(),
   });
 
   return {
-    authorization: `Bearer ${token}`
+    authorization: `Bearer ${token}`,
   };
 }

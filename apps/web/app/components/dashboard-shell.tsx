@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
-import FadeReveal from "../../components/animation/FadeReveal";
-import ScrambleNumber from "../../components/animation/ScrambleNumber";
-import WipeText from "../../components/animation/WipeText";
-import { apiFetch, getApiBaseUrl } from "../lib/api-client";
-import { getViewerSession } from "../lib/session";
-import { JOB_HISTORY_KEY } from "../lib/storage-keys";
-import { ensureViewerSubjectId } from "../lib/viewer-subject";
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
+import FadeReveal from '../../components/animation/FadeReveal';
+import ScrambleNumber from '../../components/animation/ScrambleNumber';
+import WipeText from '../../components/animation/WipeText';
+import { apiFetch, getApiBaseUrl } from '../lib/api-client';
+import { getViewerSession } from '../lib/session';
+import { JOB_HISTORY_KEY } from '../lib/storage-keys';
+import { ensureViewerSubjectId } from '../lib/viewer-subject';
 
 type QuotaPayload = {
   subjectId: string;
-  plan: "free" | "pro" | "team";
+  plan: 'free' | 'pro' | 'team';
   limit: number;
   usedCount: number;
   windowHours: number;
@@ -23,13 +23,13 @@ type QuotaPayload = {
 type JobHistoryEntry = {
   id: string;
   tool: string;
-  status: "done" | "failed";
+  status: 'done' | 'failed';
   createdAt: string;
   outputObjectKey?: string | null;
 };
 
 function readHistory(): JobHistoryEntry[] {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return [];
   }
 
@@ -43,22 +43,22 @@ function readHistory(): JobHistoryEntry[] {
       return [];
     }
     return parsed
-      .filter((item) => item && typeof item.id === "string" && typeof item.tool === "string")
+      .filter((item) => item && typeof item.id === 'string' && typeof item.tool === 'string')
       .slice(0, 20);
   } catch {
     return [];
   }
 }
 
-function statusClass(status: JobHistoryEntry["status"]): "completed" | "failed" {
-  return status === "done" ? "completed" : "failed";
+function statusClass(status: JobHistoryEntry['status']): 'completed' | 'failed' {
+  return status === 'done' ? 'completed' : 'failed';
 }
 
 export function DashboardShell() {
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaPayload | null>(null);
   const [history, setHistory] = useState<JobHistoryEntry[]>([]);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<string>('');
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
 
@@ -74,9 +74,12 @@ export function DashboardShell() {
         }
         setSubjectId(resolvedSubject);
 
-        const response = await apiFetch(`${apiBaseUrl}/api/quota/${encodeURIComponent(resolvedSubject)}`, {
-          method: "GET"
-        });
+        const response = await apiFetch(
+          `${apiBaseUrl}/api/quota/${encodeURIComponent(resolvedSubject)}`,
+          {
+            method: 'GET',
+          }
+        );
         if (!response.ok) {
           setError(`Quota request failed (${response.status})`);
           return;
@@ -100,11 +103,11 @@ export function DashboardShell() {
       setHistory(readHistory());
     };
 
-    window.addEventListener("storage", onStorage);
+    window.addEventListener('storage', onStorage);
 
     return () => {
       cancelled = true;
-      window.removeEventListener("storage", onStorage);
+      window.removeEventListener('storage', onStorage);
     };
   }, [apiBaseUrl]);
 
@@ -124,109 +127,127 @@ export function DashboardShell() {
             Operational view for your <span className="accent-italic">image pipeline.</span>
           </WipeText>
           <FadeReveal delay={200}>
-            <p>Track quota usage, view recent jobs, and move between processing workflows without leaving this console.</p>
+            <p>
+              Track quota usage, view recent jobs, and move between processing workflows without
+              leaving this console.
+            </p>
           </FadeReveal>
         </header>
 
         <FadeReveal delay={280}>
           <section className="dashboard-layout">
-          <aside className="dashboard-sidebar">
-            <p className="section-label">Workspace</p>
-            <nav className="dashboard-nav" aria-label="Dashboard navigation" style={{ marginTop: "0.9rem" }}>
-              <Link href="/dashboard" className="active">Overview</Link>
-              <Link href="/dashboard/watchtower">Watch Tower</Link>
-              <Link href="/upload">Upload Studio</Link>
-              <Link href="/tools">Tool Catalog</Link>
-              <Link href="/billing">Billing</Link>
-            </nav>
-          </aside>
+            <aside className="dashboard-sidebar">
+              <p className="section-label">Workspace</p>
+              <nav
+                className="dashboard-nav"
+                aria-label="Dashboard navigation"
+                style={{ marginTop: '0.9rem' }}
+              >
+                <Link href="/dashboard" className="active">
+                  Overview
+                </Link>
+                <Link href="/dashboard/watchtower">Watch Tower</Link>
+                <Link href="/upload">Upload Studio</Link>
+                <Link href="/tools">Tool Catalog</Link>
+                <Link href="/billing">Billing</Link>
+              </nav>
+            </aside>
 
-          <div className="dashboard-content">
-            <div className="dashboard-cards">
-              <article className="dashboard-card">
-                <p className="dashboard-card-label">Plan</p>
-                <p className="dashboard-card-value">{quota?.plan?.toUpperCase() || "-"}</p>
-              </article>
-              <article className="dashboard-card">
-                <p className="dashboard-card-label">Quota Used</p>
-                <p className="dashboard-card-value">
-                  <ScrambleNumber value={usedCount} />
-                </p>
-              </article>
-              <article className="dashboard-card">
-                <p className="dashboard-card-label">Remaining</p>
-                <p className="dashboard-card-value">
-                  <ScrambleNumber value={remaining} />
-                </p>
-              </article>
-              <article className="dashboard-card">
-                <p className="dashboard-card-label">Recent Jobs</p>
-                <p className="dashboard-card-value">
-                  <ScrambleNumber value={history.length} />
-                </p>
-              </article>
-            </div>
-
-            <article className="quota-box">
-              <p className="section-label">Quota Window</p>
-              <p style={{ marginTop: "0.4rem" }}>
-                Subject {subjectId || "initializing"} · {usedCount}/{limit || "-"} used over {quota?.windowHours || "-"}h
-              </p>
-              <div className="quota-meter" style={{ "--quota-pct": `${quotaPct}%` } as CSSProperties}>
-                <div className="quota-meter-fill" />
+            <div className="dashboard-content">
+              <div className="dashboard-cards">
+                <article className="dashboard-card">
+                  <p className="dashboard-card-label">Plan</p>
+                  <p className="dashboard-card-value">{quota?.plan?.toUpperCase() || '-'}</p>
+                </article>
+                <article className="dashboard-card">
+                  <p className="dashboard-card-label">Quota Used</p>
+                  <p className="dashboard-card-value">
+                    <ScrambleNumber value={usedCount} />
+                  </p>
+                </article>
+                <article className="dashboard-card">
+                  <p className="dashboard-card-label">Remaining</p>
+                  <p className="dashboard-card-value">
+                    <ScrambleNumber value={remaining} />
+                  </p>
+                </article>
+                <article className="dashboard-card">
+                  <p className="dashboard-card-label">Recent Jobs</p>
+                  <p className="dashboard-card-value">
+                    <ScrambleNumber value={history.length} />
+                  </p>
+                </article>
               </div>
-              <p className="jobs-meta" style={{ marginTop: "0.55rem" }}>
-                Resets at {quota?.windowResetAt ? new Date(quota.windowResetAt).toLocaleString() : "-"}
-              </p>
-            </article>
 
-            <article style={{ marginTop: "1.2rem" }}>
-              <p className="section-label">Quick Actions</p>
-              <div className="workbench-actions" style={{ marginTop: "0.7rem" }}>
-                {[
-                  { href: "/upload", label: "Open Upload" },
-                  { href: "/tools", label: "Browse Tools" },
-                  { href: "/billing", label: "Manage Billing" }
-                ].map((action, index) => (
-                  <FadeReveal key={action.href} delay={index * 50}>
-                    <Link href={action.href} className="editorial-button ghost btn-cream">
-                      <span>{action.label}</span>
-                    </Link>
-                  </FadeReveal>
-                ))}
-              </div>
-            </article>
+              <article className="quota-box">
+                <p className="section-label">Quota Window</p>
+                <p style={{ marginTop: '0.4rem' }}>
+                  Subject {subjectId || 'initializing'} · {usedCount}/{limit || '-'} used over{' '}
+                  {quota?.windowHours || '-'}h
+                </p>
+                <div
+                  className="quota-meter"
+                  style={{ '--quota-pct': `${quotaPct}%` } as CSSProperties}
+                >
+                  <div className="quota-meter-fill" />
+                </div>
+                <p className="jobs-meta" style={{ marginTop: '0.55rem' }}>
+                  Resets at{' '}
+                  {quota?.windowResetAt ? new Date(quota.windowResetAt).toLocaleString() : '-'}
+                </p>
+              </article>
 
-            <article style={{ marginTop: "1.2rem" }}>
-              <p className="section-label">Recent Jobs</p>
-              <ul className="jobs-list">
-                {history.length === 0 ? (
-                  <li className="jobs-item">
-                    <div>
-                      <p>No local job history yet.</p>
-                      <p className="jobs-meta">Run a tool from Upload Studio to populate this list.</p>
-                    </div>
-                  </li>
-                ) : (
-                  history.map((item, index) => (
-                    <FadeReveal key={item.id} as="li" className="jobs-item" delay={index * 60}>
-                      <div>
-                        <p>
-                          {item.tool} · {item.id}
-                        </p>
-                        <p className="jobs-meta">{new Date(item.createdAt).toLocaleString()}</p>
-                      </div>
-                      <span className={`status-chip ${statusClass(item.status)}`}>
-                        {item.status === "done" ? "Completed" : "Failed"}
-                      </span>
+              <article style={{ marginTop: '1.2rem' }}>
+                <p className="section-label">Quick Actions</p>
+                <div className="workbench-actions" style={{ marginTop: '0.7rem' }}>
+                  {[
+                    { href: '/upload', label: 'Open Upload' },
+                    { href: '/tools', label: 'Browse Tools' },
+                    { href: '/billing', label: 'Manage Billing' },
+                  ].map((action, index) => (
+                    <FadeReveal key={action.href} delay={index * 50}>
+                      <Link href={action.href} className="editorial-button ghost btn-cream">
+                        <span>{action.label}</span>
+                      </Link>
                     </FadeReveal>
-                  ))
-                )}
-              </ul>
-            </article>
+                  ))}
+                </div>
+              </article>
 
-            {error ? <p style={{ marginTop: "1rem", color: "var(--terra-dark)" }}>{error}</p> : null}
-          </div>
+              <article style={{ marginTop: '1.2rem' }}>
+                <p className="section-label">Recent Jobs</p>
+                <ul className="jobs-list">
+                  {history.length === 0 ? (
+                    <li className="jobs-item">
+                      <div>
+                        <p>No local job history yet.</p>
+                        <p className="jobs-meta">
+                          Run a tool from Upload Studio to populate this list.
+                        </p>
+                      </div>
+                    </li>
+                  ) : (
+                    history.map((item, index) => (
+                      <FadeReveal key={item.id} as="li" className="jobs-item" delay={index * 60}>
+                        <div>
+                          <p>
+                            {item.tool} · {item.id}
+                          </p>
+                          <p className="jobs-meta">{new Date(item.createdAt).toLocaleString()}</p>
+                        </div>
+                        <span className={`status-chip ${statusClass(item.status)}`}>
+                          {item.status === 'done' ? 'Completed' : 'Failed'}
+                        </span>
+                      </FadeReveal>
+                    ))
+                  )}
+                </ul>
+              </article>
+
+              {error ? (
+                <p style={{ marginTop: '1rem', color: 'var(--terra-dark)' }}>{error}</p>
+              ) : null}
+            </div>
           </section>
         </FadeReveal>
       </section>

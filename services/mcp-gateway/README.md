@@ -3,10 +3,12 @@
 Constrained gateway for operation discovery and orchestration.
 
 ## Exposed Endpoints
+
 - `GET /mcp/search`
 - `POST /mcp/execute`
 
 ## Guardrails
+
 - Reduced operation allowlist from `openapi/reduced.v1.yaml`
 - JWT auth with issuer/audience checks
 - Scope checks per operation
@@ -19,6 +21,7 @@ Constrained gateway for operation discovery and orchestration.
 - Raw `code` execution disabled in V1; only approved operation steps are allowed.
 
 ## Run
+
 ```bash
 npm run dev -w services/mcp-gateway
 ```

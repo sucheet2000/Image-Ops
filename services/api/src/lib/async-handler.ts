@@ -1,4 +1,4 @@
-import type { NextFunction, Request, RequestHandler, Response } from "express";
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 /**
  * Wraps an async Express route handler so any rejection is passed to Express error handling.

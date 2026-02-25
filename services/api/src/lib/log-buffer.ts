@@ -1,4 +1,4 @@
-export type BufferedLogLevel = "info" | "error";
+export type BufferedLogLevel = 'info' | 'error';
 
 export type BufferedLogEntry = {
   id: number;
@@ -11,7 +11,7 @@ export type BufferedLogEntry = {
 
 export type BufferedLogFilter = {
   limit?: number;
-  level?: "all" | BufferedLogLevel;
+  level?: 'all' | BufferedLogLevel;
   event?: string;
 };
 
@@ -47,7 +47,7 @@ export function getLogBufferCapacity(): number {
   return capacity;
 }
 
-export function appendBufferedLogEntry(entry: Omit<BufferedLogEntry, "id">): void {
+export function appendBufferedLogEntry(entry: Omit<BufferedLogEntry, 'id'>): void {
   sequence += 1;
   entries.push({ ...entry, id: sequence });
   if (entries.length > capacity) {
@@ -56,15 +56,17 @@ export function appendBufferedLogEntry(entry: Omit<BufferedLogEntry, "id">): voi
 }
 
 export function readBufferedLogs(filter: BufferedLogFilter = {}): BufferedLogSnapshot {
-  const resolvedLimit = Number.isInteger(filter.limit) ? Math.min(Math.max(filter.limit || 200, 1), 500) : 200;
-  const resolvedLevel = filter.level || "all";
-  const eventFilter = (filter.event || "").trim().toLowerCase();
+  const resolvedLimit = Number.isInteger(filter.limit)
+    ? Math.min(Math.max(filter.limit || 200, 1), 500)
+    : 200;
+  const resolvedLevel = filter.level || 'all';
+  const eventFilter = (filter.event || '').trim().toLowerCase();
 
-  const info = entries.reduce((count, entry) => count + (entry.level === "info" ? 1 : 0), 0);
+  const info = entries.reduce((count, entry) => count + (entry.level === 'info' ? 1 : 0), 0);
   const error = entries.length - info;
 
   const filtered = entries.filter((entry) => {
-    if (resolvedLevel !== "all" && entry.level !== resolvedLevel) {
+    if (resolvedLevel !== 'all' && entry.level !== resolvedLevel) {
       return false;
     }
     if (eventFilter && !entry.event.toLowerCase().includes(eventFilter)) {
@@ -78,7 +80,7 @@ export function readBufferedLogs(filter: BufferedLogFilter = {}): BufferedLogSna
     total: entries.length,
     info,
     error,
-    logs: [...filtered].reverse().slice(0, resolvedLimit)
+    logs: [...filtered].reverse().slice(0, resolvedLimit),
   };
 }
 

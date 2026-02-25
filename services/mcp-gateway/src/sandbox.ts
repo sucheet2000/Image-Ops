@@ -1,5 +1,5 @@
-import { config } from "./config";
-import type { ExecuteRequest } from "./types";
+import { config } from './config';
+import type { ExecuteRequest } from './types';
 
 const FORBIDDEN_PATTERNS = [
   /from\s+["']fs["']/,
@@ -8,19 +8,19 @@ const FORBIDDEN_PATTERNS = [
   /require\(["']child_process["']\)/,
   /process\.env/,
   /fetch\(/,
-  /XMLHttpRequest/
+  /XMLHttpRequest/,
 ];
 
 export function assertSandboxPolicy(input: ExecuteRequest): void {
   if (input.code) {
     for (const pattern of FORBIDDEN_PATTERNS) {
       if (pattern.test(input.code)) {
-        throw new Error("Execute code violates sandbox policy.");
+        throw new Error('Execute code violates sandbox policy.');
       }
     }
 
     // V1 keeps execution deterministic through approved wrappers.
-    throw new Error("Raw code execution is disabled in V1. Use approved operation steps.");
+    throw new Error('Raw code execution is disabled in V1. Use approved operation steps.');
   }
 
   if (input.steps.length > config.maxCallsPerExecute) {

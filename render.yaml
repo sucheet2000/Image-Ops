@@ -22,19 +22,19 @@ services:
       - key: NODE_ENV
         value: production
       - key: API_PORT
-        value: "10000"
+        value: '10000'
       - key: WEB_ORIGIN
         sync: false
       - key: API_AUTH_REQUIRED
-        value: "true"
+        value: 'true'
       - key: AUTH_TOKEN_SECRET
         generateValue: true
       - key: AUTH_TOKEN_TTL_SECONDS
-        value: "3600"
+        value: '3600'
       - key: AUTH_REFRESH_TTL_SECONDS
-        value: "1209600"
+        value: '1209600'
       - key: AUTH_REFRESH_COOKIE_SECURE
-        value: "true"
+        value: 'true'
       - key: AUTH_REFRESH_COOKIE_SAMESITE
         value: lax
       - key: AUTH_REFRESH_COOKIE_PATH
@@ -77,7 +77,7 @@ services:
       - key: S3_SECRET_KEY
         sync: false
       - key: S3_FORCE_PATH_STYLE
-        value: "false"
+        value: 'false'
 
   - type: worker
     name: image-ops-worker
@@ -103,9 +103,9 @@ services:
           name: image-ops-redis
           property: connectionString
       - key: WORKER_CONCURRENCY
-        value: "2"
+        value: '2'
       - key: WORKER_HEARTBEAT_INTERVAL_MS
-        value: "30000"
+        value: '30000'
       - key: S3_REGION
         value: auto
       - key: S3_BUCKET
@@ -117,19 +117,19 @@ services:
       - key: S3_SECRET_KEY
         sync: false
       - key: S3_FORCE_PATH_STYLE
-        value: "false"
+        value: 'false'
       - key: BG_REMOVE_PROVIDER
         value: http
       - key: BG_REMOVE_API_URL
         sync: false
       - key: BG_REMOVE_TIMEOUT_MS
-        value: "15000"
+        value: '15000'
       - key: BG_REMOVE_MAX_RETRIES
-        value: "1"
+        value: '1'
       - key: BG_REMOVE_BACKOFF_BASE_MS
-        value: "500"
+        value: '500'
       - key: BG_REMOVE_BACKOFF_MAX_MS
-        value: "1000"
+        value: '1000'
 
   - type: web
     name: image-ops-web
@@ -143,6 +143,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: "3000"
+        value: '3000'
       - key: NEXT_PUBLIC_API_BASE_URL
         sync: false

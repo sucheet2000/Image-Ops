@@ -1,30 +1,30 @@
 export const FREE_PLAN_LIMIT = 6;
 export const FREE_PLAN_WINDOW_HOURS = 10;
 
-export const IMAGE_TOOLS = ["resize", "compress", "convert", "background-remove"] as const;
+export const IMAGE_TOOLS = ['resize', 'compress', 'convert', 'background-remove'] as const;
 export type ImageTool = (typeof IMAGE_TOOLS)[number];
 
 export const JOB_QUEUE_NAMES = {
-  fast: "image-ops-fast",
-  slow: "image-ops-slow",
-  bulk: "image-ops-bulk"
+  fast: 'image-ops-fast',
+  slow: 'image-ops-slow',
+  bulk: 'image-ops-bulk',
 } as const;
 export type JobQueueName = (typeof JOB_QUEUE_NAMES)[keyof typeof JOB_QUEUE_NAMES];
 
 export function queueNameForTool(tool: ImageTool): JobQueueName {
-  if (tool === "background-remove") {
+  if (tool === 'background-remove') {
     return JOB_QUEUE_NAMES.slow;
   }
   return JOB_QUEUE_NAMES.fast;
 }
 
-export const IMAGE_PLANS = ["free", "pro", "team"] as const;
+export const IMAGE_PLANS = ['free', 'pro', 'team'] as const;
 export type ImagePlan = (typeof IMAGE_PLANS)[number];
 
-export const IMAGE_FORMATS = ["jpeg", "png", "webp"] as const;
+export const IMAGE_FORMATS = ['jpeg', 'png', 'webp'] as const;
 export type ImageFormat = (typeof IMAGE_FORMATS)[number];
 
-export const JOB_STATUSES = ["queued", "running", "done", "failed"] as const;
+export const JOB_STATUSES = ['queued', 'running', 'done', 'failed'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export type QuotaWindow = {
@@ -41,7 +41,7 @@ export type QuotaResult = {
 export type ResizeOptions = {
   width?: number;
   height?: number;
-  fit?: "cover" | "contain" | "inside" | "outside" | "fill";
+  fit?: 'cover' | 'contain' | 'inside' | 'outside' | 'fill';
 };
 
 export type CompressOptions = {
@@ -61,7 +61,7 @@ export type ToolOptionsByType = {
   resize: ResizeOptions;
   compress: CompressOptions;
   convert: ConvertOptions;
-  "background-remove": BackgroundRemoveOptions;
+  'background-remove': BackgroundRemoveOptions;
 };
 
 export type ToolOptions<T extends ImageTool = ImageTool> = ToolOptionsByType[T];
@@ -97,13 +97,13 @@ export type ImageJobQueuePayload = {
   options: ToolOptions;
 };
 
-export type DeletionReason = "delivered" | "page_exit" | "ttl_expiry" | "manual";
+export type DeletionReason = 'delivered' | 'page_exit' | 'ttl_expiry' | 'manual';
 
 export type DeletionAuditRecord = {
   id: string;
   objectKey: string;
   reason: DeletionReason;
-  result: "success" | "not_found";
+  result: 'success' | 'not_found';
   createdAt: string;
 };
 
@@ -171,13 +171,13 @@ export type AuthRefreshSession = {
   revokedAt?: string;
 };
 
-export const BILLING_CHECKOUT_STATUSES = ["created", "paid", "canceled", "expired"] as const;
+export const BILLING_CHECKOUT_STATUSES = ['created', 'paid', 'canceled', 'expired'] as const;
 export type BillingCheckoutStatus = (typeof BILLING_CHECKOUT_STATUSES)[number];
 
 export type BillingCheckoutSession = {
   id: string;
   subjectId: string;
-  plan: Exclude<ImagePlan, "free">;
+  plan: Exclude<ImagePlan, 'free'>;
   status: BillingCheckoutStatus;
   checkoutUrl: string;
   successUrl: string;
@@ -187,7 +187,7 @@ export type BillingCheckoutSession = {
   updatedAt: string;
 };
 
-export const BILLING_WEBHOOK_STATUSES = ["paid", "canceled", "expired"] as const;
+export const BILLING_WEBHOOK_STATUSES = ['paid', 'canceled', 'expired'] as const;
 export type BillingWebhookStatus = (typeof BILLING_WEBHOOK_STATUSES)[number];
 
 export type BillingWebhookEvent = {
@@ -195,7 +195,7 @@ export type BillingWebhookEvent = {
   providerEventId: string;
   checkoutSessionId: string;
   subjectId: string;
-  plan: Exclude<ImagePlan, "free">;
+  plan: Exclude<ImagePlan, 'free'>;
   status: BillingWebhookStatus;
   createdAt: string;
 };
@@ -229,7 +229,7 @@ export function applyQuota(
   windowHours = FREE_PLAN_WINDOW_HOURS
 ): QuotaResult {
   if (!Number.isInteger(requestedImages) || requestedImages < 0) {
-    throw new Error("requestedImages must be non-negative");
+    throw new Error('requestedImages must be non-negative');
   }
 
   const start = new Date(existing.windowStartAt);
@@ -245,7 +245,7 @@ export function applyQuota(
     return {
       allowed: false,
       window: current,
-      nextWindowStartAt: addHours(new Date(current.windowStartAt), windowHours).toISOString()
+      nextWindowStartAt: addHours(new Date(current.windowStartAt), windowHours).toISOString(),
     };
   }
 
@@ -260,7 +260,7 @@ export function applyQuota(
  * @returns `true` if `tool` is `"background-remove"`, `false` otherwise
  */
 export function isAdvancedTool(tool: ImageTool): boolean {
-  return tool === "background-remove";
+  return tool === 'background-remove';
 }
 
 /**
@@ -271,7 +271,7 @@ export function isAdvancedTool(tool: ImageTool): boolean {
  * @returns `true` if `plan` is "free" and `isAdvancedToolFlag` is `true`, `false` otherwise.
  */
 export function shouldApplyWatermark(plan: ImagePlan, isAdvancedToolFlag: boolean): boolean {
-  return plan === "free" && isAdvancedToolFlag;
+  return plan === 'free' && isAdvancedToolFlag;
 }
 
 /**
@@ -296,16 +296,16 @@ export function shouldApplyWatermarkForTool(plan: ImagePlan, tool: ImageTool): b
  * - `background-remove` -> `{ outputFormat: "png" }`
  */
 export function defaultToolOptions(tool: ImageTool): ToolOptions {
-  if (tool === "resize") {
-    return { fit: "inside" };
+  if (tool === 'resize') {
+    return { fit: 'inside' };
   }
-  if (tool === "compress") {
+  if (tool === 'compress') {
     return { quality: 80 };
   }
-  if (tool === "convert") {
-    return { format: "jpeg", quality: 85 };
+  if (tool === 'convert') {
+    return { format: 'jpeg', quality: 85 };
   }
-  return { outputFormat: "png" };
+  return { outputFormat: 'png' };
 }
 
 /**
@@ -315,7 +315,10 @@ export function defaultToolOptions(tool: ImageTool): ToolOptions {
  * @param incoming - Partial option overrides; properties provided here replace the corresponding defaults
  * @returns The fully populated options object for `tool`
  */
-export function mergeToolOptions<T extends ImageTool>(tool: T, incoming: Partial<ToolOptionsByType[T]> | undefined): ToolOptionsByType[T] {
+export function mergeToolOptions<T extends ImageTool>(
+  tool: T,
+  incoming: Partial<ToolOptionsByType[T]> | undefined
+): ToolOptionsByType[T] {
   return { ...defaultToolOptions(tool), ...(incoming || {}) } as ToolOptionsByType[T];
 }
 
@@ -327,24 +330,28 @@ export function mergeToolOptions<T extends ImageTool>(tool: T, incoming: Partial
  * @param options - Tool-specific options that can explicitly set the output format for tools that support it
  * @returns The chosen output image format: `jpeg`, `png`, or `webp`
  */
-export function toolOutputFormat(tool: ImageTool, inputMime: string, options: ToolOptions): ImageFormat {
-  if (tool === "convert") {
+export function toolOutputFormat(
+  tool: ImageTool,
+  inputMime: string,
+  options: ToolOptions
+): ImageFormat {
+  if (tool === 'convert') {
     return (options as ConvertOptions).format;
   }
 
-  if (tool === "background-remove") {
-    return (options as BackgroundRemoveOptions).outputFormat || "png";
+  if (tool === 'background-remove') {
+    return (options as BackgroundRemoveOptions).outputFormat || 'png';
   }
 
-  if (inputMime.includes("png")) {
-    return "png";
+  if (inputMime.includes('png')) {
+    return 'png';
   }
 
-  if (inputMime.includes("webp")) {
-    return "webp";
+  if (inputMime.includes('webp')) {
+    return 'webp';
   }
 
-  return "jpeg";
+  return 'jpeg';
 }
 
 /**
@@ -354,15 +361,15 @@ export function toolOutputFormat(tool: ImageTool, inputMime: string, options: To
  * @returns The MIME type string for the given `format` (`"jpeg"` → `"image/jpeg"`, `"png"` → `"image/png"`, `"webp"` → `"image/webp"`)
  */
 export function formatToMime(format: ImageFormat): string {
-  if (format === "jpeg") {
-    return "image/jpeg";
+  if (format === 'jpeg') {
+    return 'image/jpeg';
   }
 
-  if (format === "png") {
-    return "image/png";
+  if (format === 'png') {
+    return 'image/png';
   }
 
-  return "image/webp";
+  return 'image/webp';
 }
 
 /**
@@ -371,8 +378,8 @@ export function formatToMime(format: ImageFormat): string {
  * @returns `'jpg'` when `format` is `"jpeg"`; otherwise the same value as `format`.
  */
 export function formatToExtension(format: ImageFormat): string {
-  if (format === "jpeg") {
-    return "jpg";
+  if (format === 'jpeg') {
+    return 'jpg';
   }
 
   return format;
@@ -387,16 +394,16 @@ export function formatToExtension(format: ImageFormat): string {
  * @returns The `ImageFormat` (`'jpeg'`, `'png'`, or `'webp'`) for a recognized MIME type, or `null` if none match
  */
 export function mimeToFormat(mime: string): ImageFormat | null {
-  if (mime.includes("jpeg") || mime.includes("jpg")) {
-    return "jpeg";
+  if (mime.includes('jpeg') || mime.includes('jpg')) {
+    return 'jpeg';
   }
 
-  if (mime.includes("png")) {
-    return "png";
+  if (mime.includes('png')) {
+    return 'png';
   }
 
-  if (mime.includes("webp")) {
-    return "webp";
+  if (mime.includes('webp')) {
+    return 'webp';
   }
 
   return null;
@@ -409,7 +416,10 @@ export function mimeToFormat(mime: string): ImageFormat | null {
  * @param windowHours - Rolling window length in hours; defaults to free-plan window
  * @returns The ISO 8601 timestamp for `window.windowStartAt` advanced by `windowHours`
  */
-export function quotaWindowResetAt(window: QuotaWindow, windowHours = FREE_PLAN_WINDOW_HOURS): string {
+export function quotaWindowResetAt(
+  window: QuotaWindow,
+  windowHours = FREE_PLAN_WINDOW_HOURS
+): string {
   return addHours(new Date(window.windowStartAt), windowHours).toISOString();
 }
 
@@ -420,8 +430,10 @@ export function quotaWindowResetAt(window: QuotaWindow, windowHours = FREE_PLAN_
  * @returns A single string built by trimming, removing empty entries, deduplicating, lexically sorting the remaining keys, and joining them with `|`. Returns an empty string if no valid keys remain.
  */
 export function cleanupRequestSignature(objectKeys: string[]): string {
-  const keys = [...new Set(objectKeys.map((value) => value.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  return keys.join("|");
+  const keys = [...new Set(objectKeys.map((value) => value.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b)
+  );
+  return keys.join('|');
 }
 
 /**
@@ -431,7 +443,10 @@ export function cleanupRequestSignature(objectKeys: string[]): string {
  * @param incomingSignature - The newly computed cleanup request signature to compare
  * @returns `true` if both signatures are exactly equal, `false` otherwise
  */
-export function isCleanupReplayAllowed(existingSignature: string, incomingSignature: string): boolean {
+export function isCleanupReplayAllowed(
+  existingSignature: string,
+  incomingSignature: string
+): boolean {
   return existingSignature === incomingSignature;
 }
 
@@ -446,7 +461,7 @@ export function normalizeObjectKeys(keys: unknown): string[] {
     return [];
   }
 
-  return [...new Set(keys.map((value) => String(value || "").trim()).filter(Boolean))];
+  return [...new Set(keys.map((value) => String(value || '').trim()).filter(Boolean))];
 }
 
 /**
@@ -475,8 +490,8 @@ export function isPlan(value: string): value is ImagePlan {
  * @param plan - Image plan value
  * @returns True for `pro` or `team`, false for `free`
  */
-export function isPaidPlan(plan: ImagePlan): plan is Exclude<ImagePlan, "free"> {
-  return plan === "pro" || plan === "team";
+export function isPaidPlan(plan: ImagePlan): plan is Exclude<ImagePlan, 'free'> {
+  return plan === 'pro' || plan === 'team';
 }
 
 /**
@@ -486,8 +501,8 @@ export function isPaidPlan(plan: ImagePlan): plan is Exclude<ImagePlan, "free"> 
  * @returns The sanitized subject identifier containing only letters, digits, underscores, and dashes, truncated to 64 characters, or `"anonymous"` if the result is empty.
  */
 export function toSafeSubjectId(value: string): string {
-  const safe = value.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
-  return safe || "anonymous";
+  const safe = value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  return safe || 'anonymous';
 }
 
 /**
@@ -511,8 +526,8 @@ export function isWithinUploadLimit(size: number, maxUploadBytes: number): boole
  */
 export function inferUploadObjectKeyPrefix(subjectId: string, tool: ImageTool, now: Date): string {
   const yyyy = now.getUTCFullYear();
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
   return `tmp/${subjectId}/input/${yyyy}/${mm}/${dd}/${tool}`;
 }
 
@@ -526,8 +541,8 @@ export function inferUploadObjectKeyPrefix(subjectId: string, tool: ImageTool, n
  */
 export function inferOutputObjectKeyPrefix(subjectId: string, tool: ImageTool, now: Date): string {
   const yyyy = now.getUTCFullYear();
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
   return `tmp/${subjectId}/output/${yyyy}/${mm}/${dd}/${tool}`;
 }
 
@@ -539,20 +554,20 @@ export function inferOutputObjectKeyPrefix(subjectId: string, tool: ImageTool, n
  */
 export function classifyProcessingError(error: unknown): { code: string; message: string } {
   if (error instanceof Error) {
-    const message = error.message || "processing error";
+    const message = error.message || 'processing error';
     if (/background/i.test(message)) {
-      return { code: "BACKGROUND_REMOVE_FAILED", message };
+      return { code: 'BACKGROUND_REMOVE_FAILED', message };
     }
     if (/timeout/i.test(message)) {
-      return { code: "PROCESSING_TIMEOUT", message };
+      return { code: 'PROCESSING_TIMEOUT', message };
     }
     if (/not found/i.test(message)) {
-      return { code: "OBJECT_NOT_FOUND", message };
+      return { code: 'OBJECT_NOT_FOUND', message };
     }
-    return { code: "PROCESSING_FAILED", message };
+    return { code: 'PROCESSING_FAILED', message };
   }
 
-  return { code: "PROCESSING_FAILED", message: "Unknown processing error." };
+  return { code: 'PROCESSING_FAILED', message: 'Unknown processing error.' };
 }
 
 /**
@@ -566,13 +581,14 @@ export function toStructuredLog(event: string, payload: Record<string, unknown>)
   return JSON.stringify({
     ts: new Date().toISOString(),
     event,
-    payload: sanitizeLogValue(payload)
+    payload: sanitizeLogValue(payload),
   });
 }
 
-const REDACTED = "[REDACTED]";
+const REDACTED = '[REDACTED]';
 const SECRET_KEY_PATTERN = /(authorization|token|api[-_]?key|secret|signature|signed[-_]?url)/i;
-const URL_SECRET_PATTERN = /((?:token|signature|x-amz-signature|x-amz-credential|x-amz-security-token)=)([^&]+)/gi;
+const URL_SECRET_PATTERN =
+  /((?:token|signature|x-amz-signature|x-amz-credential|x-amz-security-token)=)([^&]+)/gi;
 
 function sanitizeLogValue(value: unknown): unknown {
   if (value === null || value === undefined) {
@@ -591,11 +607,11 @@ function sanitizeLogValue(value: unknown): unknown {
     return value.map((item) => sanitizeLogValue(item));
   }
 
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value.replace(URL_SECRET_PATTERN, (_match, prefix: string) => `${prefix}${REDACTED}`);
   }
 
-  if (typeof value !== "object") {
+  if (typeof value !== 'object') {
     return value;
   }
 

@@ -1,15 +1,15 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { InMemoryAuthService } from "../src/services/auth";
-import { createApiApp } from "../src/server";
-import { createFakeServices, createTestConfig } from "./helpers/fakes";
-import { startApiTestServer } from "./helpers/server";
+import { afterEach, describe, expect, it } from 'vitest';
+import { InMemoryAuthService } from '../src/services/auth';
+import { createApiApp } from '../src/server';
+import { createFakeServices, createTestConfig } from './helpers/fakes';
+import { startApiTestServer } from './helpers/server';
 
 function cookieValue(setCookieHeader: string | null, cookieName: string): string | null {
   if (!setCookieHeader) {
     return null;
   }
-  const firstPart = setCookieHeader.split(";")[0] || "";
-  const idx = firstPart.indexOf("=");
+  const firstPart = setCookieHeader.split(';')[0] || '';
+  const idx = firstPart.indexOf('=');
   if (idx === -1) {
     return null;
   }
@@ -32,179 +32,184 @@ afterEach(async () => {
   }
 });
 
-describe("auth refresh session hardening", () => {
-  it("sets httpOnly refresh cookie on google auth", async () => {
+describe('auth refresh session hardening', () => {
+  it('sets httpOnly refresh cookie on google auth', async () => {
     const config = createTestConfig();
     const services = createFakeServices();
     const auth = new InMemoryAuthService(config.authTokenSecret);
 
-    let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
+    const nowMs = Date.parse('2026-02-23T00:00:00.000Z');
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
     const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const response = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-token-1" })
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken: 'google-token-1' }),
     });
 
     expect(response.status).toBe(200);
-    const setCookie = response.headers.get("set-cookie");
+    const setCookie = response.headers.get('set-cookie');
     expect(setCookie).toContain(`${config.authRefreshCookieName}=`);
-    expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("SameSite=Lax");
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('SameSite=Lax');
     expect(setCookie).toContain(`Path=${config.authRefreshCookiePath}`);
   });
 
-  it("rotates refresh cookie and rejects replay of old cookie", async () => {
+  it('rotates refresh cookie and rejects replay of old cookie', async () => {
     const config = createTestConfig();
     const services = createFakeServices();
     const auth = new InMemoryAuthService(config.authTokenSecret);
 
-    let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
+    let nowMs = Date.parse('2026-02-23T00:00:00.000Z');
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
     const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-token-2" })
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken: 'google-token-2' }),
     });
     expect(signIn.status).toBe(200);
 
     const cookieName = config.authRefreshCookieName;
-    const firstRefreshToken = cookieValue(signIn.headers.get("set-cookie"), cookieName);
+    const firstRefreshToken = cookieValue(signIn.headers.get('set-cookie'), cookieName);
     expect(firstRefreshToken).toBeTruthy();
 
     nowMs += 1000;
 
     const refreshed = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(firstRefreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(firstRefreshToken || '')}` },
     });
 
     expect(refreshed.status).toBe(200);
     const refreshedPayload = await refreshed.json();
-    expect(refreshedPayload.tokenType).toBe("Bearer");
-    expect(refreshedPayload.plan).toBe("free");
+    expect(refreshedPayload.tokenType).toBe('Bearer');
+    expect(refreshedPayload.plan).toBe('free');
     expect(refreshedPayload.profile.subjectId).toBeTruthy();
-    expect(refreshedPayload.profile.plan).toBe("free");
+    expect(refreshedPayload.profile.plan).toBe('free');
     expect(refreshedPayload.profile.createdAt).toBeTruthy();
     expect(refreshedPayload.profile.updatedAt).toBeTruthy();
 
-    const secondRefreshToken = cookieValue(refreshed.headers.get("set-cookie"), cookieName);
+    const secondRefreshToken = cookieValue(refreshed.headers.get('set-cookie'), cookieName);
     expect(secondRefreshToken).toBeTruthy();
     expect(secondRefreshToken).not.toBe(firstRefreshToken);
 
     const replay = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(firstRefreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(firstRefreshToken || '')}` },
     });
 
     expect(replay.status).toBe(401);
   });
 
-  it("revokes the active refresh session when token secret does not match", async () => {
+  it('revokes the active refresh session when token secret does not match', async () => {
     const config = createTestConfig();
     const services = createFakeServices();
     const auth = new InMemoryAuthService(config.authTokenSecret);
 
-    const app = createApiApp({ config, ...services, auth, now: () => new Date("2026-02-23T00:00:00.000Z") });
+    const app = createApiApp({
+      config,
+      ...services,
+      auth,
+      now: () => new Date('2026-02-23T00:00:00.000Z'),
+    });
     const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-token-mismatch" })
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken: 'google-token-mismatch' }),
     });
     expect(signIn.status).toBe(200);
 
     const cookieName = config.authRefreshCookieName;
-    const refreshToken = cookieValue(signIn.headers.get("set-cookie"), cookieName);
+    const refreshToken = cookieValue(signIn.headers.get('set-cookie'), cookieName);
     expect(refreshToken).toBeTruthy();
 
     const tamperedToken = `${refreshToken?.slice(0, -1)}x`;
 
     const tamperedRefresh = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(tamperedToken)}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(tamperedToken)}` },
     });
     expect(tamperedRefresh.status).toBe(401);
 
     const legitAfterTamper = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || '')}` },
     });
     expect(legitAfterTamper.status).toBe(401);
   });
 
-  it("revokes refresh session on logout", async () => {
+  it('revokes refresh session on logout', async () => {
     const config = createTestConfig();
     const services = createFakeServices();
     const auth = new InMemoryAuthService(config.authTokenSecret);
 
-    let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
+    let nowMs = Date.parse('2026-02-23T00:00:00.000Z');
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
     const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-token-3" })
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken: 'google-token-3' }),
     });
     const cookieName = config.authRefreshCookieName;
-    const refreshToken = cookieValue(signIn.headers.get("set-cookie"), cookieName);
+    const refreshToken = cookieValue(signIn.headers.get('set-cookie'), cookieName);
     expect(refreshToken).toBeTruthy();
 
     const logout = await fetch(`${server.baseUrl}/api/auth/logout`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || '')}` },
     });
 
     expect(logout.status).toBe(204);
-    expect(logout.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(logout.headers.get('set-cookie')).toContain('Max-Age=0');
 
     nowMs += 1000;
 
     const refreshAfterLogout = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || '')}` },
     });
 
     expect(refreshAfterLogout.status).toBe(401);
   });
 
-  it("rejects expired refresh sessions", async () => {
+  it('rejects expired refresh sessions', async () => {
     const config = createTestConfig();
     config.authRefreshTtlSeconds = 1;
 
     const services = createFakeServices();
     const auth = new InMemoryAuthService(config.authTokenSecret);
 
-    let nowMs = Date.parse("2026-02-23T00:00:00.000Z");
+    let nowMs = Date.parse('2026-02-23T00:00:00.000Z');
     const app = createApiApp({ config, ...services, auth, now: () => new Date(nowMs) });
     const server = await startApiTestServer({ app });
     closers.push(server.close);
 
     const signIn = await fetch(`${server.baseUrl}/api/auth/google`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idToken: "google-token-4" })
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idToken: 'google-token-4' }),
     });
 
     const cookieName = config.authRefreshCookieName;
-    const refreshToken = cookieValue(signIn.headers.get("set-cookie"), cookieName);
+    const refreshToken = cookieValue(signIn.headers.get('set-cookie'), cookieName);
     expect(refreshToken).toBeTruthy();
 
     nowMs += 2000;
 
     const refresh = await fetch(`${server.baseUrl}/api/auth/refresh`, {
-      method: "POST",
-      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || "")}` }
+      method: 'POST',
+      headers: { cookie: `${cookieName}=${encodeURIComponent(refreshToken || '')}` },
     });
 
     expect(refresh.status).toBe(401);

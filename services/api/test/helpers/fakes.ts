@@ -1,7 +1,7 @@
-import type { ApiConfig } from "../../src/config";
-import { InMemoryJobRepository } from "../../src/services/job-repo";
-import { InMemoryJobQueueService } from "../../src/services/queue";
-import { InMemoryObjectStorageService } from "../../src/services/storage";
+import type { ApiConfig } from '../../src/config';
+import { InMemoryJobRepository } from '../../src/services/job-repo';
+import { InMemoryJobQueueService } from '../../src/services/queue';
+import { InMemoryObjectStorageService } from '../../src/services/storage';
 
 /**
  * Create an ApiConfig populated with defaults suitable for local/in-memory tests.
@@ -14,18 +14,18 @@ import { InMemoryObjectStorageService } from "../../src/services/storage";
  */
 export function createTestConfig(): ApiConfig {
   return {
-    nodeEnv: "test",
+    nodeEnv: 'test',
     port: 4000,
-    webOrigin: "http://localhost:3000",
-    googleClientId: "test-google-client",
-    authTokenSecret: "test-auth-token-secret",
+    webOrigin: 'http://localhost:3000',
+    googleClientId: 'test-google-client',
+    authTokenSecret: 'test-auth-token-secret',
     authTokenTtlSeconds: 3600,
     authRefreshTtlSeconds: 7 * 24 * 3600,
-    authRefreshCookieName: "image_ops_refresh_token",
+    authRefreshCookieName: 'image_ops_refresh_token',
     authRefreshCookieSecure: false,
-    authRefreshCookieSameSite: "lax",
+    authRefreshCookieSameSite: 'lax',
     authRefreshCookieDomain: undefined,
-    authRefreshCookiePath: "/api/auth",
+    authRefreshCookiePath: '/api/auth',
     maxUploadBytes: 10 * 1024 * 1024,
     apiWriteRateLimitWindowMs: 60 * 1000,
     apiWriteRateLimitMax: 1000,
@@ -40,30 +40,30 @@ export function createTestConfig(): ApiConfig {
     proPlanWindowHours: 24,
     teamPlanLimit: 1000,
     teamPlanWindowHours: 24,
-    queueName: "image-ops-jobs",
-    jobRepoDriver: "redis",
+    queueName: 'image-ops-jobs',
+    jobRepoDriver: 'redis',
     postgresUrl: undefined,
-    redisUrl: "redis://localhost:6379",
-    billingProvider: "hmac",
-    billingPublicBaseUrl: "http://localhost:3000",
-    billingPortalBaseUrl: "http://localhost:3000/billing/manage",
-    billingProviderSecret: "test-provider-secret",
-    billingWebhookSecret: "test-webhook-secret",
-    stripeSecretKey: "sk_test_example",
-    stripeWebhookSecret: "whsec_example",
+    redisUrl: 'redis://localhost:6379',
+    billingProvider: 'hmac',
+    billingPublicBaseUrl: 'http://localhost:3000',
+    billingPortalBaseUrl: 'http://localhost:3000/billing/manage',
+    billingProviderSecret: 'test-provider-secret',
+    billingWebhookSecret: 'test-webhook-secret',
+    stripeSecretKey: 'sk_test_example',
+    stripeWebhookSecret: 'whsec_example',
     stripeWebhookToleranceSeconds: 300,
-    stripePriceIdPro: "price_pro",
-    stripePriceIdTeam: "price_team",
+    stripePriceIdPro: 'price_pro',
+    stripePriceIdTeam: 'price_team',
     malwareScanApiUrl: undefined,
     malwareScanTimeoutMs: 5000,
     malwareScanFailClosed: true,
-    s3Region: "us-east-1",
-    s3Bucket: "image-ops-temp",
-    s3Endpoint: "http://localhost:9000",
-    s3PublicEndpoint: "http://localhost:9000",
-    s3AccessKey: "test",
-    s3SecretKey: "test",
-    s3ForcePathStyle: true
+    s3Region: 'us-east-1',
+    s3Bucket: 'image-ops-temp',
+    s3Endpoint: 'http://localhost:9000',
+    s3PublicEndpoint: 'http://localhost:9000',
+    s3AccessKey: 'test',
+    s3SecretKey: 'test',
+    s3ForcePathStyle: true,
   };
 }
 
@@ -76,6 +76,6 @@ export function createFakeServices() {
   return {
     storage: new InMemoryObjectStorageService(),
     queue: new InMemoryJobQueueService(),
-    jobRepo: new InMemoryJobRepository()
+    jobRepo: new InMemoryJobRepository(),
   };
 }

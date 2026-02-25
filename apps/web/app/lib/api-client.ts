@@ -1,20 +1,24 @@
-import { TOKEN_KEY } from "./storage-keys";
+import { TOKEN_KEY } from './storage-keys';
 
 type RefreshPayload = {
   token: string;
   profile?: {
     subjectId?: string;
-    plan?: "free" | "pro" | "team";
+    plan?: 'free' | 'pro' | 'team';
   };
 };
 
-const refreshTimeoutOverride = Number.parseInt(process.env.NEXT_PUBLIC_API_REFRESH_TIMEOUT_MS || "", 10);
-const REFRESH_TIMEOUT_MS = Number.isFinite(refreshTimeoutOverride) && refreshTimeoutOverride > 0
-  ? refreshTimeoutOverride
-  : 8_000;
+const refreshTimeoutOverride = Number.parseInt(
+  process.env.NEXT_PUBLIC_API_REFRESH_TIMEOUT_MS || '',
+  10
+);
+const REFRESH_TIMEOUT_MS =
+  Number.isFinite(refreshTimeoutOverride) && refreshTimeoutOverride > 0
+    ? refreshTimeoutOverride
+    : 8_000;
 
 export function getApiBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000';
 }
 
 function safeStorageGet(storage: Storage, key: string): string | null {
@@ -42,7 +46,7 @@ function safeStorageRemove(storage: Storage, key: string): void {
 }
 
 export function getApiToken(): string | null {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
 
@@ -50,7 +54,7 @@ export function getApiToken(): string | null {
 }
 
 export function setApiToken(token: string): void {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -59,7 +63,7 @@ export function setApiToken(token: string): void {
 }
 
 export function clearApiToken(): void {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -67,22 +71,24 @@ export function clearApiToken(): void {
   safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
-export async function refreshApiToken(apiBaseUrl = getApiBaseUrl()): Promise<RefreshPayload | null> {
+export async function refreshApiToken(
+  apiBaseUrl = getApiBaseUrl()
+): Promise<RefreshPayload | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
 
   try {
     const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-      signal: controller.signal
+      method: 'POST',
+      credentials: 'include',
+      signal: controller.signal,
     });
     if (!response.ok) {
       clearApiToken();
       return null;
     }
 
-    const payload = await response.json() as RefreshPayload;
+    const payload = (await response.json()) as RefreshPayload;
     if (!payload.token) {
       clearApiToken();
       return null;
@@ -109,17 +115,21 @@ function flushRefreshQueue(token: string | null): void {
   }
 }
 
-export async function apiFetch(input: string, init: RequestInit = {}, retryOnUnauthorized = true): Promise<Response> {
+export async function apiFetch(
+  input: string,
+  init: RequestInit = {},
+  retryOnUnauthorized = true
+): Promise<Response> {
   const token = getApiToken();
   const headers = new Headers(init.headers || {});
   if (token) {
-    headers.set("authorization", `Bearer ${token}`);
+    headers.set('authorization', `Bearer ${token}`);
   }
 
   const response = await fetch(input, {
     ...init,
-    credentials: init.credentials || "include",
-    headers
+    credentials: init.credentials || 'include',
+    headers,
   });
 
   if (response.status !== 401 || !retryOnUnauthorized) {
@@ -135,12 +145,14 @@ export async function apiFetch(input: string, init: RequestInit = {}, retryOnUna
         }
 
         const retryHeaders = new Headers(init.headers || {});
-        retryHeaders.set("authorization", `Bearer ${queuedToken}`);
+        retryHeaders.set('authorization', `Bearer ${queuedToken}`);
         fetch(input, {
           ...init,
-          credentials: init.credentials || "include",
-          headers: retryHeaders
-        }).then(resolve).catch(reject);
+          credentials: init.credentials || 'include',
+          headers: retryHeaders,
+        })
+          .then(resolve)
+          .catch(reject);
       });
     });
   }
@@ -156,11 +168,11 @@ export async function apiFetch(input: string, init: RequestInit = {}, retryOnUna
     }
 
     const retryHeaders = new Headers(init.headers || {});
-    retryHeaders.set("authorization", `Bearer ${refreshedToken}`);
+    retryHeaders.set('authorization', `Bearer ${refreshedToken}`);
     return fetch(input, {
       ...init,
-      credentials: init.credentials || "include",
-      headers: retryHeaders
+      credentials: init.credentials || 'include',
+      headers: retryHeaders,
     });
   } finally {
     isRefreshing = false;

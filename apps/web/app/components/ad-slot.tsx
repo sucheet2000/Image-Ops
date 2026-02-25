@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import type { ViewerPlan } from "../lib/session";
-import type { AdConsent } from "./ad-consent-banner";
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { ViewerPlan } from '../lib/session';
+import type { AdConsent } from './ad-consent-banner';
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 
 declare global {
   interface Window {
@@ -11,20 +11,20 @@ declare global {
   }
 }
 
-const ADSENSE_SCRIPT_ID = "image-ops-adsense-script";
+const ADSENSE_SCRIPT_ID = 'image-ops-adsense-script';
 
 function resolveAdSlotId(placement: string): string {
-  if (placement === "homepage-top") {
-    return process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOMEPAGE_TOP || "";
+  if (placement === 'homepage-top') {
+    return process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOMEPAGE_TOP || '';
   }
-  if (placement === "homepage-bottom") {
-    return process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOMEPAGE_BOTTOM || "";
+  if (placement === 'homepage-bottom') {
+    return process.env.NEXT_PUBLIC_ADSENSE_SLOT_HOMEPAGE_BOTTOM || '';
   }
-  return process.env.NEXT_PUBLIC_ADSENSE_SLOT_DEFAULT || "";
+  return process.env.NEXT_PUBLIC_ADSENSE_SLOT_DEFAULT || '';
 }
 
 async function ensureAdsenseScript(clientId: string): Promise<void> {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return;
   }
 
@@ -34,13 +34,13 @@ async function ensureAdsenseScript(clientId: string): Promise<void> {
   }
 
   await new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
+    const script = document.createElement('script');
     script.id = ADSENSE_SCRIPT_ID;
     script.async = true;
-    script.crossOrigin = "anonymous";
+    script.crossOrigin = 'anonymous';
     script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(clientId)}`;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load ad network script."));
+    script.onerror = () => reject(new Error('Failed to load ad network script.'));
     document.head.appendChild(script);
   });
 }
@@ -50,33 +50,33 @@ export function AdSlot(props: {
   consent: AdConsent;
   placement: string;
 }): ReactNode {
-  const [adState, setAdState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [adMessage, setAdMessage] = useState("");
-  const clientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID || "";
-  const adNetwork = process.env.NEXT_PUBLIC_AD_NETWORK || "";
+  const [adState, setAdState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [adMessage, setAdMessage] = useState('');
+  const clientId = process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID || '';
+  const adNetwork = process.env.NEXT_PUBLIC_AD_NETWORK || '';
   const slotId = resolveAdSlotId(props.placement);
 
   useEffect(() => {
     let cancelled = false;
 
     const mountAd = async () => {
-      if (props.plan !== "free" || props.consent !== "accepted") {
+      if (props.plan !== 'free' || props.consent !== 'accepted') {
         return;
       }
 
-      if (adNetwork !== "adsense") {
-        setAdState("error");
-        setAdMessage("Ad network not configured.");
+      if (adNetwork !== 'adsense') {
+        setAdState('error');
+        setAdMessage('Ad network not configured.');
         return;
       }
 
       if (!clientId || !slotId) {
-        setAdState("error");
-        setAdMessage("Missing NEXT_PUBLIC_ADSENSE_CLIENT_ID or slot id.");
+        setAdState('error');
+        setAdMessage('Missing NEXT_PUBLIC_ADSENSE_CLIENT_ID or slot id.');
         return;
       }
 
-      setAdState("loading");
+      setAdState('loading');
       try {
         await ensureAdsenseScript(clientId);
         if (cancelled) {
@@ -85,11 +85,11 @@ export function AdSlot(props: {
 
         window.adsbygoogle = window.adsbygoogle || [];
         window.adsbygoogle.push({});
-        setAdState("ready");
+        setAdState('ready');
       } catch (error) {
         if (!cancelled) {
-          setAdState("error");
-          setAdMessage(error instanceof Error ? error.message : "Ad slot initialization failed.");
+          setAdState('error');
+          setAdMessage(error instanceof Error ? error.message : 'Ad slot initialization failed.');
         }
       }
     };
@@ -100,9 +100,12 @@ export function AdSlot(props: {
     };
   }, [adNetwork, clientId, props.consent, props.plan, slotId]);
 
-  if (props.plan !== "free") {
+  if (props.plan !== 'free') {
     return (
-      <section className="editorial-card ad-block ad-block--disabled" aria-label="Ad slot hidden for paid plan">
+      <section
+        className="editorial-card ad-block ad-block--disabled"
+        aria-label="Ad slot hidden for paid plan"
+      >
         <span className="section-label">Sponsored</span>
         <h3>No Ads on Paid Plans</h3>
         <p>Upgrade benefit active. This slot stays disabled for {props.plan.toUpperCase()}.</p>
@@ -110,9 +113,12 @@ export function AdSlot(props: {
     );
   }
 
-  if (props.consent !== "accepted") {
+  if (props.consent !== 'accepted') {
     return (
-      <section className="editorial-card ad-block ad-block--disabled" aria-label="Ad slot awaiting consent">
+      <section
+        className="editorial-card ad-block ad-block--disabled"
+        aria-label="Ad slot awaiting consent"
+      >
         <span className="section-label">Sponsored</span>
         <h3>Ads Paused</h3>
         <p>Grant consent to render ads in this placement.</p>
@@ -127,14 +133,16 @@ export function AdSlot(props: {
       <p>Placement: {props.placement}</p>
       <ins
         className="adsbygoogle ad-slot"
-        style={{ display: "block" }}
+        style={{ display: 'block' }}
         data-ad-client={clientId}
         data-ad-slot={slotId}
         data-ad-format="auto"
         data-full-width-responsive="true"
       />
-      {adState === "loading" ? <p className="ad-note">Loading sponsored placement...</p> : null}
-      {adState === "error" ? <p className="ad-note">{adMessage || "Ad slot unavailable."}</p> : null}
+      {adState === 'loading' ? <p className="ad-note">Loading sponsored placement...</p> : null}
+      {adState === 'error' ? (
+        <p className="ad-note">{adMessage || 'Ad slot unavailable.'}</p>
+      ) : null}
     </section>
   );
 }

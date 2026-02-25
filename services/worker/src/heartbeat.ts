@@ -1,7 +1,7 @@
-import type IORedis from "ioredis";
+import type IORedis from 'ioredis';
 
 export type WorkerHeartbeatPayload = {
-  event: "worker.heartbeat";
+  event: 'worker.heartbeat';
   queue: string;
   workerId: string;
   pid: number;
@@ -10,7 +10,7 @@ export type WorkerHeartbeatPayload = {
 };
 
 export function startWorkerHeartbeat(input: {
-  redis: Pick<IORedis, "set">;
+  redis: Pick<IORedis, 'set'>;
   workerId: string;
   queueName: string;
   intervalMs: number;
@@ -28,15 +28,15 @@ export function startWorkerHeartbeat(input: {
 
   const timer = setInterval(() => {
     const payload: WorkerHeartbeatPayload = {
-      event: "worker.heartbeat",
+      event: 'worker.heartbeat',
       queue: input.queueName,
       workerId: input.workerId,
       pid,
       ts: now().toISOString(),
-      uptimeSeconds: Math.floor(uptimeSeconds())
+      uptimeSeconds: Math.floor(uptimeSeconds()),
     };
     void input.redis
-      .set(heartbeatKey, payload.ts, "EX", input.ttlSeconds)
+      .set(heartbeatKey, payload.ts, 'EX', input.ttlSeconds)
       .then(() => {
         input.onHeartbeat(payload);
       })
@@ -44,12 +44,12 @@ export function startWorkerHeartbeat(input: {
         // eslint-disable-next-line no-console
         console.error(
           JSON.stringify({
-            event: "worker.heartbeat.write_failed",
+            event: 'worker.heartbeat.write_failed',
             heartbeatKey,
             workerId: input.workerId,
             ts: payload.ts,
             ttlSeconds: input.ttlSeconds,
-            message: error instanceof Error ? error.message : String(error)
+            message: error instanceof Error ? error.message : String(error),
           })
         );
       });

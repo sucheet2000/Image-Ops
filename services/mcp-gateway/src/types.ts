@@ -1,13 +1,13 @@
 export type OperationScope =
-  | "image.upload"
-  | "image.jobs.write"
-  | "image.jobs.read"
-  | "image.cleanup"
-  | "image.quota.read";
+  | 'image.upload'
+  | 'image.jobs.write'
+  | 'image.jobs.read'
+  | 'image.cleanup'
+  | 'image.quota.read';
 
 export type OperationDef = {
   operationId: string;
-  method: "GET" | "POST";
+  method: 'GET' | 'POST';
   route: string;
   summary: string;
   keyInputFields: string[];
@@ -17,7 +17,7 @@ export type OperationDef = {
 
 export type SearchResult = Pick<
   OperationDef,
-  "operationId" | "method" | "route" | "summary" | "keyInputFields"
+  'operationId' | 'method' | 'route' | 'summary' | 'keyInputFields'
 >;
 
 export type ExecuteStep = {

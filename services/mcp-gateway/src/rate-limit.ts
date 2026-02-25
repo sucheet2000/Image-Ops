@@ -1,6 +1,6 @@
-import type { NextFunction, Response } from "express";
-import { config } from "./config";
-import type { AuthenticatedRequest } from "./auth";
+import type { NextFunction, Response } from 'express';
+import { config } from './config';
+import type { AuthenticatedRequest } from './auth';
 
 type RateState = {
   windowStart: number;
@@ -10,10 +10,14 @@ type RateState = {
 const stateByActor = new Map<string, RateState>();
 
 function actorKey(req: AuthenticatedRequest): string {
-  return req.auth?.sub || req.ip || "anonymous";
+  return req.auth?.sub || req.ip || 'anonymous';
 }
 
-export function rateLimitMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export function rateLimitMiddleware(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
   const key = actorKey(req);
   const now = Date.now();
   const current = stateByActor.get(key) || { windowStart: now, count: 0 };
@@ -27,7 +31,7 @@ export function rateLimitMiddleware(req: AuthenticatedRequest, res: Response, ne
   stateByActor.set(key, current);
 
   if (current.count > config.rateLimitMaxRequests) {
-    res.status(429).json({ error: "RATE_LIMITED", message: "Too many requests." });
+    res.status(429).json({ error: 'RATE_LIMITED', message: 'Too many requests.' });
     return;
   }
 

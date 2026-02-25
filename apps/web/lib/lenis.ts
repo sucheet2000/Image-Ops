@@ -1,4 +1,4 @@
-import Lenis from "@studio-freight/lenis";
+import Lenis from '@studio-freight/lenis';
 
 let lenis: Lenis | null = null;
 let rafId = 0;
@@ -10,35 +10,35 @@ function notify(scroll: number) {
 }
 
 function currentScroll(): number {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return 0;
   }
   return window.scrollY || window.pageYOffset || 0;
 }
 
 function initNativeScrollEmitter() {
-  if (typeof window === "undefined" || nativeScrollCleanup) {
+  if (typeof window === 'undefined' || nativeScrollCleanup) {
     return;
   }
 
   const onNativeScroll = () => notify(currentScroll());
-  window.addEventListener("scroll", onNativeScroll, { passive: true });
-  window.addEventListener("resize", onNativeScroll);
+  window.addEventListener('scroll', onNativeScroll, { passive: true });
+  window.addEventListener('resize', onNativeScroll);
   onNativeScroll();
 
   nativeScrollCleanup = () => {
-    window.removeEventListener("scroll", onNativeScroll);
-    window.removeEventListener("resize", onNativeScroll);
+    window.removeEventListener('scroll', onNativeScroll);
+    window.removeEventListener('resize', onNativeScroll);
     nativeScrollCleanup = null;
   };
 }
 
 export function initLenis(): Lenis | null {
-  if (typeof window === "undefined") {
+  if (typeof window === 'undefined') {
     return null;
   }
 
-  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (prefersReduced) {
     if (lenis) {
       lenis.destroy();
@@ -63,13 +63,13 @@ export function initLenis(): Lenis | null {
   lenis = new Lenis({
     duration: 1.4,
     easing: (value: number) => Math.min(1, 1.001 - 2 ** (-10 * value)),
-    orientation: "vertical",
+    orientation: 'vertical',
     smoothWheel: true,
     wheelMultiplier: 0.8,
-    touchMultiplier: 1.5
+    touchMultiplier: 1.5,
   });
 
-  lenis.on("scroll", ({ scroll }: { scroll: number }) => {
+  lenis.on('scroll', ({ scroll }: { scroll: number }) => {
     notify(scroll);
   });
 

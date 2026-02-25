@@ -1,9 +1,4 @@
-export {
-  FREE_PLAN_LIMIT,
-  FREE_PLAN_WINDOW_HOURS,
-  applyQuota,
-  quotaWindowResetAt
-} from "./types";
+export { FREE_PLAN_LIMIT, FREE_PLAN_WINDOW_HOURS, applyQuota, quotaWindowResetAt } from './types';
 
 const QUOTA_SCRIPT = `
   local key = KEYS[1]
@@ -21,7 +16,7 @@ const QUOTA_SCRIPT = `
 `;
 
 export type QuotaRedisClient = {
-  script(subcommand: "LOAD", script: string): Promise<string>;
+  script(subcommand: 'LOAD', script: string): Promise<string>;
   evalsha(
     sha: string,
     numKeys: number,
@@ -34,7 +29,7 @@ export type QuotaRedisClient = {
 const quotaScriptShaByClient = new WeakMap<QuotaRedisClient, string>();
 
 function parseQuotaReply(reply: number | string): number {
-  if (typeof reply === "number") {
+  if (typeof reply === 'number') {
     return reply;
   }
   const parsed = Number.parseInt(reply, 10);
@@ -45,7 +40,7 @@ function parseQuotaReply(reply: number | string): number {
 }
 
 export async function loadQuotaScript(redis: QuotaRedisClient): Promise<void> {
-  const sha = await redis.script("LOAD", QUOTA_SCRIPT);
+  const sha = await redis.script('LOAD', QUOTA_SCRIPT);
   quotaScriptShaByClient.set(redis, sha);
 }
 
@@ -57,7 +52,7 @@ export async function checkAndIncrementQuota(
   nowMs = Date.now()
 ): Promise<boolean> {
   if (!Number.isFinite(windowSeconds) || windowSeconds <= 0) {
-    throw new Error("windowSeconds must be a positive number");
+    throw new Error('windowSeconds must be a positive number');
   }
 
   const windowKey = Math.floor(nowMs / (windowSeconds * 1000));
@@ -69,7 +64,7 @@ export async function checkAndIncrementQuota(
     quotaScriptSha = quotaScriptShaByClient.get(redis);
   }
   if (!quotaScriptSha) {
-    throw new Error("Failed to load Redis quota script SHA");
+    throw new Error('Failed to load Redis quota script SHA');
   }
 
   try {
@@ -80,7 +75,7 @@ export async function checkAndIncrementQuota(
       await loadQuotaScript(redis);
       quotaScriptSha = quotaScriptShaByClient.get(redis);
       if (!quotaScriptSha) {
-        throw new Error("Failed to reload Redis quota script SHA");
+        throw new Error('Failed to reload Redis quota script SHA');
       }
       const result = await redis.evalsha(quotaScriptSha, 1, key, limit, windowSeconds);
       return parseQuotaReply(result) !== -1;

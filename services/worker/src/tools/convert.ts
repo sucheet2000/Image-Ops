@@ -1,5 +1,5 @@
-import { formatToMime, type ConvertOptions } from "@imageops/core";
-import sharp from "sharp";
+import { formatToMime, type ConvertOptions } from '@imageops/core';
+import sharp from 'sharp';
 
 /**
  * Convert image bytes to PNG, WebP, or JPEG (auto-rotating the image) and return the converted bytes with the correct MIME type.
@@ -15,22 +15,22 @@ export async function runConvert(input: {
 }): Promise<{ bytes: Buffer; contentType: string }> {
   const base = sharp(input.bytes).rotate();
 
-  if (input.options.format === "png") {
+  if (input.options.format === 'png') {
     return {
       bytes: await base.png().toBuffer(),
-      contentType: formatToMime("png")
+      contentType: formatToMime('png'),
     };
   }
 
-  if (input.options.format === "webp") {
+  if (input.options.format === 'webp') {
     return {
       bytes: await base.webp({ quality: input.options.quality || 85 }).toBuffer(),
-      contentType: formatToMime("webp")
+      contentType: formatToMime('webp'),
     };
   }
 
   return {
     bytes: await base.jpeg({ quality: input.options.quality || 85 }).toBuffer(),
-    contentType: formatToMime("jpeg")
+    contentType: formatToMime('jpeg'),
   };
 }

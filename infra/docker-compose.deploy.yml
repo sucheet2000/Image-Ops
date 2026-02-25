@@ -3,7 +3,7 @@ services:
     image: redis:7
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
 
   postgres:
     image: postgres:16
@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: image_ops
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -25,8 +25,8 @@ services:
       MINIO_ROOT_USER: imageopslocal
       MINIO_ROOT_PASSWORD: imageopslocalsecret
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - '9000:9000'
+      - '9001:9001'
     volumes:
       - minio_data:/data
 
@@ -34,7 +34,7 @@ services:
     image: quay.io/minio/mc
     depends_on:
       - minio
-    restart: "no"
+    restart: 'no'
     entrypoint: >
       /bin/sh -c "
       until mc alias set local http://minio:9000 imageopslocal imageopslocalsecret; do sleep 1; done &&
@@ -50,30 +50,30 @@ services:
       - path: ../.env
         required: false
     environment:
-      API_PORT: "4000"
-      WEB_ORIGIN: "http://localhost:3000"
-      AUTH_TOKEN_SECRET: "local-deploy-auth-token"
-      BILLING_PROVIDER_SECRET: "local-deploy-billing-provider"
-      BILLING_WEBHOOK_SECRET: "local-deploy-billing-webhook"
-      REDIS_URL: "redis://redis:6379"
-      JOB_QUEUE_NAME: "image-ops-jobs"
-      JOB_REPO_DRIVER: "postgres"
-      POSTGRES_URL: "postgres://postgres:postgres@postgres:5432/image_ops"
-      S3_REGION: "us-east-1"
-      S3_BUCKET: "image-ops-temp"
-      S3_ENDPOINT: "http://minio:9000"
-      S3_PUBLIC_ENDPOINT: "http://localhost:9000"
-      S3_ACCESS_KEY: "imageopslocal"
-      S3_SECRET_KEY: "imageopslocalsecret"
-      S3_FORCE_PATH_STYLE: "true"
-      BILLING_PUBLIC_BASE_URL: "http://localhost:3000"
-      BILLING_PORTAL_BASE_URL: "http://localhost:3000/billing/manage"
+      API_PORT: '4000'
+      WEB_ORIGIN: 'http://localhost:3000'
+      AUTH_TOKEN_SECRET: 'local-deploy-auth-token'
+      BILLING_PROVIDER_SECRET: 'local-deploy-billing-provider'
+      BILLING_WEBHOOK_SECRET: 'local-deploy-billing-webhook'
+      REDIS_URL: 'redis://redis:6379'
+      JOB_QUEUE_NAME: 'image-ops-jobs'
+      JOB_REPO_DRIVER: 'postgres'
+      POSTGRES_URL: 'postgres://postgres:postgres@postgres:5432/image_ops'
+      S3_REGION: 'us-east-1'
+      S3_BUCKET: 'image-ops-temp'
+      S3_ENDPOINT: 'http://minio:9000'
+      S3_PUBLIC_ENDPOINT: 'http://localhost:9000'
+      S3_ACCESS_KEY: 'imageopslocal'
+      S3_SECRET_KEY: 'imageopslocalsecret'
+      S3_FORCE_PATH_STYLE: 'true'
+      BILLING_PUBLIC_BASE_URL: 'http://localhost:3000'
+      BILLING_PORTAL_BASE_URL: 'http://localhost:3000/billing/manage'
     depends_on:
       - redis
       - postgres
       - minio-setup
     ports:
-      - "4000:4000"
+      - '4000:4000'
 
   worker:
     build:
@@ -84,17 +84,17 @@ services:
       - path: ../.env
         required: false
     environment:
-      REDIS_URL: "redis://redis:6379"
-      JOB_QUEUE_NAME: "image-ops-jobs"
-      JOB_REPO_DRIVER: "postgres"
-      POSTGRES_URL: "postgres://postgres:postgres@postgres:5432/image_ops"
-      S3_REGION: "us-east-1"
-      S3_BUCKET: "image-ops-temp"
-      S3_ENDPOINT: "http://minio:9000"
-      S3_ACCESS_KEY: "imageopslocal"
-      S3_SECRET_KEY: "imageopslocalsecret"
-      S3_FORCE_PATH_STYLE: "true"
-      BG_REMOVE_API_URL: "http://127.0.0.1:9999/mock-unused"
+      REDIS_URL: 'redis://redis:6379'
+      JOB_QUEUE_NAME: 'image-ops-jobs'
+      JOB_REPO_DRIVER: 'postgres'
+      POSTGRES_URL: 'postgres://postgres:postgres@postgres:5432/image_ops'
+      S3_REGION: 'us-east-1'
+      S3_BUCKET: 'image-ops-temp'
+      S3_ENDPOINT: 'http://minio:9000'
+      S3_ACCESS_KEY: 'imageopslocal'
+      S3_SECRET_KEY: 'imageopslocalsecret'
+      S3_FORCE_PATH_STYLE: 'true'
+      BG_REMOVE_API_URL: 'http://127.0.0.1:9999/mock-unused'
     depends_on:
       - redis
       - postgres
@@ -109,11 +109,11 @@ services:
       - path: ../.env
         required: false
     environment:
-      NEXT_PUBLIC_API_BASE_URL: "http://localhost:4000"
+      NEXT_PUBLIC_API_BASE_URL: 'http://localhost:4000'
     depends_on:
       - api
     ports:
-      - "3000:3000"
+      - '3000:3000'
 
 volumes:
   postgres_data:

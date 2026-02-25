@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["master"]
+    branches: ['master']
   pull_request:
 
 concurrency:
@@ -19,6 +19,12 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - name: Type Check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Format Check
+        run: npm run format:check
       - run: npm run test
 
   integration:
@@ -40,18 +46,18 @@ jobs:
           npm run build -w services/worker
       - name: Start API and worker
         env:
-          API_PORT: "4000"
-          WEB_ORIGIN: "http://127.0.0.1:3000"
-          REDIS_URL: "redis://127.0.0.1:6379"
-          JOB_QUEUE_NAME: "image-ops-jobs"
-          S3_REGION: "us-east-1"
-          S3_BUCKET: "image-ops-temp"
-          S3_ENDPOINT: "http://127.0.0.1:9000"
-          S3_ACCESS_KEY: "minioadmin"
-          S3_SECRET_KEY: "minioadmin"
-          S3_FORCE_PATH_STYLE: "true"
-          AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
-          BG_REMOVE_API_URL: "http://127.0.0.1:9999/mock-unused"
+          API_PORT: '4000'
+          WEB_ORIGIN: 'http://127.0.0.1:3000'
+          REDIS_URL: 'redis://127.0.0.1:6379'
+          JOB_QUEUE_NAME: 'image-ops-jobs'
+          S3_REGION: 'us-east-1'
+          S3_BUCKET: 'image-ops-temp'
+          S3_ENDPOINT: 'http://127.0.0.1:9000'
+          S3_ACCESS_KEY: 'minioadmin'
+          S3_SECRET_KEY: 'minioadmin'
+          S3_FORCE_PATH_STYLE: 'true'
+          AUTH_TOKEN_SECRET: 'wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc='
+          BG_REMOVE_API_URL: 'http://127.0.0.1:9999/mock-unused'
         run: |
           nohup npm run start -w services/api > /tmp/api.log 2>&1 &
           echo $! > /tmp/api.pid
@@ -88,16 +94,16 @@ jobs:
           exit 1
       - name: Run integration tests
         env:
-          RUN_INTEGRATION_TESTS: "1"
-          INTEGRATION_API_BASE_URL: "http://127.0.0.1:4000"
-          INTEGRATION_JOB_TIMEOUT_MS: "30000"
-          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
-          BILLING_WEBHOOK_SECRET: "dev-webhook-secret"
+          RUN_INTEGRATION_TESTS: '1'
+          INTEGRATION_API_BASE_URL: 'http://127.0.0.1:4000'
+          INTEGRATION_JOB_TIMEOUT_MS: '30000'
+          INTEGRATION_AUTH_TOKEN_SECRET: 'wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc='
+          BILLING_WEBHOOK_SECRET: 'dev-webhook-secret'
         run: npm run test:integration:api
       - name: Run staging smoke contract against integration stack
         env:
-          STAGING_API_BASE_URL: "http://127.0.0.1:4000"
-          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
+          STAGING_API_BASE_URL: 'http://127.0.0.1:4000'
+          INTEGRATION_AUTH_TOKEN_SECRET: 'wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc='
         run: |
           API_BEARER_TOKEN="$(node -e 'const jwt=require("jsonwebtoken"); const now=Math.floor(Date.now()/1000); process.stdout.write(jwt.sign({sub:"ci_smoke", plan:"free", iat:now, exp:now+3600}, process.env.INTEGRATION_AUTH_TOKEN_SECRET, { algorithm:"HS256", noTimestamp:true }));')"
           STAGING_API_BASE_URL="${STAGING_API_BASE_URL}" API_BEARER_TOKEN="${API_BEARER_TOKEN}" npm run smoke:staging

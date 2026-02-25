@@ -1,11 +1,11 @@
-import { toStructuredLog } from "@imageops/core";
+import { toStructuredLog } from '@imageops/core';
 import {
   appendBufferedLogEntry,
   readBufferedLogs,
   resetBufferedLogs,
   type BufferedLogFilter,
-  type BufferedLogSnapshot
-} from "./log-buffer";
+  type BufferedLogSnapshot,
+} from './log-buffer';
 
 type StructuredLog = {
   ts?: unknown;
@@ -14,13 +14,17 @@ type StructuredLog = {
 };
 
 function asObject(value: unknown): Record<string, unknown> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
     return value as Record<string, unknown>;
   }
   return { value };
 }
 
-function parseStructuredLog(rawLog: string, fallbackEvent: string, fallbackPayload: Record<string, unknown>): {
+function parseStructuredLog(
+  rawLog: string,
+  fallbackEvent: string,
+  fallbackPayload: Record<string, unknown>
+): {
   ts: string;
   event: string;
   payload: Record<string, unknown>;
@@ -28,20 +32,20 @@ function parseStructuredLog(rawLog: string, fallbackEvent: string, fallbackPaylo
   try {
     const parsed = JSON.parse(rawLog) as StructuredLog;
     return {
-      ts: typeof parsed.ts === "string" ? parsed.ts : new Date().toISOString(),
-      event: typeof parsed.event === "string" ? parsed.event : fallbackEvent,
-      payload: asObject(parsed.payload ?? fallbackPayload)
+      ts: typeof parsed.ts === 'string' ? parsed.ts : new Date().toISOString(),
+      event: typeof parsed.event === 'string' ? parsed.event : fallbackEvent,
+      payload: asObject(parsed.payload ?? fallbackPayload),
     };
   } catch {
     return {
       ts: new Date().toISOString(),
       event: fallbackEvent,
-      payload: fallbackPayload
+      payload: fallbackPayload,
     };
   }
 }
 
-function emitLog(level: "info" | "error", event: string, payload: Record<string, unknown>): void {
+function emitLog(level: 'info' | 'error', event: string, payload: Record<string, unknown>): void {
   const rawLog = toStructuredLog(event, payload);
   const parsed = parseStructuredLog(rawLog, event, payload);
   appendBufferedLogEntry({
@@ -49,10 +53,10 @@ function emitLog(level: "info" | "error", event: string, payload: Record<string,
     level,
     event: parsed.event,
     payload: parsed.payload,
-    raw: rawLog
+    raw: rawLog,
   });
 
-  if (level === "error") {
+  if (level === 'error') {
     // eslint-disable-next-line no-console
     console.error(rawLog);
     return;
@@ -69,7 +73,7 @@ function emitLog(level: "info" | "error", event: string, payload: Record<string,
  * @param payload - Key/value data to attach to the log entry
  */
 export function logInfo(event: string, payload: Record<string, unknown>): void {
-  emitLog("info", event, payload);
+  emitLog('info', event, payload);
 }
 
 /**
@@ -79,7 +83,7 @@ export function logInfo(event: string, payload: Record<string, unknown>): void {
  * @param payload - Additional key/value data to include in the structured log
  */
 export function logError(event: string, payload: Record<string, unknown>): void {
-  emitLog("error", event, payload);
+  emitLog('error', event, payload);
 }
 
 export function readLogBuffer(filter: BufferedLogFilter = {}): BufferedLogSnapshot {

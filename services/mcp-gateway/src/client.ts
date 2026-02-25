@@ -1,6 +1,6 @@
-import { config } from "./config";
-import { OPERATION_BY_ID } from "./operations";
-import type { ExecuteResult, ExecuteStep } from "./types";
+import { config } from './config';
+import { OPERATION_BY_ID } from './operations';
+import type { ExecuteResult, ExecuteStep } from './types';
 
 type ExecuteContext = {
   token: string;
@@ -9,16 +9,16 @@ type ExecuteContext = {
 };
 
 function withPathParams(route: string, params: Record<string, unknown>): string {
-  return route.replace("{id}", encodeURIComponent(String(params.id || "")));
+  return route.replace('{id}', encodeURIComponent(String(params.id || '')));
 }
 
 function toQueryString(operationId: string, params: Record<string, unknown>): string {
-  if (operationId !== "quota_get") {
-    return "";
+  if (operationId !== 'quota_get') {
+    return '';
   }
 
-  const subjectId = String(params.subjectId || "");
-  return subjectId ? `?subjectId=${encodeURIComponent(subjectId)}` : "";
+  const subjectId = String(params.subjectId || '');
+  return subjectId ? `?subjectId=${encodeURIComponent(subjectId)}` : '';
 }
 
 export async function executeStep(step: ExecuteStep, ctx: ExecuteContext): Promise<ExecuteResult> {
@@ -33,11 +33,11 @@ export async function executeStep(step: ExecuteStep, ctx: ExecuteContext): Promi
 
   const headers: Record<string, string> = {
     authorization: `Bearer ${ctx.token}`,
-    "content-type": "application/json"
+    'content-type': 'application/json',
   };
 
   if (ctx.idempotencyKey && operation.mutating) {
-    headers["idempotency-key"] = ctx.idempotencyKey;
+    headers['idempotency-key'] = ctx.idempotencyKey;
   }
 
   const controller = new AbortController();
@@ -47,13 +47,13 @@ export async function executeStep(step: ExecuteStep, ctx: ExecuteContext): Promi
     const response = await fetch(url, {
       method: operation.method,
       headers,
-      body: operation.method === "POST" ? JSON.stringify(params) : undefined,
-      signal: controller.signal
+      body: operation.method === 'POST' ? JSON.stringify(params) : undefined,
+      signal: controller.signal,
     });
 
     let body: unknown = null;
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
       body = await response.json();
     } else {
       body = await response.text();
@@ -62,7 +62,7 @@ export async function executeStep(step: ExecuteStep, ctx: ExecuteContext): Promi
     return {
       operationId: operation.operationId,
       status: response.status,
-      body
+      body,
     };
   } finally {
     clearTimeout(timeout);

@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useMagnetic } from "../../components/cursor/useMagnetic";
-import { onScroll } from "../../lib/lenis";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useMagnetic } from '../../components/cursor/useMagnetic';
+import { onScroll } from '../../lib/lenis';
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/") {
-    return pathname === "/";
+  if (href === '/') {
+    return pathname === '/';
   }
-  if (href.startsWith("/#")) {
-    return pathname === "/";
+  if (href.startsWith('/#')) {
+    return pathname === '/';
   }
   return pathname.startsWith(href);
 }
@@ -24,10 +24,10 @@ export function EditorialChrome() {
 
   const navItems = useMemo(
     () => [
-      { href: "/tools", label: "Tools" },
-      { href: "/use-cases/amazon-listings", label: "Use Cases" },
-      { href: "/#pricing", label: "Pricing" },
-      { href: "/guides/prepare-amazon-main-images", label: "Guides" }
+      { href: '/tools', label: 'Tools' },
+      { href: '/use-cases/amazon-listings', label: 'Use Cases' },
+      { href: '/#pricing', label: 'Pricing' },
+      { href: '/guides/prepare-amazon-main-images', label: 'Guides' },
     ],
     []
   );
@@ -42,20 +42,22 @@ export function EditorialChrome() {
 
     const unsubscribe = onScroll(updateFromScroll);
     const onResize = () => updateFromScroll(window.scrollY || window.pageYOffset || 0);
-    window.addEventListener("resize", onResize);
+    window.addEventListener('resize', onResize);
     return () => {
       unsubscribe();
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener('resize', onResize);
     };
   }, []);
 
   useEffect(() => {
-    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReduced) {
       return;
     }
 
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>(".editorial-media-inner[data-parallax-speed]"));
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>('.editorial-media-inner[data-parallax-speed]')
+    );
     if (nodes.length === 0) {
       return;
     }
@@ -68,14 +70,14 @@ export function EditorialChrome() {
         }
         const rect = wrapper.getBoundingClientRect();
         const center = rect.top + rect.height / 2 - window.innerHeight / 2;
-        const speed = Number.parseFloat(node.dataset.parallaxSpeed || "0.12");
+        const speed = Number.parseFloat(node.dataset.parallaxSpeed || '0.12');
         node.style.transform = `translateY(${center * speed}px)`;
       });
     });
   }, [pathname]);
 
   useEffect(() => {
-    const layers = Array.from(document.querySelectorAll<HTMLElement>("[data-mouse-parallax]"));
+    const layers = Array.from(document.querySelectorAll<HTMLElement>('[data-mouse-parallax]'));
     if (layers.length === 0) {
       return;
     }
@@ -83,7 +85,7 @@ export function EditorialChrome() {
     const cleanup: Array<() => void> = [];
 
     layers.forEach((layer) => {
-      const scope = layer.closest(".hero-section") as HTMLElement | null;
+      const scope = layer.closest('.hero-section') as HTMLElement | null;
       if (!scope) {
         return;
       }
@@ -96,14 +98,14 @@ export function EditorialChrome() {
       };
 
       const onLeave = () => {
-        layer.style.transform = "translate3d(0, 0, 0)";
+        layer.style.transform = 'translate3d(0, 0, 0)';
       };
 
-      scope.addEventListener("mousemove", onMove);
-      scope.addEventListener("mouseleave", onLeave);
+      scope.addEventListener('mousemove', onMove);
+      scope.addEventListener('mouseleave', onLeave);
       cleanup.push(() => {
-        scope.removeEventListener("mousemove", onMove);
-        scope.removeEventListener("mouseleave", onLeave);
+        scope.removeEventListener('mousemove', onMove);
+        scope.removeEventListener('mouseleave', onLeave);
       });
     });
 
@@ -116,18 +118,18 @@ export function EditorialChrome() {
     <>
       <div className="scroll-progress" style={{ width: `${progress}%` }} />
       <header
-        className={`site-header${scrolled ? " scrolled" : ""}`}
+        className={`site-header${scrolled ? ' scrolled' : ''}`}
         style={{
-          position: "fixed",
+          position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           zIndex: 900,
-          padding: scrolled ? "15px 52px" : "22px 52px",
-          background: scrolled ? "rgba(245,240,232,0.94)" : "transparent",
-          backdropFilter: scrolled ? "blur(14px)" : "none",
-          borderBottom: scrolled ? "1px solid var(--border)" : "1px solid transparent",
-          transition: "all 0.5s ease"
+          padding: scrolled ? '15px 52px' : '22px 52px',
+          background: scrolled ? 'rgba(245,240,232,0.94)' : 'transparent',
+          backdropFilter: scrolled ? 'blur(14px)' : 'none',
+          borderBottom: scrolled ? '1px solid var(--border)' : '1px solid transparent',
+          transition: 'all 0.5s ease',
         }}
       >
         <div className="site-header-inner">
@@ -139,13 +141,17 @@ export function EditorialChrome() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={isActive(pathname, item.href) ? "active" : undefined}
+                className={isActive(pathname, item.href) ? 'active' : undefined}
               >
                 {item.label}
               </Link>
             ))}
           </nav>
-          <Link href="/upload" className="editorial-button primary site-header-cta nav-btn btn-primary" ref={ctaRef as never}>
+          <Link
+            href="/upload"
+            className="editorial-button primary site-header-cta nav-btn btn-primary"
+            ref={ctaRef as never}
+          >
             <span>Start Free</span>
           </Link>
         </div>

@@ -1,5 +1,1 @@
-export {
-  isAdvancedTool,
-  shouldApplyWatermark,
-  shouldApplyWatermarkForTool
-} from "./types";
+export { isAdvancedTool, shouldApplyWatermark, shouldApplyWatermarkForTool } from './types';

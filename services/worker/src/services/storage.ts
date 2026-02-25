@@ -1,6 +1,11 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { AppError, NotFoundError } from "@imageops/core";
-import type { WorkerConfig } from "../config";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { AppError, NotFoundError } from '@imageops/core';
+import type { WorkerConfig } from '../config';
 
 /**
  * Convert a readable stream (Web ReadableStream<Uint8Array> or Node.js ReadableStream) into a single Buffer.
@@ -8,8 +13,10 @@ import type { WorkerConfig } from "../config";
  * @param stream - The source stream to read from; may be a web ReadableStream of Uint8Array or a Node.js ReadableStream.
  * @returns A Buffer containing all bytes read from the stream (empty if the stream has no data).
  */
-async function streamToBuffer(stream: ReadableStream<Uint8Array> | NodeJS.ReadableStream): Promise<Buffer> {
-  if ("getReader" in stream) {
+async function streamToBuffer(
+  stream: ReadableStream<Uint8Array> | NodeJS.ReadableStream
+): Promise<Buffer> {
+  if ('getReader' in stream) {
     const reader = stream.getReader();
     const chunks: Uint8Array[] = [];
     for (;;) {
@@ -47,8 +54,8 @@ export class S3WorkerStorageService implements WorkerStorageService {
       forcePathStyle: config.s3ForcePathStyle,
       credentials: {
         accessKeyId: config.s3AccessKey,
-        secretAccessKey: config.s3SecretKey
-      }
+        secretAccessKey: config.s3SecretKey,
+      },
     });
   }
 
@@ -56,28 +63,34 @@ export class S3WorkerStorageService implements WorkerStorageService {
     const response = await this.client.send(
       new GetObjectCommand({
         Bucket: this.bucket,
-        Key: objectKey
+        Key: objectKey,
       })
     );
 
     if (!response.Body) {
-      throw new AppError("STORAGE_ERROR", 500, `Object body missing for key: ${objectKey}`);
+      throw new AppError('STORAGE_ERROR', 500, `Object body missing for key: ${objectKey}`);
     }
 
-    const bytes = await streamToBuffer(response.Body as ReadableStream<Uint8Array> | NodeJS.ReadableStream);
+    const bytes = await streamToBuffer(
+      response.Body as ReadableStream<Uint8Array> | NodeJS.ReadableStream
+    );
     return {
       bytes,
-      contentType: response.ContentType || "application/octet-stream"
+      contentType: response.ContentType || 'application/octet-stream',
     };
   }
 
-  async putObjectBuffer(input: { objectKey: string; bytes: Buffer; contentType: string }): Promise<void> {
+  async putObjectBuffer(input: {
+    objectKey: string;
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<void> {
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.bucket,
         Key: input.objectKey,
         Body: input.bytes,
-        ContentType: input.contentType
+        ContentType: input.contentType,
       })
     );
   }
@@ -86,7 +99,7 @@ export class S3WorkerStorageService implements WorkerStorageService {
     await this.client.send(
       new DeleteObjectCommand({
         Bucket: this.bucket,
-        Key: objectKey
+        Key: objectKey,
       })
     );
   }
@@ -112,7 +125,11 @@ export class InMemoryWorkerStorageService implements WorkerStorageService {
     return object;
   }
 
-  async putObjectBuffer(input: { objectKey: string; bytes: Buffer; contentType: string }): Promise<void> {
+  async putObjectBuffer(input: {
+    objectKey: string;
+    bytes: Buffer;
+    contentType: string;
+  }): Promise<void> {
     this.objects.set(input.objectKey, { bytes: input.bytes, contentType: input.contentType });
   }
 

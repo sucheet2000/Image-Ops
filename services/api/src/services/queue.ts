@@ -1,6 +1,6 @@
-import { JOB_QUEUE_NAMES, queueNameForTool, type ImageJobQueuePayload } from "@imageops/core";
-import { Queue } from "bullmq";
-import IORedis from "ioredis";
+import { JOB_QUEUE_NAMES, queueNameForTool, type ImageJobQueuePayload } from '@imageops/core';
+import { Queue } from 'bullmq';
+import IORedis from 'ioredis';
 
 export type QueueMetrics = {
   waiting: number;
@@ -26,7 +26,7 @@ export class BullMqJobQueueService implements JobQueueService {
     this.queues = new Map(
       Object.values(JOB_QUEUE_NAMES).map((queueName) => [
         queueName,
-        new Queue<ImageJobQueuePayload>(queueName, { connection: this.connection })
+        new Queue<ImageJobQueuePayload>(queueName, { connection: this.connection }),
       ])
     );
   }
@@ -44,15 +44,17 @@ export class BullMqJobQueueService implements JobQueueService {
       removeOnFail: { count: 500 },
       attempts: 3,
       backoff: {
-        type: "exponential",
-        delay: 2000
-      }
+        type: 'exponential',
+        delay: 2000,
+      },
     });
   }
 
   async getMetrics(): Promise<QueueMetrics> {
     const countsByQueue = await Promise.all(
-      [...this.queues.values()].map((queue) => queue.getJobCounts("waiting", "active", "completed", "failed", "delayed"))
+      [...this.queues.values()].map((queue) =>
+        queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed')
+      )
     );
     const counts = countsByQueue.reduce<QueueMetrics>(
       (acc, item) => ({
@@ -60,7 +62,7 @@ export class BullMqJobQueueService implements JobQueueService {
         active: acc.active + (item.active || 0),
         completed: acc.completed + (item.completed || 0),
         failed: acc.failed + (item.failed || 0),
-        delayed: acc.delayed + (item.delayed || 0)
+        delayed: acc.delayed + (item.delayed || 0),
       }),
       { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }
     );
@@ -101,7 +103,7 @@ export class InMemoryJobQueueService implements JobQueueService {
       active: 0,
       completed: 0,
       failed: 0,
-      delayed: 0
+      delayed: 0,
     };
   }
 

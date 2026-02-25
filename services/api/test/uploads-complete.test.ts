@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
-import { bearerAuthHeaders } from "./helpers/auth";
-import { createFakeServices, createTestConfig } from "./helpers/fakes";
-import { startApiTestServer } from "./helpers/server";
-import { fakePngBytes } from "./utils/image-helpers";
+import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { bearerAuthHeaders } from './helpers/auth';
+import { createFakeServices, createTestConfig } from './helpers/fakes';
+import { startApiTestServer } from './helpers/server';
+import { fakePngBytes } from './utils/image-helpers';
 
 const closers: Array<() => Promise<void>> = [];
 
@@ -23,25 +23,25 @@ async function startServerWithCleanup(services = createFakeServices()) {
 }
 
 function sha256Hex(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
-describe("POST /api/uploads/complete", () => {
-  it("completes upload and returns canonical metadata", async () => {
+describe('POST /api/uploads/complete', () => {
+  it('completes upload and returns canonical metadata', async () => {
     const { services, server } = await startServerWithCleanup();
 
-    const objectKey = "tmp/seller_1/input/2026/02/23/resize/source.jpg";
-    const bytes = fakePngBytes("dedup-source");
-    services.storage.setObject(objectKey, "image/png", bytes);
+    const objectKey = 'tmp/seller_1/input/2026/02/23/resize/source.jpg';
+    const bytes = fakePngBytes('dedup-source');
+    services.storage.setObject(objectKey, 'image/png', bytes);
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_1') },
       body: JSON.stringify({
-        subjectId: "seller_1",
+        subjectId: 'seller_1',
         objectKey,
-        sha256: sha256Hex(bytes)
-      })
+        sha256: sha256Hex(bytes),
+      }),
     });
 
     expect(response.status).toBe(200);
@@ -54,53 +54,53 @@ describe("POST /api/uploads/complete", () => {
     expect(completion?.sha256).toBe(payload.sha256);
   });
 
-  it("rejects completion when provided sha256 does not match uploaded bytes", async () => {
+  it('rejects completion when provided sha256 does not match uploaded bytes', async () => {
     const { services, server } = await startServerWithCleanup();
 
-    const objectKey = "tmp/seller_1/input/2026/02/23/resize/source-mismatch.jpg";
-    const bytes = fakePngBytes("actual-bytes");
-    services.storage.setObject(objectKey, "image/png", bytes);
+    const objectKey = 'tmp/seller_1/input/2026/02/23/resize/source-mismatch.jpg';
+    const bytes = fakePngBytes('actual-bytes');
+    services.storage.setObject(objectKey, 'image/png', bytes);
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_1') },
       body: JSON.stringify({
-        subjectId: "seller_1",
+        subjectId: 'seller_1',
         objectKey,
-        sha256: "a".repeat(64)
-      })
+        sha256: 'a'.repeat(64),
+      }),
     });
 
     expect(response.status).toBe(400);
     const payload = await response.json();
-    expect(payload.error).toBe("SHA256_MISMATCH");
+    expect(payload.error).toBe('SHA256_MISMATCH');
 
     const completion = await services.jobRepo.getUploadCompletion(objectKey);
     expect(completion).toBeNull();
   });
 
-  it("deduplicates identical uploads to canonical object key", async () => {
+  it('deduplicates identical uploads to canonical object key', async () => {
     const { services, server } = await startServerWithCleanup();
 
-    const canonicalKey = "tmp/seller_2/input/2026/02/23/compress/original.jpg";
-    const duplicateKey = "tmp/seller_2/input/2026/02/23/compress/duplicate.jpg";
-    const bytes = fakePngBytes("same-content");
+    const canonicalKey = 'tmp/seller_2/input/2026/02/23/compress/original.jpg';
+    const duplicateKey = 'tmp/seller_2/input/2026/02/23/compress/duplicate.jpg';
+    const bytes = fakePngBytes('same-content');
 
-    services.storage.setObject(canonicalKey, "image/png", bytes);
-    services.storage.setObject(duplicateKey, "image/png", bytes);
+    services.storage.setObject(canonicalKey, 'image/png', bytes);
+    services.storage.setObject(duplicateKey, 'image/png', bytes);
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
-      body: JSON.stringify({ subjectId: "seller_2", objectKey: canonicalKey })
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_2') },
+      body: JSON.stringify({ subjectId: 'seller_2', objectKey: canonicalKey }),
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_2') },
       // Intentionally omits sha256 to exercise server-side digest computation.
-      body: JSON.stringify({ subjectId: "seller_2", objectKey: duplicateKey })
+      body: JSON.stringify({ subjectId: 'seller_2', objectKey: duplicateKey }),
     });
     expect(second.status).toBe(200);
 
@@ -112,27 +112,27 @@ describe("POST /api/uploads/complete", () => {
     expect(deletedHead.exists).toBe(false);
   });
 
-  it("does not deduplicate across different subjects even with identical bytes", async () => {
+  it('does not deduplicate across different subjects even with identical bytes', async () => {
     const { services, server } = await startServerWithCleanup();
 
-    const subjectAKey = "tmp/seller_a/input/2026/02/23/resize/source-a.jpg";
-    const subjectBKey = "tmp/seller_b/input/2026/02/23/resize/source-b.jpg";
-    const bytes = fakePngBytes("same-cross-subject-content");
+    const subjectAKey = 'tmp/seller_a/input/2026/02/23/resize/source-a.jpg';
+    const subjectBKey = 'tmp/seller_b/input/2026/02/23/resize/source-b.jpg';
+    const bytes = fakePngBytes('same-cross-subject-content');
 
-    services.storage.setObject(subjectAKey, "image/png", bytes);
-    services.storage.setObject(subjectBKey, "image/png", bytes);
+    services.storage.setObject(subjectAKey, 'image/png', bytes);
+    services.storage.setObject(subjectBKey, 'image/png', bytes);
 
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_a") },
-      body: JSON.stringify({ subjectId: "seller_a", objectKey: subjectAKey })
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_a') },
+      body: JSON.stringify({ subjectId: 'seller_a', objectKey: subjectAKey }),
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_b") },
-      body: JSON.stringify({ subjectId: "seller_b", objectKey: subjectBKey })
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_b') },
+      body: JSON.stringify({ subjectId: 'seller_b', objectKey: subjectBKey }),
     });
     expect(second.status).toBe(200);
 
@@ -144,42 +144,42 @@ describe("POST /api/uploads/complete", () => {
     expect(secondHead.exists).toBe(true);
   });
 
-  it("falls back to byte-compare when hash index candidate differs", async () => {
+  it('falls back to byte-compare when hash index candidate differs', async () => {
     const { services, server } = await startServerWithCleanup();
 
-    const sourceKey = "tmp/seller_3/input/2026/02/23/resize/source.jpg";
-    const fakeCandidateKey = "tmp/seller_3/input/2026/02/23/resize/fake-candidate.jpg";
-    const sourceBytes = fakePngBytes("source-bytes");
-    const fakeBytes = fakePngBytes("different-bytes");
+    const sourceKey = 'tmp/seller_3/input/2026/02/23/resize/source.jpg';
+    const fakeCandidateKey = 'tmp/seller_3/input/2026/02/23/resize/fake-candidate.jpg';
+    const sourceBytes = fakePngBytes('source-bytes');
+    const fakeBytes = fakePngBytes('different-bytes');
     const sourceHash = sha256Hex(sourceBytes);
 
-    services.storage.setObject(sourceKey, "image/png", sourceBytes);
-    services.storage.setObject(fakeCandidateKey, "image/png", fakeBytes);
+    services.storage.setObject(sourceKey, 'image/png', sourceBytes);
+    services.storage.setObject(fakeCandidateKey, 'image/png', fakeBytes);
 
     await services.jobRepo.finalizeUploadCompletion({
       completion: {
         objectKey: fakeCandidateKey,
         canonicalObjectKey: fakeCandidateKey,
-        subjectId: "seller_3",
+        subjectId: 'seller_3',
         sha256: sourceHash,
         sizeBytes: sourceBytes.length,
-        contentType: "image/png",
+        contentType: 'image/png',
         deduplicated: false,
-        createdAt: "2026-02-23T00:00:00.000Z"
+        createdAt: '2026-02-23T00:00:00.000Z',
       },
       dedupRecord: {
         sha256: sourceHash,
         objectKey: fakeCandidateKey,
         sizeBytes: sourceBytes.length,
-        contentType: "image/png",
-        createdAt: "2026-02-23T00:00:00.000Z"
-      }
+        contentType: 'image/png',
+        createdAt: '2026-02-23T00:00:00.000Z',
+      },
     });
 
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_3") },
-      body: JSON.stringify({ subjectId: "seller_3", objectKey: sourceKey })
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_3') },
+      body: JSON.stringify({ subjectId: 'seller_3', objectKey: sourceKey }),
     });
 
     expect(response.status).toBe(200);

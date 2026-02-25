@@ -47,7 +47,7 @@ Current coverage:
 scrape_configs:
   - job_name: image-ops-api
     static_configs:
-      - targets: ["api-hostname:4000"]
+      - targets: ['api-hostname:4000']
     metrics_path: /metrics
 ```
 

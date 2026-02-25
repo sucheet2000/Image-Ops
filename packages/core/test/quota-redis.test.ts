@@ -1,11 +1,11 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import IORedis from "ioredis";
-import { checkAndIncrementQuota, loadQuotaScript } from "../src";
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import IORedis from 'ioredis';
+import { checkAndIncrementQuota, loadQuotaScript } from '../src';
 
-const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1" || process.env.CORE_REDIS_TESTS === "1";
-const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+const shouldRun = process.env.RUN_INTEGRATION_TESTS === '1' || process.env.CORE_REDIS_TESTS === '1';
+const redisUrl = process.env.REDIS_URL || 'redis://127.0.0.1:6379';
 
-describe.skipIf(!shouldRun)("redis quota script", () => {
+describe.skipIf(!shouldRun)('redis quota script', () => {
   let redis: IORedis;
 
   beforeAll(async () => {
@@ -20,7 +20,7 @@ describe.skipIf(!shouldRun)("redis quota script", () => {
     }
   });
 
-  it("allows exactly 6 of 8 concurrent quota increments", async () => {
+  it('allows exactly 6 of 8 concurrent quota increments', async () => {
     const userId = `core_quota_concurrency_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     const nowMs = Date.now();
 

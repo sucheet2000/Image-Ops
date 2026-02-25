@@ -16,29 +16,30 @@ import {
   QuotaWindow,
   SubjectProfile,
   type UploadCompletionRecord,
-  type QuotaResult
-} from "@imageops/core";
-import type { ApiConfig } from "../config";
-import IORedis from "ioredis";
-import { Pool } from "pg";
-import { logError } from "../lib/log";
+  type QuotaResult,
+} from '@imageops/core';
+import type { ApiConfig } from '../config';
+import IORedis from 'ioredis';
+import { Pool } from 'pg';
+import { logError } from '../lib/log';
 
-const JOB_KEY_PREFIX = "imageops:job:";
-const QUOTA_KEY_PREFIX = "imageops:quota:";
-const SUBJECT_PROFILE_KEY_PREFIX = "imageops:subject-profile:";
-const BILLING_CHECKOUT_KEY_PREFIX = "imageops:billing-checkout:";
-const BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX = "imageops:billing-checkout-subject:";
-const BILLING_EVENT_KEY_PREFIX = "imageops:billing-event:";
-const CLEANUP_IDEMPOTENCY_PREFIX = "imageops:cleanup-idempotency:";
-const UPLOAD_COMPLETION_PREFIX = "imageops:upload-completion:";
-const DEDUP_HASH_PREFIX = "imageops:dedup-hash:";
-const AUTH_REFRESH_SESSION_PREFIX = "imageops:auth-refresh:";
-const DELETION_AUDIT_LIST_KEY = "imageops:deletion-audit";
-const BILLING_EVENT_LIST_KEY = "imageops:billing-events";
+const JOB_KEY_PREFIX = 'imageops:job:';
+const QUOTA_KEY_PREFIX = 'imageops:quota:';
+const SUBJECT_PROFILE_KEY_PREFIX = 'imageops:subject-profile:';
+const BILLING_CHECKOUT_KEY_PREFIX = 'imageops:billing-checkout:';
+const BILLING_CHECKOUT_SUBJECT_INDEX_PREFIX = 'imageops:billing-checkout-subject:';
+const BILLING_EVENT_KEY_PREFIX = 'imageops:billing-event:';
+const CLEANUP_IDEMPOTENCY_PREFIX = 'imageops:cleanup-idempotency:';
+const BILLING_RECONCILE_IDEMPOTENCY_PREFIX = 'imageops:billing-reconcile-idempotency:';
+const UPLOAD_COMPLETION_PREFIX = 'imageops:upload-completion:';
+const DEDUP_HASH_PREFIX = 'imageops:dedup-hash:';
+const AUTH_REFRESH_SESSION_PREFIX = 'imageops:auth-refresh:';
+const DELETION_AUDIT_LIST_KEY = 'imageops:deletion-audit';
+const BILLING_EVENT_LIST_KEY = 'imageops:billing-events';
 
-const POSTGRES_KV_TABLE = "imageops_metadata_kv";
-const POSTGRES_AUDIT_TABLE = "imageops_deletion_audit";
-const POSTGRES_BILLING_EVENT_TABLE = "imageops_billing_events";
+const POSTGRES_KV_TABLE = 'imageops_metadata_kv';
+const POSTGRES_AUDIT_TABLE = 'imageops_deletion_audit';
+const POSTGRES_BILLING_EVENT_TABLE = 'imageops_billing_events';
 
 export interface JobRepository {
   getQuotaWindow(subjectId: string): Promise<QuotaWindow | null>;
@@ -81,15 +82,34 @@ export interface JobRepository {
   createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void>;
   getBillingCheckoutSession(id: string): Promise<BillingCheckoutSession | null>;
   listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]>;
-  listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]>;
-  updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void>;
+  listBillingCheckoutSessionsForSubject(
+    subjectId: string,
+    limit: number
+  ): Promise<BillingCheckoutSession[]>;
+  updateBillingCheckoutStatus(
+    id: string,
+    status: BillingCheckoutStatus,
+    updatedAt: string
+  ): Promise<void>;
 
   getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null>;
   appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void>;
   listBillingWebhookEvents(limit: number): Promise<BillingWebhookEvent[]>;
 
   getCleanupIdempotency(key: string): Promise<CleanupIdempotencyRecord | null>;
-  setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void>;
+  setCleanupIdempotency(
+    key: string,
+    record: CleanupIdempotencyRecord,
+    ttlSeconds: number
+  ): Promise<void>;
+  getBillingReconcileIdempotency(
+    key: string
+  ): Promise<{ scanned: number; paidSessions: number; corrected: number } | null>;
+  setBillingReconcileIdempotency(
+    key: string,
+    record: { scanned: number; paidSessions: number; corrected: number },
+    ttlSeconds: number
+  ): Promise<void>;
 
   appendDeletionAudit(record: DeletionAuditRecord): Promise<void>;
   listDeletionAudit(limit: number): Promise<DeletionAuditRecord[]>;
@@ -123,6 +143,10 @@ function billingEventKey(providerEventId: string): string {
 
 function idempotencyKey(key: string): string {
   return `${CLEANUP_IDEMPOTENCY_PREFIX}${key}`;
+}
+
+function billingReconcileIdempotencyKey(key: string): string {
+  return `${BILLING_RECONCILE_IDEMPOTENCY_PREFIX}${key}`;
 }
 
 function uploadCompletionKey(objectKey: string): string {
@@ -229,7 +253,7 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
 
   constructor(input: { redisUrl?: string; clock?: () => Date; redisClient?: IORedis }) {
     if (!input.redisClient && !input.redisUrl) {
-      throw new ValidationError("redisUrl is required when redisClient is not provided");
+      throw new ValidationError('redisUrl is required when redisClient is not provided');
     }
 
     this.redis = input.redisClient || new IORedis(input.redisUrl!, { maxRetriesPerRequest: null });
@@ -262,7 +286,7 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
     try {
       const quotaLimit = input.quotaLimit ?? FREE_PLAN_LIMIT;
       const quotaWindowHours = input.quotaWindowHours ?? FREE_PLAN_WINDOW_HOURS;
-      const evalResult = await this.redis.eval(
+      const evalResult = (await this.redis.eval(
         RedisJobRepository.RESERVE_QUOTA_AND_CREATE_JOB_LUA,
         2,
         subjectQuotaKey,
@@ -273,13 +297,13 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
         String(quotaLimit),
         String(quotaWindowHours),
         JSON.stringify(input.job)
-      ) as [number | string, string, string, string] | null;
+      )) as [number | string, string, string, string] | null;
 
       if (Array.isArray(evalResult)) {
         const allowedFlag = Number(evalResult[0]);
         const windowStartAt = String(evalResult[1] || input.now.toISOString());
-        const usedCount = Number.parseInt(String(evalResult[2] || "0"), 10);
-        const nextWindowStartMs = Number.parseInt(String(evalResult[3] || "0"), 10);
+        const usedCount = Number.parseInt(String(evalResult[2] || '0'), 10);
+        const nextWindowStartMs = Number.parseInt(String(evalResult[3] || '0'), 10);
         const normalizedUsedCount = Number.isFinite(usedCount) ? usedCount : 0;
 
         if (allowedFlag === 1) {
@@ -287,8 +311,8 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
             allowed: true,
             window: {
               windowStartAt,
-              usedCount: normalizedUsedCount
-            }
+              usedCount: normalizedUsedCount,
+            },
           };
         }
 
@@ -296,11 +320,12 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
           allowed: false,
           window: {
             windowStartAt,
-            usedCount: normalizedUsedCount
+            usedCount: normalizedUsedCount,
           },
-          nextWindowStartAt: Number.isFinite(nextWindowStartMs) && nextWindowStartMs > 0
-            ? new Date(nextWindowStartMs).toISOString()
-            : undefined
+          nextWindowStartAt:
+            Number.isFinite(nextWindowStartMs) && nextWindowStartMs > 0
+              ? new Date(nextWindowStartMs).toISOString()
+              : undefined,
         };
       }
 
@@ -317,25 +342,25 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
         );
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes("REQUESTED_IMAGES_NEGATIVE")) {
-        throw new ValidationError("requestedImages must be non-negative");
+      if (error instanceof Error && error.message.includes('REQUESTED_IMAGES_NEGATIVE')) {
+        throw new ValidationError('requestedImages must be non-negative');
       }
 
       if (isLuaUnavailableError(error)) {
-        logError("job_repo.reserve_quota.lua_unavailable", {
+        logError('job_repo.reserve_quota.lua_unavailable', {
           subjectId: input.subjectId,
           jobId: input.job.id,
           quotaKey: subjectQuotaKey,
-          error: formatRepoErrorMessage(error)
+          error: formatRepoErrorMessage(error),
         });
         return this.reserveQuotaAndCreateJobOptimistic(input);
       }
 
-      logError("job_repo.reserve_quota.lua_failed", {
+      logError('job_repo.reserve_quota.lua_failed', {
         subjectId: input.subjectId,
         jobId: input.job.id,
         quotaKey: subjectQuotaKey,
-        error: formatRepoErrorMessage(error)
+        error: formatRepoErrorMessage(error),
       });
       throw error;
     }
@@ -362,7 +387,7 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
           ? (JSON.parse(existingRaw) as QuotaWindow)
           : {
               windowStartAt: input.now.toISOString(),
-              usedCount: 0
+              usedCount: 0,
             };
         const quotaResult = applyQuota(
           existing,
@@ -376,7 +401,8 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
           return quotaResult;
         }
 
-        const committed = await this.redis.multi()
+        const committed = await this.redis
+          .multi()
           .set(subjectQuotaKey, JSON.stringify(quotaResult.window))
           .set(jobKey(input.job.id), JSON.stringify(input.job))
           .exec();
@@ -389,7 +415,7 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
       }
     }
 
-    throw new ConflictError("Failed to reserve quota and create job due to concurrent updates.");
+    throw new ConflictError('Failed to reserve quota and create job due to concurrent updates.');
   }
 
   async getUploadCompletion(objectKey: string): Promise<UploadCompletionRecord | null> {
@@ -418,7 +444,8 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
           existing.push(input.dedupRecord);
         }
 
-        const committed = await this.redis.multi()
+        const committed = await this.redis
+          .multi()
           .set(completionKey, JSON.stringify(input.completion))
           .set(dedupKey, JSON.stringify(existing))
           .exec();
@@ -430,7 +457,7 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
       }
     }
 
-    throw new ConflictError("Failed to finalize upload completion due to concurrent updates.");
+    throw new ConflictError('Failed to finalize upload completion due to concurrent updates.');
   }
 
   async listDedupByHash(sha256: string): Promise<DedupObjectRecord[]> {
@@ -454,12 +481,17 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
   }
 
   async putAuthRefreshSession(session: AuthRefreshSession, ttlSeconds: number): Promise<void> {
-    await this.redis.set(authRefreshSessionKey(session.id), JSON.stringify(session), "EX", ttlSeconds);
+    await this.redis.set(
+      authRefreshSessionKey(session.id),
+      JSON.stringify(session),
+      'EX',
+      ttlSeconds
+    );
   }
 
   async getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null> {
     const key = authRefreshSessionKey(id);
-    const raw = await this.redis.eval(
+    const raw = (await this.redis.eval(
       `
 local key = KEYS[1]
 local ttl = redis.call("TTL", key)
@@ -475,7 +507,7 @@ return redis.call("GET", key)
 `,
       1,
       key
-    ) as string | null;
+    )) as string | null;
     if (!raw) {
       return null;
     }
@@ -488,7 +520,9 @@ return redis.call("GET", key)
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
+    const ttlSeconds = Math.floor(
+      (new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000
+    );
     if (ttlSeconds <= 0) {
       await this.redis.del(authRefreshSessionKey(id));
       return;
@@ -499,9 +533,9 @@ return redis.call("GET", key)
       JSON.stringify({
         ...existing,
         revokedAt,
-        updatedAt: revokedAt
+        updatedAt: revokedAt,
       }),
-      "EX",
+      'EX',
       ttlSeconds
     );
   }
@@ -535,7 +569,7 @@ return redis.call("GET", key)
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {
@@ -554,10 +588,18 @@ return redis.call("GET", key)
     await this.redis.set(jobKey(input.id), JSON.stringify(updated));
   }
 
-  async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
-    await this.redis.multi()
-      .set(billingCheckoutKey(session.id), JSON.stringify(session), "EX", ttlSeconds)
-      .zadd(billingCheckoutSubjectIndexKey(session.subjectId), timestampMsOrNow(session.updatedAt), session.id)
+  async createBillingCheckoutSession(
+    session: BillingCheckoutSession,
+    ttlSeconds: number
+  ): Promise<void> {
+    await this.redis
+      .multi()
+      .set(billingCheckoutKey(session.id), JSON.stringify(session), 'EX', ttlSeconds)
+      .zadd(
+        billingCheckoutSubjectIndexKey(session.subjectId),
+        timestampMsOrNow(session.updatedAt),
+        session.id
+      )
       .exec();
   }
 
@@ -584,12 +626,19 @@ return redis.call("GET", key)
     return sessions.slice(-limit);
   }
 
-  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+  async listBillingCheckoutSessionsForSubject(
+    subjectId: string,
+    limit: number
+  ): Promise<BillingCheckoutSession[]> {
     if (limit <= 0) {
       return [];
     }
 
-    const ids = await this.redis.zrevrange(billingCheckoutSubjectIndexKey(subjectId), 0, Math.max(limit - 1, 0));
+    const ids = await this.redis.zrevrange(
+      billingCheckoutSubjectIndexKey(subjectId),
+      0,
+      Math.max(limit - 1, 0)
+    );
     if (ids.length === 0) {
       return [];
     }
@@ -602,24 +651,35 @@ return redis.call("GET", key)
       .slice(0, limit);
   }
 
-  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+  async updateBillingCheckoutStatus(
+    id: string,
+    status: BillingCheckoutStatus,
+    updatedAt: string
+  ): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
+    const ttlSeconds = Math.max(
+      1,
+      Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000)
+    );
     await this.redis.set(
       billingCheckoutKey(id),
       JSON.stringify({
         ...existing,
         status,
-        updatedAt
+        updatedAt,
       }),
-      "EX",
+      'EX',
       ttlSeconds
     );
-    await this.redis.zadd(billingCheckoutSubjectIndexKey(existing.subjectId), timestampMsOrNow(updatedAt), id);
+    await this.redis.zadd(
+      billingCheckoutSubjectIndexKey(existing.subjectId),
+      timestampMsOrNow(updatedAt),
+      id
+    );
   }
 
   async getBillingWebhookEvent(providerEventId: string): Promise<BillingWebhookEvent | null> {
@@ -631,7 +691,11 @@ return redis.call("GET", key)
   }
 
   async appendBillingWebhookEvent(event: BillingWebhookEvent): Promise<void> {
-    const inserted = await this.redis.set(billingEventKey(event.providerEventId), JSON.stringify(event), "NX");
+    const inserted = await this.redis.set(
+      billingEventKey(event.providerEventId),
+      JSON.stringify(event),
+      'NX'
+    );
     if (inserted === null) {
       return;
     }
@@ -652,8 +716,35 @@ return redis.call("GET", key)
     return JSON.parse(raw) as CleanupIdempotencyRecord;
   }
 
-  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void> {
-    await this.redis.set(idempotencyKey(key), JSON.stringify(record), "EX", ttlSeconds);
+  async setCleanupIdempotency(
+    key: string,
+    record: CleanupIdempotencyRecord,
+    ttlSeconds: number
+  ): Promise<void> {
+    await this.redis.set(idempotencyKey(key), JSON.stringify(record), 'EX', ttlSeconds);
+  }
+
+  async getBillingReconcileIdempotency(
+    key: string
+  ): Promise<{ scanned: number; paidSessions: number; corrected: number } | null> {
+    const raw = await this.redis.get(billingReconcileIdempotencyKey(key));
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as { scanned: number; paidSessions: number; corrected: number };
+  }
+
+  async setBillingReconcileIdempotency(
+    key: string,
+    record: { scanned: number; paidSessions: number; corrected: number },
+    ttlSeconds: number
+  ): Promise<void> {
+    await this.redis.set(
+      billingReconcileIdempotencyKey(key),
+      JSON.stringify(record),
+      'EX',
+      ttlSeconds
+    );
   }
 
   async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
@@ -761,7 +852,9 @@ export class PostgresJobRepository implements JobRepository {
 
   private async setStoredValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     await this.initialize();
-    const expiresAt = ttlSeconds ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString() : null;
+    const expiresAt = ttlSeconds
+      ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString()
+      : null;
     await this.pool.query(
       `
         INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
@@ -792,16 +885,17 @@ export class PostgresJobRepository implements JobRepository {
     await this.initialize();
     const client = await this.pool.connect();
     try {
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
       const quotaResultRow = await client.query<{ value: QuotaWindow; expires_at: Date | null }>(
         `SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1 FOR UPDATE`,
         [quotaKey(input.subjectId)]
       );
 
-      const existing = (quotaResultRow.rowCount ?? 0) > 0
-        ? (quotaResultRow.rows[0].value as QuotaWindow)
-        : { windowStartAt: input.now.toISOString(), usedCount: 0 };
+      const existing =
+        (quotaResultRow.rowCount ?? 0) > 0
+          ? (quotaResultRow.rows[0].value as QuotaWindow)
+          : { windowStartAt: input.now.toISOString(), usedCount: 0 };
 
       const quotaResult = applyQuota(
         existing,
@@ -811,7 +905,7 @@ export class PostgresJobRepository implements JobRepository {
         input.quotaWindowHours
       );
       if (!quotaResult.allowed) {
-        await client.query("ROLLBACK");
+        await client.query('ROLLBACK');
         return quotaResult;
       }
 
@@ -834,10 +928,10 @@ export class PostgresJobRepository implements JobRepository {
         [jobKey(input.job.id), JSON.stringify(input.job)]
       );
 
-      await client.query("COMMIT");
+      await client.query('COMMIT');
       return quotaResult;
     } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
@@ -855,15 +949,16 @@ export class PostgresJobRepository implements JobRepository {
     await this.initialize();
     const client = await this.pool.connect();
     try {
-      await client.query("BEGIN");
+      await client.query('BEGIN');
 
-      const dedupResult = await client.query<{ value: DedupObjectRecord[]; expires_at: Date | null }>(
-        `SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1 FOR UPDATE`,
-        [dedupHashKey(input.dedupRecord.sha256)]
-      );
-      const existing = (dedupResult.rowCount ?? 0) > 0
-        ? (dedupResult.rows[0].value as DedupObjectRecord[])
-        : [];
+      const dedupResult = await client.query<{
+        value: DedupObjectRecord[];
+        expires_at: Date | null;
+      }>(`SELECT value, expires_at FROM ${POSTGRES_KV_TABLE} WHERE key = $1 FOR UPDATE`, [
+        dedupHashKey(input.dedupRecord.sha256),
+      ]);
+      const existing =
+        (dedupResult.rowCount ?? 0) > 0 ? (dedupResult.rows[0].value as DedupObjectRecord[]) : [];
       if (!existing.some((record) => record.objectKey === input.dedupRecord.objectKey)) {
         existing.push(input.dedupRecord);
       }
@@ -887,9 +982,9 @@ export class PostgresJobRepository implements JobRepository {
         [dedupHashKey(input.dedupRecord.sha256), JSON.stringify(existing)]
       );
 
-      await client.query("COMMIT");
+      await client.query('COMMIT');
     } catch (error) {
-      await client.query("ROLLBACK");
+      await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
@@ -922,9 +1017,13 @@ export class PostgresJobRepository implements JobRepository {
       return;
     }
 
-    const ttlSeconds = Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000);
+    const ttlSeconds = Math.floor(
+      (new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000
+    );
     if (ttlSeconds <= 0) {
-      await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [authRefreshSessionKey(id)]);
+      await this.pool.query(`DELETE FROM ${POSTGRES_KV_TABLE} WHERE key = $1`, [
+        authRefreshSessionKey(id),
+      ]);
       return;
     }
 
@@ -933,7 +1032,7 @@ export class PostgresJobRepository implements JobRepository {
       {
         ...existing,
         revokedAt,
-        updatedAt: revokedAt
+        updatedAt: revokedAt,
       },
       ttlSeconds
     );
@@ -964,7 +1063,7 @@ export class PostgresJobRepository implements JobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {
@@ -983,7 +1082,10 @@ export class PostgresJobRepository implements JobRepository {
     await this.setStoredValue(jobKey(input.id), updated);
   }
 
-  async createBillingCheckoutSession(session: BillingCheckoutSession, ttlSeconds: number): Promise<void> {
+  async createBillingCheckoutSession(
+    session: BillingCheckoutSession,
+    ttlSeconds: number
+  ): Promise<void> {
     await this.setStoredValue(billingCheckoutKey(session.id), session, ttlSeconds);
   }
 
@@ -993,7 +1095,10 @@ export class PostgresJobRepository implements JobRepository {
 
   async listBillingCheckoutSessions(limit: number): Promise<BillingCheckoutSession[]> {
     await this.initialize();
-    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+    const result = await this.pool.query<{
+      value: BillingCheckoutSession;
+      expires_at: Date | null;
+    }>(
       `
         SELECT value, expires_at
         FROM ${POSTGRES_KV_TABLE}
@@ -1016,13 +1121,19 @@ export class PostgresJobRepository implements JobRepository {
     return sessions.slice(-limit);
   }
 
-  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+  async listBillingCheckoutSessionsForSubject(
+    subjectId: string,
+    limit: number
+  ): Promise<BillingCheckoutSession[]> {
     await this.initialize();
     if (limit <= 0) {
       return [];
     }
 
-    const result = await this.pool.query<{ value: BillingCheckoutSession; expires_at: Date | null }>(
+    const result = await this.pool.query<{
+      value: BillingCheckoutSession;
+      expires_at: Date | null;
+    }>(
       `
         SELECT value, expires_at
         FROM ${POSTGRES_KV_TABLE}
@@ -1040,19 +1151,26 @@ export class PostgresJobRepository implements JobRepository {
       .map((row) => row.value);
   }
 
-  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+  async updateBillingCheckoutStatus(
+    id: string,
+    status: BillingCheckoutStatus,
+    updatedAt: string
+  ): Promise<void> {
     const existing = await this.getBillingCheckoutSession(id);
     if (!existing) {
       return;
     }
 
-    const ttlSeconds = Math.max(1, Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000));
+    const ttlSeconds = Math.max(
+      1,
+      Math.floor((new Date(existing.expiresAt).getTime() - this.now().getTime()) / 1000)
+    );
     await this.setStoredValue(
       billingCheckoutKey(id),
       {
         ...existing,
         status,
-        updatedAt
+        updatedAt,
       },
       ttlSeconds
     );
@@ -1100,8 +1218,28 @@ export class PostgresJobRepository implements JobRepository {
     return this.getStoredValue<CleanupIdempotencyRecord>(idempotencyKey(key));
   }
 
-  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void> {
+  async setCleanupIdempotency(
+    key: string,
+    record: CleanupIdempotencyRecord,
+    ttlSeconds: number
+  ): Promise<void> {
     await this.setStoredValue(idempotencyKey(key), record, ttlSeconds);
+  }
+
+  async getBillingReconcileIdempotency(
+    key: string
+  ): Promise<{ scanned: number; paidSessions: number; corrected: number } | null> {
+    return this.getStoredValue<{ scanned: number; paidSessions: number; corrected: number }>(
+      billingReconcileIdempotencyKey(key)
+    );
+  }
+
+  async setBillingReconcileIdempotency(
+    key: string,
+    record: { scanned: number; paidSessions: number; corrected: number },
+    ttlSeconds: number
+  ): Promise<void> {
+    await this.setStoredValue(billingReconcileIdempotencyKey(key), record, ttlSeconds);
   }
 
   async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
@@ -1144,7 +1282,14 @@ export class InMemoryJobRepository implements JobRepository {
   private readonly jobs = new Map<string, ImageJobRecord>();
   private readonly checkouts = new Map<string, BillingCheckoutSession>();
   private readonly billingEvents = new Map<string, BillingWebhookEvent>();
-  private readonly idempotency = new Map<string, { record: CleanupIdempotencyRecord; expiresAtMs: number }>();
+  private readonly idempotency = new Map<
+    string,
+    { record: CleanupIdempotencyRecord; expiresAtMs: number }
+  >();
+  private readonly billingReconcileIdempotency = new Map<
+    string,
+    { record: { scanned: number; paidSessions: number; corrected: number }; expiresAtMs: number }
+  >();
   private readonly deletionAudit: DeletionAuditRecord[] = [];
 
   async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
@@ -1165,7 +1310,7 @@ export class InMemoryJobRepository implements JobRepository {
   }): Promise<QuotaResult> {
     const existing = this.quotas.get(input.subjectId) || {
       windowStartAt: input.now.toISOString(),
-      usedCount: 0
+      usedCount: 0,
     };
     const quotaResult = applyQuota(
       existing,
@@ -1227,7 +1372,7 @@ export class InMemoryJobRepository implements JobRepository {
     this.authRefreshSessions.set(id, {
       ...existing,
       revokedAt,
-      updatedAt: revokedAt
+      updatedAt: revokedAt,
     });
   }
 
@@ -1256,7 +1401,7 @@ export class InMemoryJobRepository implements JobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      updatedAt: input.updatedAt
+      updatedAt: input.updatedAt,
     };
 
     if (input.outputObjectKey !== undefined) {
@@ -1275,7 +1420,10 @@ export class InMemoryJobRepository implements JobRepository {
     this.jobs.set(input.id, updated);
   }
 
-  async createBillingCheckoutSession(session: BillingCheckoutSession, _ttlSeconds: number): Promise<void> {
+  async createBillingCheckoutSession(
+    session: BillingCheckoutSession,
+    _ttlSeconds: number
+  ): Promise<void> {
     this.checkouts.set(session.id, session);
   }
 
@@ -1287,11 +1435,16 @@ export class InMemoryJobRepository implements JobRepository {
     if (limit <= 0) {
       return [];
     }
-    const rows = Array.from(this.checkouts.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    const rows = Array.from(this.checkouts.values()).sort((left, right) =>
+      left.createdAt.localeCompare(right.createdAt)
+    );
     return rows.slice(-limit);
   }
 
-  async listBillingCheckoutSessionsForSubject(subjectId: string, limit: number): Promise<BillingCheckoutSession[]> {
+  async listBillingCheckoutSessionsForSubject(
+    subjectId: string,
+    limit: number
+  ): Promise<BillingCheckoutSession[]> {
     if (limit <= 0) {
       return [];
     }
@@ -1302,7 +1455,11 @@ export class InMemoryJobRepository implements JobRepository {
       .slice(0, limit);
   }
 
-  async updateBillingCheckoutStatus(id: string, status: BillingCheckoutStatus, updatedAt: string): Promise<void> {
+  async updateBillingCheckoutStatus(
+    id: string,
+    status: BillingCheckoutStatus,
+    updatedAt: string
+  ): Promise<void> {
     const existing = this.checkouts.get(id);
     if (!existing) {
       return;
@@ -1311,7 +1468,7 @@ export class InMemoryJobRepository implements JobRepository {
     this.checkouts.set(id, {
       ...existing,
       status,
-      updatedAt
+      updatedAt,
     });
   }
 
@@ -1345,10 +1502,39 @@ export class InMemoryJobRepository implements JobRepository {
     return entry.record;
   }
 
-  async setCleanupIdempotency(key: string, record: CleanupIdempotencyRecord, ttlSeconds: number): Promise<void> {
+  async setCleanupIdempotency(
+    key: string,
+    record: CleanupIdempotencyRecord,
+    ttlSeconds: number
+  ): Promise<void> {
     this.idempotency.set(key, {
       record,
-      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000
+      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000,
+    });
+  }
+
+  async getBillingReconcileIdempotency(
+    key: string
+  ): Promise<{ scanned: number; paidSessions: number; corrected: number } | null> {
+    const entry = this.billingReconcileIdempotency.get(key);
+    if (!entry) {
+      return null;
+    }
+    if (entry.expiresAtMs <= Date.now()) {
+      this.billingReconcileIdempotency.delete(key);
+      return null;
+    }
+    return entry.record;
+  }
+
+  async setBillingReconcileIdempotency(
+    key: string,
+    record: { scanned: number; paidSessions: number; corrected: number },
+    ttlSeconds: number
+  ): Promise<void> {
+    this.billingReconcileIdempotency.set(key, {
+      record,
+      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000,
     });
   }
 
@@ -1368,9 +1554,9 @@ export class InMemoryJobRepository implements JobRepository {
 }
 
 export function createJobRepository(config: ApiConfig): JobRepository {
-  if (config.jobRepoDriver === "postgres") {
+  if (config.jobRepoDriver === 'postgres') {
     if (!config.postgresUrl) {
-      throw new ValidationError("POSTGRES_URL is required when JOB_REPO_DRIVER=postgres");
+      throw new ValidationError('POSTGRES_URL is required when JOB_REPO_DRIVER=postgres');
     }
     return new PostgresJobRepository({ connectionString: config.postgresUrl });
   }
