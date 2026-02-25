@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
+import { randomUUID } from "node:crypto";
 import { AppError, ValidationError } from "@imageops/core";
 import IORedis from "ioredis";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
@@ -291,6 +292,13 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     return `${lines.join("\n")}\n`;
   };
 
+  app.use((req, res, next) => {
+    const incomingRequestId = String(req.header("x-request-id") || "").trim();
+    const requestId = incomingRequestId.length > 0 ? incomingRequestId : randomUUID();
+    res.setHeader("X-Request-ID", requestId);
+    next();
+  });
+
   app.use(cors({ origin: deps.config.webOrigin, credentials: true }));
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
@@ -407,7 +415,22 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     });
   });
 
-  app.get("/metrics", async (_req, res) => {
+  app.get("/metrics", async (req, res) => {
+    const metricsToken = process.env.METRICS_TOKEN;
+    const authorization = req.header("authorization");
+    const providedToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : undefined;
+    if (!metricsToken || !providedToken || providedToken !== metricsToken) {
+      res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Invalid metrics token"
+        }
+      });
+      return;
+    }
+
     let queueMetrics = {
       waiting: 0,
       active: 0,
