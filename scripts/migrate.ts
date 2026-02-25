@@ -26,7 +26,18 @@ async function listUpMigrations(): Promise<string[]> {
   const entries = await fs.readdir(MIGRATIONS_DIR);
   return entries
     .filter((entry) => /^\d+_.+\.up\.sql$/.test(entry))
-    .sort((left, right) => left.localeCompare(right));
+    .sort((left, right) => {
+      const leftMatch = left.match(/^(\d+)_(.+)\.up\.sql$/);
+      const rightMatch = right.match(/^(\d+)_(.+)\.up\.sql$/);
+      const leftOrder = leftMatch ? Number.parseInt(leftMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+      const rightOrder = rightMatch ? Number.parseInt(rightMatch[1], 10) : Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      const leftRemainder = leftMatch?.[2] || left;
+      const rightRemainder = rightMatch?.[2] || right;
+      return leftRemainder.localeCompare(rightRemainder);
+    });
 }
 
 async function readMigrationSql(fileName: string): Promise<string> {
@@ -78,7 +89,7 @@ async function migrateUp(client: Client): Promise<void> {
 
 async function migrateDown(client: Client): Promise<void> {
   const result = await client.query<{ name: string }>(
-    `SELECT name FROM ${MIGRATION_TABLE} ORDER BY name DESC LIMIT 1`
+    `SELECT name FROM ${MIGRATION_TABLE} ORDER BY applied_at DESC LIMIT 1`
   );
   const latest = result.rows[0]?.name;
   if (!latest) {
