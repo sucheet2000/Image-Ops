@@ -385,6 +385,27 @@ describe('billing routes', () => {
     expect(payload.error).toBe('INVALID_IDEMPOTENCY_KEY');
   });
 
+  it('accepts reconcile idempotency key at exact max length', async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/billing/reconcile`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'k'.repeat(128),
+        ...bearerAuthHeaders('seller_5'),
+      },
+      body: JSON.stringify({ limit: 100 }),
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.error).toBeUndefined();
+  });
+
   it('returns billing summary and applies cancel/reactivate lifecycle actions', async () => {
     const services = createFakeServices();
     const config = createTestConfig();
