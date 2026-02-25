@@ -43,6 +43,28 @@ describe('billing routes', () => {
     expect(stored?.plan).toBe('pro');
   });
 
+  it('rejects checkout when authenticated subject does not match body subjectId', async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/billing/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_auth') },
+      body: JSON.stringify({
+        subjectId: 'seller_other',
+        plan: 'pro',
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel',
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.error).toBe('BILLING_SUBJECT_FORBIDDEN');
+  });
+
   it('accepts paid webhook and upgrades plan', async () => {
     const services = createFakeServices();
     const config = createTestConfig();
@@ -342,6 +364,27 @@ describe('billing routes', () => {
     expect(afterSecond?.plan).toBe('free');
   });
 
+  it('rejects reconcile idempotency key that exceeds max length', async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/billing/reconcile`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'k'.repeat(129),
+        ...bearerAuthHeaders('seller_5'),
+      },
+      body: JSON.stringify({ limit: 100 }),
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe('INVALID_IDEMPOTENCY_KEY');
+  });
+
   it('returns billing summary and applies cancel/reactivate lifecycle actions', async () => {
     const services = createFakeServices();
     const config = createTestConfig();
@@ -419,6 +462,29 @@ describe('billing routes', () => {
     const reactivated = await reactivateResponse.json();
     expect(reactivated.plan).toBe('team');
     expect(reactivated.changed).toBe(true);
+  });
+
+  it('rejects subscription updates when authenticated subject does not match body subjectId', async () => {
+    const services = createFakeServices();
+    const config = createTestConfig();
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/billing/subscription`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...bearerAuthHeaders('seller_auth', 'team'),
+      },
+      body: JSON.stringify({
+        subjectId: 'seller_other',
+        action: 'cancel',
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.error).toBe('BILLING_SUBJECT_FORBIDDEN');
   });
 
   it('rejects invalid Stripe signature and accepts valid Stripe signature for raw webhook body', async () => {
