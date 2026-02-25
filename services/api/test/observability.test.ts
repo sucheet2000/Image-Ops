@@ -103,6 +103,36 @@ describe("observability routes", () => {
     }
   });
 
+  it("returns 401 for an invalid metrics bearer token", async () => {
+    const config = createTestConfig();
+    const services = createFakeServices();
+    const server = await startApiTestServer({ config, ...services });
+
+    try {
+      const previousMetricsToken = process.env.METRICS_TOKEN;
+      try {
+        process.env.METRICS_TOKEN = "test-metrics-token";
+
+        const response = await fetch(`${server.baseUrl}/metrics`, {
+          headers: {
+            authorization: "Bearer test-metrics-tokfn"
+          }
+        });
+
+        expect(response.status).toBe(401);
+        expect(response.headers.get("www-authenticate")).toBe('Bearer realm="metrics", error="invalid_token"');
+      } finally {
+        if (previousMetricsToken === undefined) {
+          delete process.env.METRICS_TOKEN;
+        } else {
+          process.env.METRICS_TOKEN = previousMetricsToken;
+        }
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
   it("returns buffered logs for watch tower with counts", async () => {
     const config = createTestConfig();
     const services = createFakeServices();
