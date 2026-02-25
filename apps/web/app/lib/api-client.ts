@@ -8,6 +8,11 @@ type RefreshPayload = {
   };
 };
 
+const refreshTimeoutOverride = Number.parseInt(process.env.NEXT_PUBLIC_API_REFRESH_TIMEOUT_MS || "", 10);
+const REFRESH_TIMEOUT_MS = Number.isFinite(refreshTimeoutOverride) && refreshTimeoutOverride > 0
+  ? refreshTimeoutOverride
+  : 8_000;
+
 export function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 }
@@ -63,10 +68,14 @@ export function clearApiToken(): void {
 }
 
 export async function refreshApiToken(apiBaseUrl = getApiBaseUrl()): Promise<RefreshPayload | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS);
+
   try {
     const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
       method: "POST",
-      credentials: "include"
+      credentials: "include",
+      signal: controller.signal
     });
     if (!response.ok) {
       clearApiToken();
@@ -84,6 +93,8 @@ export async function refreshApiToken(apiBaseUrl = getApiBaseUrl()): Promise<Ref
   } catch {
     clearApiToken();
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -136,7 +147,7 @@ export async function apiFetch(input: string, init: RequestInit = {}, retryOnUna
 
   isRefreshing = true;
   try {
-    const refreshed = await refreshApiToken();
+    const refreshed = await refreshApiToken(getApiBaseUrl());
     const refreshedToken = refreshed?.token || null;
     flushRefreshQueue(refreshedToken);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import piexif from "piexifjs";
@@ -86,8 +86,20 @@ async function stripExif(rawFile: File): Promise<File> {
       try {
         const dataUrl = String(event.target?.result || "");
         const stripped = piexif.remove(dataUrl);
-        const base64 = stripped.split(",")[1] || "";
-        const binary = atob(base64);
+        const base64 = stripped.split(",")[1];
+        if (!base64) {
+          resolve(rawFile);
+          return;
+        }
+
+        let binary: string;
+        try {
+          binary = atob(base64);
+        } catch {
+          resolve(rawFile);
+          return;
+        }
+
         const bytes = new Uint8Array(binary.length);
         for (let index = 0; index < binary.length; index += 1) {
           bytes[index] = binary.charCodeAt(index);
@@ -176,6 +188,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
   const [convertFormat, setConvertFormat] = useState<OutputFormat>("jpeg");
   const [convertQuality, setConvertQuality] = useState("85");
   const [bgOutputFormat, setBgOutputFormat] = useState<OutputFormat>("png");
+  const fileSelectionIdRef = useRef(0);
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
 
@@ -468,6 +481,8 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={(event) => {
+                  const selectionId = fileSelectionIdRef.current + 1;
+                  fileSelectionIdRef.current = selectionId;
                   const selected = event.target.files?.[0];
                   if (!selected) {
                     setFile(null);
@@ -475,7 +490,9 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
                   }
                   void (async () => {
                     const cleanFile = await stripExif(selected);
-                    setFile(cleanFile);
+                    if (fileSelectionIdRef.current === selectionId) {
+                      setFile(cleanFile);
+                    }
                   })();
                 }}
               />
