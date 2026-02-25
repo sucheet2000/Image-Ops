@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { Router } from "express";
 import type { ApiConfig } from "../config";
 import { asyncHandler } from "../lib/async-handler";
-import { logInfo } from "../lib/log";
+import { logError, logInfo } from "../lib/log";
 import { quotaPolicyForPlan } from "../lib/quota-policy";
 import type { JobQueueService } from "../services/queue";
 import type { JobRepository } from "../services/job-repo";
@@ -159,7 +159,24 @@ export function registerJobsRoutes(
       options: job.options
     };
 
-    await deps.queue.enqueue(queuePayload);
+    try {
+      await deps.queue.enqueue(queuePayload);
+    } catch (error) {
+      const enqueueErrorMessage = error instanceof Error ? error.message : String(error);
+      await deps.jobRepo.updateJobStatus({
+        id: job.id,
+        status: "failed",
+        errorCode: "QUEUE_ENQUEUE_FAILED",
+        errorMessage: enqueueErrorMessage,
+        updatedAt: deps.now().toISOString()
+      });
+      logError("job.enqueue.failed", {
+        jobId: job.id,
+        subjectId: job.subjectId,
+        error: enqueueErrorMessage
+      });
+      throw error;
+    }
 
     logInfo("job.enqueued", {
       jobId: job.id,

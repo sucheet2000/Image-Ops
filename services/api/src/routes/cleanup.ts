@@ -12,6 +12,7 @@ const cleanupSchema = z.object({
   objectKeys: z.array(z.string().min(1).refine((value) => value.startsWith("tmp/"), "Object key must start with tmp/")).min(1).max(100),
   reason: z.enum(["delivered", "page_exit", "ttl_expiry", "manual"]).default("page_exit")
 });
+const CLEANUP_IN_PROGRESS_STATUS = 102;
 
 /**
  * Register the POST /api/cleanup route that performs idempotent deletion of object keys with auditing.
@@ -68,13 +69,28 @@ export function registerCleanupRoutes(
         return;
       }
 
-      res.setHeader("x-idempotent-replay", "true");
-      res.status(existing.status).json(existing.response);
-      return;
+      if (existing.status !== CLEANUP_IN_PROGRESS_STATUS) {
+        res.setHeader("x-idempotent-replay", "true");
+        res.status(existing.status).json(existing.response);
+        return;
+      }
     }
 
-    const result = await deps.storage.deleteObjects(objectKeys);
     const nowIso = deps.now().toISOString();
+    const inProgressRecord: CleanupIdempotencyRecord = {
+      signature,
+      response: {
+        accepted: true,
+        cleaned: 0,
+        notFound: 0,
+        idempotencyKey
+      },
+      status: CLEANUP_IN_PROGRESS_STATUS,
+      createdAt: nowIso
+    };
+    await deps.jobRepo.setCleanupIdempotency(idempotencyKey, inProgressRecord, deps.config.cleanupIdempotencyTtlSeconds);
+
+    const result = await deps.storage.deleteObjects(objectKeys);
 
     for (const objectKey of result.deleted) {
       await deps.jobRepo.appendDeletionAudit({

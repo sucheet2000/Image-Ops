@@ -16,12 +16,15 @@ export async function runResize(input: {
   options: ResizeOptions;
 }): Promise<{ bytes: Buffer; contentType: string }> {
   const format = mimeToFormat(input.contentType) || "jpeg";
-  const transformer = sharp(input.bytes).rotate().resize({
-    width: input.options.width,
-    height: input.options.height,
-    fit: input.options.fit || "inside",
-    withoutEnlargement: true
-  });
+  const hasDimensions = input.options.width !== undefined || input.options.height !== undefined;
+  const transformer = hasDimensions
+    ? sharp(input.bytes).rotate().resize({
+      width: input.options.width,
+      height: input.options.height,
+      fit: input.options.fit || "inside",
+      withoutEnlargement: true
+    })
+    : sharp(input.bytes).rotate();
 
   let output: Buffer;
   if (format === "png") {

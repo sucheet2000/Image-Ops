@@ -67,6 +67,7 @@ describe("GET /api/quota/:subjectId", () => {
     const rolled = await fetch(`${server.baseUrl}/api/quota/seller_1`, {
       headers: { ...bearerAuthHeaders("seller_1") }
     });
+    expect(rolled.status).toBe(200);
     const rolledPayload = await rolled.json();
     expect(rolledPayload.usedCount).toBe(0);
   });

@@ -56,11 +56,16 @@ export function registerQuotaRoutes(
     const profile = await deps.jobRepo.getSubjectProfile(subjectId);
     const plan = (parsedQuery.data.plan || profile?.plan || "free") as ImagePlan;
     const quotaPolicy = quotaPolicyForPlan(deps.config, plan);
-    const existing = (await deps.jobRepo.getQuotaWindow(subjectId)) || defaultQuota(now);
+    const existingRecord = await deps.jobRepo.getQuotaWindow(subjectId);
+    const existing = existingRecord || defaultQuota(now);
 
     // requestedImages=0 keeps existing count but still rolls window when expired.
     const rolled = applyQuota(existing, 0, now, quotaPolicy.limit, quotaPolicy.windowHours).window;
-    if (rolled.windowStartAt !== existing.windowStartAt || rolled.usedCount !== existing.usedCount) {
+    if (
+      !existingRecord
+      || rolled.windowStartAt !== existing.windowStartAt
+      || rolled.usedCount !== existing.usedCount
+    ) {
       await deps.jobRepo.setQuotaWindow(subjectId, rolled);
     }
 
