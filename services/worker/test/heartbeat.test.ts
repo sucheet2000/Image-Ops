@@ -10,10 +10,16 @@ describe("startWorkerHeartbeat", () => {
     vi.useFakeTimers();
     let uptime = 10;
     const events: WorkerHeartbeatPayload[] = [];
+    const redis = {
+      set: vi.fn().mockResolvedValue("OK")
+    };
 
     const stop = startWorkerHeartbeat({
+      redis: redis as never,
+      workerId: "worker-123",
       queueName: "image-ops-jobs",
       intervalMs: 1000,
+      ttlSeconds: 90,
       pid: 999,
       now: () => new Date("2026-02-24T00:00:00.000Z"),
       uptimeSeconds: () => ++uptime,
@@ -27,10 +33,12 @@ describe("startWorkerHeartbeat", () => {
     expect(events[0]).toEqual({
       event: "worker.heartbeat",
       queue: "image-ops-jobs",
+      workerId: "worker-123",
       pid: 999,
       ts: "2026-02-24T00:00:00.000Z",
       uptimeSeconds: 11
     });
+    expect(redis.set).toHaveBeenCalledWith("worker:heartbeat:worker-123", "2026-02-24T00:00:00.000Z", "EX", 90);
 
     stop();
     vi.advanceTimersByTime(2000);

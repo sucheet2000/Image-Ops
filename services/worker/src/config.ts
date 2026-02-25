@@ -3,10 +3,11 @@ import { z } from "zod";
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   REDIS_URL: z.string().default("redis://localhost:6379"),
-  JOB_QUEUE_NAME: z.string().default("image-ops-jobs"),
   JOB_REPO_DRIVER: z.enum(["redis", "postgres"]).default("redis"),
   POSTGRES_URL: z.string().optional(),
-  WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+  WORKER_FAST_CONCURRENCY: z.coerce.number().int().positive().default(8),
+  WORKER_SLOW_CONCURRENCY: z.coerce.number().int().positive().default(3),
+  WORKER_BULK_CONCURRENCY: z.coerce.number().int().positive().default(2),
   S3_REGION: z.string().default("us-east-1"),
   S3_BUCKET: z.string().min(1),
   S3_ENDPOINT: z.string().optional(),
@@ -62,10 +63,11 @@ const envSchema = z.object({
 
 export type WorkerConfig = {
   redisUrl: string;
-  queueName: string;
   jobRepoDriver: "redis" | "postgres";
   postgresUrl?: string;
-  concurrency: number;
+  fastConcurrency: number;
+  slowConcurrency: number;
+  bulkConcurrency: number;
   s3Region: string;
   s3Bucket: string;
   s3Endpoint?: string;
@@ -93,10 +95,11 @@ export function loadWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
   const parsed = envSchema.parse(env);
   return {
     redisUrl: parsed.REDIS_URL,
-    queueName: parsed.JOB_QUEUE_NAME,
     jobRepoDriver: parsed.JOB_REPO_DRIVER,
     postgresUrl: parsed.POSTGRES_URL,
-    concurrency: parsed.WORKER_CONCURRENCY,
+    fastConcurrency: parsed.WORKER_FAST_CONCURRENCY,
+    slowConcurrency: parsed.WORKER_SLOW_CONCURRENCY,
+    bulkConcurrency: parsed.WORKER_BULK_CONCURRENCY,
     s3Region: parsed.S3_REGION,
     s3Bucket: parsed.S3_BUCKET,
     s3Endpoint: parsed.S3_ENDPOINT,

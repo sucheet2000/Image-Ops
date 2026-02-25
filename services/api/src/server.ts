@@ -198,7 +198,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   const deps: ApiDependencies = {
     config,
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
-    queue: incomingDeps?.queue || new BullMqJobQueueService({ queueName: config.queueName, redisUrl: config.redisUrl }),
+    queue: incomingDeps?.queue || new BullMqJobQueueService({ redisUrl: config.redisUrl }),
     jobRepo: incomingDeps?.jobRepo || createJobRepository(config),
     billing: incomingDeps?.billing || createBillingService(config),
     auth: incomingDeps?.auth || new GoogleTokenAuthService({
@@ -219,9 +219,17 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   const rateLimitRedis = deps.config.nodeEnv === "test"
     ? null
     : new IORedis(deps.config.redisUrl, { maxRetriesPerRequest: null });
+  const readinessRedis = deps.config.nodeEnv === "test"
+    ? null
+    : new IORedis(deps.config.redisUrl, { maxRetriesPerRequest: null });
   if (rateLimitRedis) {
     (app.locals.__runtimeCleanup as CleanupCallback[]).push(async () => {
       await rateLimitRedis.quit();
+    });
+  }
+  if (readinessRedis) {
+    (app.locals.__runtimeCleanup as CleanupCallback[]).push(async () => {
+      await readinessRedis.quit();
     });
   }
   const requestMetrics = new Map<string, { count: number; durationSecondsTotal: number }>();
@@ -364,16 +372,24 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   });
 
   app.get("/ready", async (_req, res) => {
-    const [storageResult, jobRepoResult] = await Promise.allSettled([
+    const [storageResult, jobRepoResult, workerHeartbeatResult] = await Promise.allSettled([
       deps.storage.headObject(`${TMP_PREFIX}__ready_probe__`),
-      deps.jobRepo.getQuotaWindow("__ready_probe_subject__")
+      deps.jobRepo.getQuotaWindow("__ready_probe_subject__"),
+      readinessRedis
+        ? readinessRedis.keys("worker:heartbeat:*").then((keys) => {
+            if (keys.length === 0) {
+              throw new Error("no live workers detected");
+            }
+          })
+        : Promise.resolve()
     ]);
 
     const checks = {
       storage: formatReadinessCheck(storageResult),
-      jobRepo: formatReadinessCheck(jobRepoResult)
+      jobRepo: formatReadinessCheck(jobRepoResult),
+      workers: formatReadinessCheck(workerHeartbeatResult)
     };
-    const isReady = checks.storage.status === "ok" && checks.jobRepo.status === "ok";
+    const isReady = checks.storage.status === "ok" && checks.jobRepo.status === "ok" && checks.workers.status === "ok";
 
     res.status(isReady ? 200 : 503).json({
       status: isReady ? "ready" : "degraded",
