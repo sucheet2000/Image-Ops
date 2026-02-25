@@ -14,7 +14,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc --noEmit -p tsconfig.base.json",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "prepare": "husky",
     "infra:up:integration": "docker compose -f infra/docker-compose.integration.yml up -d",
     "infra:down:integration": "docker compose -f infra/docker-compose.integration.yml down -v",
