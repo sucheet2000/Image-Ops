@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -21,7 +22,7 @@ describe("POST /api/uploads/init", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         tool: "resize",
@@ -47,7 +48,7 @@ describe("POST /api/uploads/init", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         tool: "resize",
@@ -72,7 +73,7 @@ describe("POST /api/uploads/init", () => {
 
     const response = await fetch(`${server.baseUrl}/api/uploads/init`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         tool: "resize",

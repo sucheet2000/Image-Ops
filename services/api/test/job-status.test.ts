@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -38,7 +39,9 @@ describe("GET /api/jobs/:id", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig(), now });
     closers.push(server.close);
 
-    const response = await fetch(`${server.baseUrl}/api/jobs/01JSTATUSDONE`);
+    const response = await fetch(`${server.baseUrl}/api/jobs/01JSTATUSDONE`, {
+      headers: { ...bearerAuthHeaders("seller_1", "pro") }
+    });
     expect(response.status).toBe(200);
 
     const payload = await response.json();
@@ -71,7 +74,9 @@ describe("GET /api/jobs/:id", () => {
     const server = await startApiTestServer({ ...services, config: createTestConfig(), now });
     closers.push(server.close);
 
-    const response = await fetch(`${server.baseUrl}/api/jobs/01JSTATUSRUNNING`);
+    const response = await fetch(`${server.baseUrl}/api/jobs/01JSTATUSRUNNING`, {
+      headers: { ...bearerAuthHeaders("seller_1") }
+    });
     expect(response.status).toBe(200);
 
     const payload = await response.json();

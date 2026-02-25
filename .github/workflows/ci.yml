@@ -35,6 +35,7 @@ jobs:
         run: docker compose -f infra/docker-compose.integration.yml up -d redis minio minio-setup
       - name: Build API and worker
         run: |
+          npm run build -w packages/core
           npm run build -w services/api
           npm run build -w services/worker
       - name: Start API and worker
@@ -49,6 +50,7 @@ jobs:
           S3_ACCESS_KEY: "minioadmin"
           S3_SECRET_KEY: "minioadmin"
           S3_FORCE_PATH_STYLE: "true"
+          AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
           BG_REMOVE_API_URL: "http://127.0.0.1:9999/mock-unused"
         run: |
           nohup npm run start -w services/api > /tmp/api.log 2>&1 &
@@ -57,13 +59,22 @@ jobs:
           echo $! > /tmp/worker.pid
       - name: Wait for worker ready
         run: |
-          for i in $(seq 1 40); do
-            if grep -q '"event":"worker.ready"' /tmp/worker.log; then
+          for i in $(seq 1 60); do
+            if grep -Eq '"event":"worker.ready"|"event":"worker.heartbeat"' /tmp/worker.log 2>/dev/null; then
+              echo "Worker readiness signal detected"
               exit 0
             fi
+
+            if [ -f /tmp/worker.pid ] && ! kill -0 "$(cat /tmp/worker.pid)" 2>/dev/null; then
+              echo "Worker process exited before reporting readiness"
+              tail -n 200 /tmp/worker.log || true
+              exit 1
+            fi
+
             sleep 1
           done
-          echo "Worker did not report ready event in time"
+          echo "Worker did not report ready/heartbeat event in time"
+          tail -n 200 /tmp/worker.log || true
           exit 1
       - name: Wait for API health
         run: |
@@ -80,12 +91,16 @@ jobs:
           RUN_INTEGRATION_TESTS: "1"
           INTEGRATION_API_BASE_URL: "http://127.0.0.1:4000"
           INTEGRATION_JOB_TIMEOUT_MS: "30000"
+          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
           BILLING_WEBHOOK_SECRET: "dev-webhook-secret"
         run: npm run test:integration:api
       - name: Run staging smoke contract against integration stack
         env:
           STAGING_API_BASE_URL: "http://127.0.0.1:4000"
-        run: npm run smoke:staging
+          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
+        run: |
+          API_BEARER_TOKEN="$(node -e 'const jwt=require("jsonwebtoken"); const now=Math.floor(Date.now()/1000); process.stdout.write(jwt.sign({sub:"ci_smoke", plan:"free", iat:now, exp:now+3600}, process.env.INTEGRATION_AUTH_TOKEN_SECRET, { algorithm:"HS256", noTimestamp:true }));')"
+          STAGING_API_BASE_URL="${STAGING_API_BASE_URL}" API_BEARER_TOKEN="${API_BEARER_TOKEN}" npm run smoke:staging
       - name: Dump service logs
         if: always()
         run: |

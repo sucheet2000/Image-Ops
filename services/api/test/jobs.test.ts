@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -23,7 +24,7 @@ function fakeImageBytes(marker: string): Buffer {
 async function completeUpload(baseUrl: string, subjectId: string, objectKey: string): Promise<void> {
   const response = await fetch(`${baseUrl}/api/uploads/complete`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...bearerAuthHeaders(subjectId) },
     body: JSON.stringify({ subjectId, objectKey })
   });
   expect(response.status).toBe(200);
@@ -41,7 +42,7 @@ describe("POST /api/jobs", () => {
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         plan: "free",
@@ -70,7 +71,7 @@ describe("POST /api/jobs", () => {
     const missingObjectKey = "tmp/seller_1/input/2026/02/23/compress/missing.jpg";
     const completeResponse = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         objectKey: missingObjectKey
@@ -80,7 +81,7 @@ describe("POST /api/jobs", () => {
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         plan: "free",
@@ -106,7 +107,7 @@ describe("POST /api/jobs", () => {
 
       const response = await fetch(`${server.baseUrl}/api/jobs`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
         body: JSON.stringify({
           subjectId: "seller_2",
           plan: "free",
@@ -124,7 +125,7 @@ describe("POST /api/jobs", () => {
 
     const blocked = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
       body: JSON.stringify({
         subjectId: "seller_2",
         plan: "free",
@@ -160,7 +161,7 @@ describe("POST /api/jobs", () => {
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_paid", "pro") },
       body: JSON.stringify({
         subjectId: "seller_paid",
         tool: "background-remove",
@@ -199,7 +200,7 @@ describe("POST /api/jobs", () => {
 
       const create = await fetch(`${server.baseUrl}/api/jobs`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_pro_limited", "pro") },
         body: JSON.stringify({
           subjectId: "seller_pro_limited",
           tool: "convert",
@@ -221,7 +222,7 @@ describe("POST /api/jobs", () => {
 
     const blocked = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_pro_limited", "pro") },
       body: JSON.stringify({
         subjectId: "seller_pro_limited",
         tool: "convert",
@@ -249,7 +250,7 @@ describe("POST /api/jobs", () => {
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_spoof") },
       body: JSON.stringify({
         subjectId: "seller_spoof",
         plan: "team",

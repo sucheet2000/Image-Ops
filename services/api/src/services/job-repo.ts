@@ -284,7 +284,24 @@ export class RedisJobRepository implements JobRepository {
   }
 
   async getAuthRefreshSession(id: string): Promise<AuthRefreshSession | null> {
-    const raw = await this.redis.get(authRefreshSessionKey(id));
+    const key = authRefreshSessionKey(id);
+    const raw = await this.redis.eval(
+      `
+local key = KEYS[1]
+local ttl = redis.call("TTL", key)
+if ttl == -2 then
+  return nil
+end
+if ttl == -1 then
+  local value = redis.call("GET", key)
+  redis.call("DEL", key)
+  return value
+end
+return redis.call("GET", key)
+`,
+      1,
+      key
+    ) as string | null;
     if (!raw) {
       return null;
     }

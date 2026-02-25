@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTestConfig, createFakeServices } from "./helpers/fakes";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { logError, logInfo, resetLogBuffer } from "../src/lib/log";
 import { startApiTestServer } from "./helpers/server";
 
@@ -92,7 +93,9 @@ describe("observability routes", () => {
       logInfo("watchtower.info", { phase: "boot" });
       logError("watchtower.error", { issue: "queue stalled" });
 
-      const response = await fetch(`${server.baseUrl}/api/observability/logs?limit=10`);
+      const response = await fetch(`${server.baseUrl}/api/observability/logs?limit=10`, {
+        headers: { ...bearerAuthHeaders("observer_1") }
+      });
       expect(response.status).toBe(200);
 
       const body = await response.json() as {
@@ -130,7 +133,9 @@ describe("observability routes", () => {
       logInfo("watchtower.info", { phase: "boot" });
       logError("watchtower.error", { issue: "queue stalled" });
 
-      const response = await fetch(`${server.baseUrl}/api/observability/logs?level=error&limit=10`);
+      const response = await fetch(`${server.baseUrl}/api/observability/logs?level=error&limit=10`, {
+        headers: { ...bearerAuthHeaders("observer_1") }
+      });
       expect(response.status).toBe(200);
 
       const body = await response.json() as {

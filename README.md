@@ -41,7 +41,7 @@ Key runtime groups:
 - API: `API_PORT`, `WEB_ORIGIN`, `MAX_UPLOAD_BYTES`, `SIGNED_UPLOAD_TTL_SECONDS`, `SIGNED_DOWNLOAD_TTL_SECONDS`
 - API hardening: `API_WRITE_RATE_LIMIT_WINDOW_MS`, `API_WRITE_RATE_LIMIT_MAX`, `MALWARE_SCAN_API_URL`, `MALWARE_SCAN_TIMEOUT_MS`, `MALWARE_SCAN_FAIL_CLOSED`
 - Quota policy: `FREE_PLAN_LIMIT`, `FREE_PLAN_WINDOW_HOURS`, `PRO_PLAN_LIMIT`, `PRO_PLAN_WINDOW_HOURS`, `TEAM_PLAN_LIMIT`, `TEAM_PLAN_WINDOW_HOURS`
-- Auth: `API_AUTH_REQUIRED`, `GOOGLE_CLIENT_ID`, `AUTH_TOKEN_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TTL_SECONDS`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_SECURE`, `AUTH_REFRESH_COOKIE_SAMESITE`, `AUTH_REFRESH_COOKIE_DOMAIN`, `AUTH_REFRESH_COOKIE_PATH`
+- Auth: `GOOGLE_CLIENT_ID`, `AUTH_TOKEN_SECRET`, `AUTH_TOKEN_TTL_SECONDS`, `AUTH_REFRESH_TTL_SECONDS`, `AUTH_REFRESH_COOKIE_NAME`, `AUTH_REFRESH_COOKIE_SECURE`, `AUTH_REFRESH_COOKIE_SAMESITE`, `AUTH_REFRESH_COOKIE_DOMAIN`, `AUTH_REFRESH_COOKIE_PATH`
 - Billing: `BILLING_PROVIDER`, `BILLING_PUBLIC_BASE_URL`, `BILLING_PORTAL_BASE_URL`, `BILLING_PROVIDER_SECRET`, `BILLING_WEBHOOK_SECRET`, `BILLING_CHECKOUT_TTL_SECONDS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE_SECONDS`, `STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_TEAM`
 - Queue/Redis: `REDIS_URL`, `JOB_QUEUE_NAME`
 - Repository driver: `JOB_REPO_DRIVER` (`redis` or `postgres`), `POSTGRES_URL` (required when postgres)
@@ -117,7 +117,7 @@ Image publishing and deployment workflows:
   - waits for `/ready` and runs `npm run smoke:staging`
 - `.github/workflows/release-preflight.yml`
   - manual smoke contract against a target API URL
-  - reads optional bearer token from repository/environment secret `API_BEARER_TOKEN`
+  - reads bearer token from repository/environment secret `API_BEARER_TOKEN` (required)
 
 Required staging secrets for `deploy-staging.yml`:
 - `STAGING_SSH_HOST`
@@ -127,9 +127,9 @@ Required staging secrets for `deploy-staging.yml`:
 - `GHCR_DEPLOY_USER`
 - `GHCR_DEPLOY_TOKEN`
 - `STAGING_API_BASE_URL`
-- `STAGING_API_BEARER_TOKEN` (optional if auth is disabled)
+- `STAGING_API_BEARER_TOKEN` (required; API auth is enforced)
 
-Required secret for `release-preflight.yml` (optional when target API does not enforce auth):
+Required secret for `release-preflight.yml`:
 - `API_BEARER_TOKEN`
 
 ## Render + Cloudflare + R2

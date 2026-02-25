@@ -22,10 +22,6 @@ const envSchema = z.object({
     .url("WEB_ORIGIN must be a valid URL")
     .refine((value) => value !== "*", "WEB_ORIGIN cannot be '*'")
     .default("http://localhost:3000"),
-  API_AUTH_REQUIRED: z
-    .string()
-    .default("false")
-    .transform((value) => value === "1" || value.toLowerCase() === "true"),
   GOOGLE_CLIENT_ID: z.string().default("google-client-id"),
   AUTH_TOKEN_SECRET: z.string().min(1).default("dev-auth-token-secret"),
   AUTH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60),
@@ -116,24 +112,6 @@ const envSchema = z.object({
     });
   }
 
-  if (value.API_AUTH_REQUIRED) {
-    if (value.AUTH_TOKEN_SECRET === "dev-auth-token-secret") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["AUTH_TOKEN_SECRET"],
-        message: "AUTH_TOKEN_SECRET must not use the development default when API_AUTH_REQUIRED=true"
-      });
-    }
-
-    if (value.GOOGLE_CLIENT_ID === "google-client-id") {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["GOOGLE_CLIENT_ID"],
-        message: "GOOGLE_CLIENT_ID must not use the development default when API_AUTH_REQUIRED=true"
-      });
-    }
-  }
-
   if (value.NODE_ENV === "production") {
     if (value.JOB_REPO_DRIVER !== "postgres") {
       ctx.addIssue({
@@ -189,7 +167,6 @@ export type ApiConfig = {
   nodeEnv: "development" | "test" | "production";
   port: number;
   webOrigin: string;
-  apiAuthRequired: boolean;
   googleClientId: string;
   authTokenSecret: string;
   authTokenTtlSeconds: number;
@@ -252,7 +229,6 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     nodeEnv: parsed.NODE_ENV,
     port: parsed.API_PORT,
     webOrigin: parsed.WEB_ORIGIN,
-    apiAuthRequired: parsed.API_AUTH_REQUIRED,
     googleClientId: parsed.GOOGLE_CLIENT_ID,
     authTokenSecret: parsed.AUTH_TOKEN_SECRET,
     authTokenTtlSeconds: parsed.AUTH_TOKEN_TTL_SECONDS,

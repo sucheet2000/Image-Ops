@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { HmacBillingService } from "../src/services/billing";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -23,7 +24,7 @@ describe("billing routes", () => {
 
     const response = await fetch(`${server.baseUrl}/api/billing/checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         plan: "pro",
@@ -50,7 +51,7 @@ describe("billing routes", () => {
 
     const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_2") },
       body: JSON.stringify({
         subjectId: "seller_2",
         plan: "pro",
@@ -122,9 +123,9 @@ describe("billing routes", () => {
       })
     });
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(400);
     const payload = await response.json();
-    expect(payload.error).toBe("INVALID_BILLING_SIGNATURE");
+    expect(payload.error).toBe("INVALID_SIGNATURE");
   });
 
   it("treats repeated provider events as idempotent replays", async () => {
@@ -135,7 +136,7 @@ describe("billing routes", () => {
 
     const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_4") },
       body: JSON.stringify({
         subjectId: "seller_4",
         plan: "team",
@@ -193,7 +194,7 @@ describe("billing routes", () => {
 
     const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_5") },
       body: JSON.stringify({
         subjectId: "seller_5",
         plan: "pro",
@@ -239,7 +240,7 @@ describe("billing routes", () => {
 
     const reconcileResponse = await fetch(`${server.baseUrl}/api/billing/reconcile`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_5") },
       body: JSON.stringify({ limit: 100 })
     });
 
@@ -259,7 +260,7 @@ describe("billing routes", () => {
 
     const checkoutResponse = await fetch(`${server.baseUrl}/api/billing/checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_6") },
       body: JSON.stringify({
         subjectId: "seller_6",
         plan: "team",
@@ -295,7 +296,9 @@ describe("billing routes", () => {
     });
     expect(webhookResponse.status).toBe(200);
 
-    const summaryBefore = await fetch(`${server.baseUrl}/api/billing/summary/seller_6`);
+    const summaryBefore = await fetch(`${server.baseUrl}/api/billing/summary/seller_6`, {
+      headers: { ...bearerAuthHeaders("seller_6", "team") }
+    });
     expect(summaryBefore.status).toBe(200);
     const summaryBeforePayload = await summaryBefore.json();
     expect(summaryBeforePayload.plan).toBe("team");
@@ -303,7 +306,7 @@ describe("billing routes", () => {
 
     const cancelResponse = await fetch(`${server.baseUrl}/api/billing/subscription`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_6", "team") },
       body: JSON.stringify({
         subjectId: "seller_6",
         action: "cancel"
@@ -316,7 +319,7 @@ describe("billing routes", () => {
 
     const reactivateResponse = await fetch(`${server.baseUrl}/api/billing/subscription`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_6") },
       body: JSON.stringify({
         subjectId: "seller_6",
         action: "reactivate"

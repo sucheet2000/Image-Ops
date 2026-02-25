@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FREE_PLAN_LIMIT, type ImageJobRecord } from "@image-ops/core";
+import { FREE_PLAN_LIMIT, type ImageJobRecord } from "@imageops/core";
 import { InMemoryJobRepository } from "../src/services/job-repo";
 
 function buildJob(id: string, subjectId: string): ImageJobRecord {

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { isPlan, type ImagePlan } from "@image-ops/core";
+import { isPlan, type ImagePlan } from "@imageops/core";
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import { ulid } from "ulid";
@@ -200,7 +200,7 @@ export class InMemoryAuthService implements AuthService {
 
   async verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
     if (!idToken) {
-      throw new AuthError("Invalid Google ID token.");
+      throw new GoogleTokenVerificationError("Invalid Google ID token.");
     }
 
     return {

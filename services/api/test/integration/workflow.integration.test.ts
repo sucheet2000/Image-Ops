@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { InMemoryAuthService } from "../../src/services/auth";
 
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1";
 const apiBaseUrl = process.env.INTEGRATION_API_BASE_URL || "http://127.0.0.1:4000";
 const jobTimeoutMs = Number(process.env.INTEGRATION_JOB_TIMEOUT_MS || 30000);
 const testTimeoutMs = Number(process.env.INTEGRATION_TEST_TIMEOUT_MS || String(jobTimeoutMs + 20000));
+const integrationAuthTokenSecret = process.env.INTEGRATION_AUTH_TOKEN_SECRET
+  || process.env.AUTH_TOKEN_SECRET
+  || "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc=";
 
 const samplePngBytes = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2p6i8AAAAASUVORK5CYII=",
@@ -23,13 +27,29 @@ async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+function bearerAuthHeaders(subjectId: string, plan: "free" | "pro" | "team" = "free"): Record<string, string> {
+  const auth = new InMemoryAuthService(integrationAuthTokenSecret);
+  const token = auth.issueApiToken({
+    sub: subjectId,
+    plan,
+    now: new Date()
+  });
+  return {
+    authorization: `Bearer ${token}`
+  };
+}
+
 describe.skipIf(!shouldRun)("integration workflow", () => {
   it("processes upload -> job -> status -> cleanup with idempotency and deletion checks", async () => {
     const subjectId = `integration_${nowTag()}_${Math.floor(Math.random() * 1000)}`;
+    const authHeaders = bearerAuthHeaders(subjectId);
 
     const uploadInitResponse = await fetch(`${apiBaseUrl}/api/uploads/init`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({
         subjectId,
         tool: "resize",
@@ -57,7 +77,10 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
 
     const uploadCompleteResponse = await fetch(`${apiBaseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({
         subjectId,
         objectKey: uploadInit.objectKey
@@ -67,7 +90,10 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
 
     const createJobResponse = await fetch(`${apiBaseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({
         subjectId,
         plan: "free",
@@ -95,7 +121,9 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
       | null = null;
 
     while (Date.now() < deadline) {
-      const statusResponse = await fetch(`${apiBaseUrl}/api/jobs/${encodeURIComponent(createdJob.id)}`);
+      const statusResponse = await fetch(`${apiBaseUrl}/api/jobs/${encodeURIComponent(createdJob.id)}`, {
+        headers: authHeaders
+      });
       expect(statusResponse.status).toBe(200);
       const payload = await readJson<{
         id: string;
@@ -136,7 +164,8 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": cleanupIdempotencyKey
+        "idempotency-key": cleanupIdempotencyKey,
+        ...authHeaders
       },
       body: JSON.stringify(cleanupBody)
     });
@@ -155,7 +184,8 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": cleanupIdempotencyKey
+        "idempotency-key": cleanupIdempotencyKey,
+        ...authHeaders
       },
       body: JSON.stringify(cleanupBody)
     });
@@ -173,7 +203,8 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": cleanupIdempotencyKey
+        "idempotency-key": cleanupIdempotencyKey,
+        ...authHeaders
       },
       body: JSON.stringify({
         objectKeys: [uploadInit.objectKey],
@@ -189,7 +220,10 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
 
     const createJobFromDeletedInputResponse = await fetch(`${apiBaseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...authHeaders
+      },
       body: JSON.stringify({
         subjectId,
         plan: "free",

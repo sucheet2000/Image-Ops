@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -25,7 +26,8 @@ describe("POST /api/cleanup", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": "cleanup-key-1"
+        "idempotency-key": "cleanup-key-1",
+        ...bearerAuthHeaders("seller_1")
       },
       body: JSON.stringify({
         objectKeys: ["tmp/seller_1/input1.jpg"],
@@ -41,7 +43,8 @@ describe("POST /api/cleanup", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": "cleanup-key-1"
+        "idempotency-key": "cleanup-key-1",
+        ...bearerAuthHeaders("seller_1")
       },
       body: JSON.stringify({
         objectKeys: ["tmp/seller_1/input1.jpg"],
@@ -71,7 +74,8 @@ describe("POST /api/cleanup", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": "cleanup-key-2"
+        "idempotency-key": "cleanup-key-2",
+        ...bearerAuthHeaders("seller_1")
       },
       body: JSON.stringify({ objectKeys: ["tmp/seller_1/a.jpg"], reason: "manual" })
     });
@@ -80,7 +84,8 @@ describe("POST /api/cleanup", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": "cleanup-key-2"
+        "idempotency-key": "cleanup-key-2",
+        ...bearerAuthHeaders("seller_1")
       },
       body: JSON.stringify({ objectKeys: ["tmp/seller_1/b.jpg"], reason: "manual" })
     });
@@ -99,7 +104,8 @@ describe("POST /api/cleanup", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "idempotency-key": "cleanup-key-3"
+        "idempotency-key": "cleanup-key-3",
+        ...bearerAuthHeaders("seller_1")
       },
       body: JSON.stringify({
         objectKeys: ["tmp/seller_1/missing.jpg"],

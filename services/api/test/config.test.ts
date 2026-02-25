@@ -12,27 +12,6 @@ function baseEnv(): NodeJS.ProcessEnv {
 }
 
 describe("loadApiConfig production safeguards", () => {
-  it("rejects auth placeholder defaults when API_AUTH_REQUIRED=true", () => {
-    expect(() =>
-      loadApiConfig({
-        ...baseEnv(),
-        API_AUTH_REQUIRED: "true"
-      })
-    ).toThrow(/AUTH_TOKEN_SECRET must not use the development default when API_AUTH_REQUIRED=true/i);
-  });
-
-  it("accepts explicit auth values when API_AUTH_REQUIRED=true", () => {
-    const config = loadApiConfig({
-      ...baseEnv(),
-      API_AUTH_REQUIRED: "true",
-      GOOGLE_CLIENT_ID: "google-client-prod-1",
-      AUTH_TOKEN_SECRET: "auth-token-secret-prod-1"
-    });
-
-    expect(config.apiAuthRequired).toBe(true);
-    expect(config.googleClientId).toBe("google-client-prod-1");
-  });
-
   it("rejects development defaults in production", () => {
     expect(() =>
       loadApiConfig({

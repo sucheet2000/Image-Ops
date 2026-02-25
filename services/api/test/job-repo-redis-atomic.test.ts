@@ -1,4 +1,4 @@
-import type { ImageJobRecord } from "@image-ops/core";
+import type { ImageJobRecord } from "@imageops/core";
 import type IORedis from "ioredis";
 import { describe, expect, it } from "vitest";
 import { RedisJobRepository } from "../src/services/job-repo";

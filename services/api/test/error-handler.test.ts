@@ -28,8 +28,10 @@ describe("errorHandler", () => {
 
     expect(response.status).toHaveBeenCalledWith(500);
     expect(response.json).toHaveBeenCalledWith({
-      error: "INTERNAL_SERVER_ERROR",
-      message: "An unexpected error occurred."
+      error: {
+        code: "INTERNAL",
+        message: "An unexpected error occurred."
+      }
     });
     expect(logSpy).toHaveBeenCalledWith(
       "api.error",
@@ -69,8 +71,10 @@ describe("errorHandler", () => {
     expect(logSpy).toHaveBeenCalledWith("api.error", { error: { value: nonError } });
     expect(response.status).toHaveBeenCalledWith(500);
     expect(response.json).toHaveBeenCalledWith({
-      error: "INTERNAL_SERVER_ERROR",
-      message: "An unexpected error occurred."
+      error: {
+        code: "INTERNAL",
+        message: "An unexpected error occurred."
+      }
     });
     expect(next).not.toHaveBeenCalled();
   });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -23,21 +24,30 @@ describe("api write rate limiting", () => {
 
       const first = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...bearerAuthHeaders("seller_rl")
+        },
         body: JSON.stringify(requestBody)
       });
       expect(first.status).toBe(201);
 
       const second = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...bearerAuthHeaders("seller_rl")
+        },
         body: JSON.stringify(requestBody)
       });
       expect(second.status).toBe(201);
 
       const third = await fetch(`${server.baseUrl}/api/uploads/init`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...bearerAuthHeaders("seller_rl")
+        },
         body: JSON.stringify(requestBody)
       });
       expect(third.status).toBe(429);

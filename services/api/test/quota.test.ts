@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
 
@@ -33,7 +34,7 @@ describe("GET /api/quota/:subjectId", () => {
 
     const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         objectKey: inputObjectKey
@@ -43,7 +44,7 @@ describe("GET /api/quota/:subjectId", () => {
 
     const createJob = await fetch(`${server.baseUrl}/api/jobs`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...bearerAuthHeaders("seller_1") },
       body: JSON.stringify({
         subjectId: "seller_1",
         plan: "free",
@@ -53,7 +54,9 @@ describe("GET /api/quota/:subjectId", () => {
     });
     expect(createJob.status).toBe(201);
 
-    const quota = await fetch(`${server.baseUrl}/api/quota/seller_1`);
+    const quota = await fetch(`${server.baseUrl}/api/quota/seller_1`, {
+      headers: { ...bearerAuthHeaders("seller_1") }
+    });
     expect(quota.status).toBe(200);
     const payload = await quota.json();
     expect(payload.plan).toBe("free");
@@ -61,7 +64,9 @@ describe("GET /api/quota/:subjectId", () => {
     expect(payload.limit).toBe(6);
 
     nowValue = new Date("2026-02-23T11:00:00.000Z");
-    const rolled = await fetch(`${server.baseUrl}/api/quota/seller_1`);
+    const rolled = await fetch(`${server.baseUrl}/api/quota/seller_1`, {
+      headers: { ...bearerAuthHeaders("seller_1") }
+    });
     const rolledPayload = await rolled.json();
     expect(rolledPayload.usedCount).toBe(0);
   });
@@ -75,7 +80,9 @@ describe("GET /api/quota/:subjectId", () => {
     const server = await startApiTestServer({ ...services, config });
     closers.push(server.close);
 
-    const response = await fetch(`${server.baseUrl}/api/quota/seller_team?plan=team`);
+    const response = await fetch(`${server.baseUrl}/api/quota/seller_team?plan=team`, {
+      headers: { ...bearerAuthHeaders("seller_team", "team") }
+    });
     expect(response.status).toBe(200);
     const payload = await response.json();
     expect(payload.plan).toBe("team");

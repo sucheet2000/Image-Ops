@@ -2,8 +2,11 @@ import cors from "cors";
 import express from "express";
 import type { Express, NextFunction, Request, Response } from "express";
 import { AppError, ValidationError } from "@imageops/core";
+import IORedis from "ioredis";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import { RedisStore, type RedisReply } from "rate-limit-redis";
 import { loadApiConfig, type ApiConfig } from "./config";
-import { requireApiAuth } from "./lib/auth-middleware";
+import { requireApiAuth, type RequestWithAuth } from "./lib/auth-middleware";
 import { logError, logInfo } from "./lib/log";
 import { createRateLimitMiddleware } from "./lib/rate-limit";
 import { registerAuthRoutes } from "./routes/auth";
@@ -73,15 +76,17 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
   return { value: error };
 }
 
-function runAppCleanup(app: Express): void {
-  const cleanupCallbacks = app.locals.__runtimeCleanup as Array<() => void> | undefined;
+type CleanupCallback = () => void | Promise<void>;
+
+async function runAppCleanup(app: Express): Promise<void> {
+  const cleanupCallbacks = app.locals.__runtimeCleanup as CleanupCallback[] | undefined;
   if (!cleanupCallbacks) {
     return;
   }
 
   for (const cleanup of cleanupCallbacks) {
     try {
-      cleanup();
+      await cleanup();
     } catch (error) {
       logError("api.cleanup.failed", { error: formatErrorForLog(error) });
     }
@@ -132,6 +137,33 @@ function createMalwareScanService(config: ApiConfig): MalwareScanService {
   });
 }
 
+function validateEnv(): void {
+  const secret = process.env.AUTH_TOKEN_SECRET;
+  if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
+    // eslint-disable-next-line no-console
+    console.error("FATAL: AUTH_TOKEN_SECRET must be at least 32 bytes. Generate one with: openssl rand -base64 32");
+    process.exit(1);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    if (process.env.AUTH_REFRESH_COOKIE_SECURE !== "true") {
+      // eslint-disable-next-line no-console
+      console.error('FATAL: AUTH_REFRESH_COOKIE_SECURE must be "true" in production');
+      process.exit(1);
+    }
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      // eslint-disable-next-line no-console
+      console.error("FATAL: STRIPE_WEBHOOK_SECRET is required in production");
+      process.exit(1);
+    }
+    if (!process.env.METRICS_TOKEN) {
+      // eslint-disable-next-line no-console
+      console.error("FATAL: METRICS_TOKEN is required in production");
+      process.exit(1);
+    }
+  }
+}
+
 export function errorHandler(error: unknown, _req: Request, res: Response, next: NextFunction): void {
   if (res.headersSent) {
     next(error);
@@ -159,6 +191,10 @@ export function errorHandler(error: unknown, _req: Request, res: Response, next:
 
 export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRuntime {
   const config = incomingDeps?.config || loadApiConfig();
+  if (config.nodeEnv !== "test") {
+    validateEnv();
+  }
+
   const deps: ApiDependencies = {
     config,
     storage: incomingDeps?.storage || new S3ObjectStorageService(config),
@@ -180,6 +216,14 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
 
   const app = express();
   app.locals.__runtimeCleanup = [];
+  const rateLimitRedis = deps.config.nodeEnv === "test"
+    ? null
+    : new IORedis(deps.config.redisUrl, { maxRetriesPerRequest: null });
+  if (rateLimitRedis) {
+    (app.locals.__runtimeCleanup as CleanupCallback[]).push(async () => {
+      await rateLimitRedis.quit();
+    });
+  }
   const requestMetrics = new Map<string, { count: number; durationSecondsTotal: number }>();
   const metricsStartMs = Date.now();
   let inflightRequests = 0;
@@ -230,18 +274,70 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   app.use("/api/webhooks/billing", express.raw({ type: "application/json", limit: "1mb" }));
   app.use(express.json({ limit: "1mb" }));
 
+  const createRedisRateLimitStore = (prefix: string): RedisStore | undefined => {
+    if (!rateLimitRedis) {
+      return undefined;
+    }
+
+    return new RedisStore({
+      prefix,
+      sendCommand: (...command: string[]) =>
+        rateLimitRedis.call(command[0], ...command.slice(1)) as Promise<RedisReply>
+    });
+  };
+  const authRateLimitStore = createRedisRateLimitStore("rl:auth:");
+  const uploadRateLimitStore = createRedisRateLimitStore("rl:upload:");
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 10,
+    ...(authRateLimitStore ? { store: authRateLimitStore } : {}),
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Too many attempts. Please wait 15 minutes."
+        }
+      });
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
+  const uploadLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    limit: 30,
+    keyGenerator: (req) => {
+      const subjectId = (req as RequestWithAuth).auth?.sub;
+      return subjectId || ipKeyGenerator(req.ip || "unknown");
+    },
+    ...(uploadRateLimitStore ? { store: uploadRateLimitStore } : {}),
+    handler: (_req, res) => {
+      res.status(429).json({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Upload rate limit exceeded. Please wait."
+        }
+      });
+    },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+
   const writeRateLimit = createRateLimitMiddleware({
     limit: deps.config.apiWriteRateLimitMax,
     windowMs: deps.config.apiWriteRateLimitWindowMs,
     keyPrefix: "api-write"
   });
-  (app.locals.__runtimeCleanup as Array<() => void>).push(() => writeRateLimit.close());
+  (app.locals.__runtimeCleanup as CleanupCallback[]).push(() => writeRateLimit.close());
   app.use("/api/uploads/init", writeRateLimit);
   app.use("/api/uploads/complete", writeRateLimit);
   app.use("/api/jobs", writeRateLimit);
   app.use("/api/cleanup", writeRateLimit);
   app.use("/api/billing/checkout", writeRateLimit);
   app.use("/api/billing/subscription", writeRateLimit);
+  app.use("/api/auth/google", authLimiter);
+  app.use("/api/auth/refresh", authLimiter);
 
   app.use((req, res, next) => {
     const startedAtNs = process.hrtime.bigint();
@@ -304,17 +400,24 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
     res.send(renderMetrics(queueMetrics));
   });
 
-  if (deps.config.apiAuthRequired) {
-    app.use("/api/uploads", requireApiAuth(deps.auth));
-    app.use("/api/jobs", requireApiAuth(deps.auth));
-    app.use("/api/cleanup", requireApiAuth(deps.auth));
-    app.use("/api/quota", requireApiAuth(deps.auth));
-    app.use("/api/observability", requireApiAuth(deps.auth));
-    app.use("/api/billing/checkout", requireApiAuth(deps.auth));
-    app.use("/api/billing/reconcile", requireApiAuth(deps.auth));
-    app.use("/api/billing/summary", requireApiAuth(deps.auth));
-    app.use("/api/billing/subscription", requireApiAuth(deps.auth));
-  }
+  app.use("/api/uploads", requireApiAuth(deps.auth));
+  app.use("/api/jobs", requireApiAuth(deps.auth));
+  app.use("/api/cleanup", requireApiAuth(deps.auth));
+  app.use("/api/quota", requireApiAuth(deps.auth));
+  app.use("/api/observability", requireApiAuth(deps.auth));
+  app.use("/api/billing/checkout", requireApiAuth(deps.auth));
+  app.use("/api/billing/reconcile", requireApiAuth(deps.auth));
+  app.use("/api/billing/summary", requireApiAuth(deps.auth));
+  app.use("/api/billing/subscription", requireApiAuth(deps.auth));
+
+  app.use("/api/uploads/init", uploadLimiter);
+  app.use("/api/jobs", (req, res, next) => {
+    if (req.method === "POST") {
+      uploadLimiter(req, res, next);
+      return;
+    }
+    next();
+  });
 
   registerUploadsRoutes(app, {
     config: deps.config,
