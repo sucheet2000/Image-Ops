@@ -50,6 +50,7 @@ jobs:
           S3_ACCESS_KEY: "minioadmin"
           S3_SECRET_KEY: "minioadmin"
           S3_FORCE_PATH_STYLE: "true"
+          AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
           BG_REMOVE_API_URL: "http://127.0.0.1:9999/mock-unused"
         run: |
           nohup npm run start -w services/api > /tmp/api.log 2>&1 &
