@@ -1,6 +1,8 @@
 import {
   applyQuota,
   ConflictError,
+  FREE_PLAN_LIMIT,
+  FREE_PLAN_WINDOW_HOURS,
   ValidationError,
   type AuthRefreshSession,
   type DedupObjectRecord,
@@ -144,6 +146,67 @@ function timestampMsOrNow(input: string): number {
 
 export class RedisJobRepository implements JobRepository {
   private static readonly MAX_OPTIMISTIC_RETRIES = 5;
+  private static readonly RESERVE_QUOTA_AND_CREATE_JOB_LUA = `
+local quotaKey = KEYS[1]
+local jobKey = KEYS[2]
+local nowIso = ARGV[1]
+local nowMs = tonumber(ARGV[2])
+local requested = tonumber(ARGV[3])
+local quotaLimit = tonumber(ARGV[4])
+local quotaWindowHours = tonumber(ARGV[5])
+local jobJson = ARGV[6]
+
+if requested < 0 then
+  return {err="REQUESTED_IMAGES_NEGATIVE"}
+end
+
+local existingRaw = redis.call("GET", quotaKey)
+local windowStartAt = nowIso
+local windowStartAtEpochMs = nowMs
+local usedCount = 0
+
+if existingRaw then
+  local ok, existing = pcall(cjson.decode, existingRaw)
+  if ok and existing then
+    if type(existing.windowStartAt) == "string" and string.len(existing.windowStartAt) > 0 then
+      windowStartAt = existing.windowStartAt
+    end
+
+    if existing.windowStartAtEpochMs ~= nil then
+      local parsedWindowStartAtEpochMs = tonumber(existing.windowStartAtEpochMs)
+      if parsedWindowStartAtEpochMs ~= nil then
+        windowStartAtEpochMs = parsedWindowStartAtEpochMs
+      end
+    end
+
+    local parsedUsedCount = tonumber(existing.usedCount)
+    if parsedUsedCount ~= nil then
+      usedCount = parsedUsedCount
+    end
+  end
+end
+
+local quotaWindowMs = quotaWindowHours * 3600000
+if (nowMs - windowStartAtEpochMs) >= quotaWindowMs then
+  windowStartAt = nowIso
+  windowStartAtEpochMs = nowMs
+  usedCount = 0
+end
+
+local nextUsedCount = usedCount + requested
+if nextUsedCount > quotaLimit then
+  return {0, windowStartAt, tostring(usedCount), tostring(windowStartAtEpochMs + quotaWindowMs)}
+end
+
+redis.call("SET", quotaKey, cjson.encode({
+  windowStartAt = windowStartAt,
+  windowStartAtEpochMs = windowStartAtEpochMs,
+  usedCount = nextUsedCount
+}))
+redis.call("SET", jobKey, jobJson)
+
+return {1, windowStartAt, tostring(nextUsedCount), ""}
+`;
   private readonly redis: IORedis;
   private readonly now: () => Date;
   private closePromise: Promise<void> | null = null;
@@ -170,6 +233,68 @@ export class RedisJobRepository implements JobRepository {
   }
 
   async reserveQuotaAndCreateJob(input: {
+    subjectId: string;
+    requestedImages: number;
+    now: Date;
+    job: ImageJobRecord;
+    quotaLimit?: number;
+    quotaWindowHours?: number;
+  }): Promise<QuotaResult> {
+    try {
+      const quotaLimit = input.quotaLimit ?? FREE_PLAN_LIMIT;
+      const quotaWindowHours = input.quotaWindowHours ?? FREE_PLAN_WINDOW_HOURS;
+      const evalResult = await this.redis.eval(
+        RedisJobRepository.RESERVE_QUOTA_AND_CREATE_JOB_LUA,
+        2,
+        quotaKey(input.subjectId),
+        jobKey(input.job.id),
+        input.now.toISOString(),
+        String(input.now.getTime()),
+        String(input.requestedImages),
+        String(quotaLimit),
+        String(quotaWindowHours),
+        JSON.stringify(input.job)
+      ) as [number | string, string, string, string] | null;
+
+      if (Array.isArray(evalResult)) {
+        const allowedFlag = Number(evalResult[0]);
+        const windowStartAt = String(evalResult[1] || input.now.toISOString());
+        const usedCount = Number.parseInt(String(evalResult[2] || "0"), 10);
+        const nextWindowStartMs = Number.parseInt(String(evalResult[3] || "0"), 10);
+        const normalizedUsedCount = Number.isFinite(usedCount) ? usedCount : 0;
+
+        if (allowedFlag === 1) {
+          return {
+            allowed: true,
+            window: {
+              windowStartAt,
+              usedCount: normalizedUsedCount
+            }
+          };
+        }
+
+        return {
+          allowed: false,
+          window: {
+            windowStartAt,
+            usedCount: normalizedUsedCount
+          },
+          nextWindowStartAt: Number.isFinite(nextWindowStartMs) && nextWindowStartMs > 0
+            ? new Date(nextWindowStartMs).toISOString()
+            : undefined
+        };
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("REQUESTED_IMAGES_NEGATIVE")) {
+        throw new ValidationError("requestedImages must be non-negative");
+      }
+      // Fall through to optimistic locking fallback when Lua eval is unavailable.
+    }
+
+    return this.reserveQuotaAndCreateJobOptimistic(input);
+  }
+
+  private async reserveQuotaAndCreateJobOptimistic(input: {
     subjectId: string;
     requestedImages: number;
     now: Date;
