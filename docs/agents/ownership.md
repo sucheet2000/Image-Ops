@@ -26,7 +26,7 @@ Branch: `codex/agent-core-postgres`
 
 # Agent Ownership: Integration Test Harness
 
-Branch: `codex/agent-integration-tests`
+Branch: `codex/v1-processing-backend`
 
 ## Scope
 - Add docker-backed integration harness (Redis + MinIO + optional Postgres).
