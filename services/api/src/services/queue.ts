@@ -54,7 +54,7 @@ export class BullMqJobQueueService implements JobQueueService {
     const countsByQueue = await Promise.all(
       [...this.queues.values()].map((queue) => queue.getJobCounts("waiting", "active", "completed", "failed", "delayed"))
     );
-    const counts = countsByQueue.reduce(
+    const counts = countsByQueue.reduce<QueueMetrics>(
       (acc, item) => ({
         waiting: acc.waiting + (item.waiting || 0),
         active: acc.active + (item.active || 0),
@@ -64,13 +64,7 @@ export class BullMqJobQueueService implements JobQueueService {
       }),
       { waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }
     );
-    return {
-      waiting: counts.waiting,
-      active: counts.active,
-      completed: counts.completed,
-      failed: counts.failed,
-      delayed: counts.delayed
-    };
+    return counts;
   }
 
   async close(): Promise<void> {

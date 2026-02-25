@@ -40,7 +40,7 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
     this.breaker = new CircuitBreaker<[Buffer, string], BackgroundRemoveResult>(
       async (bytes, contentType) => this.callProvider(bytes, contentType),
       {
-        timeout: config.timeoutMs,
+        timeout: false,
         errorThresholdPercentage: 50,
         resetTimeout: 60000,
         volumeThreshold: 5
@@ -88,6 +88,17 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
     let lastError: unknown = null;
 
     while (attempt <= this.config.maxRetries) {
+      if (this.breaker.opened) {
+        const reason = "circuit open";
+        this.config.onRetry?.({
+          attempt: Math.max(1, attempt + 1),
+          maxRetries: this.config.maxRetries,
+          reason
+        });
+        lastError = reason;
+        break;
+      }
+
       attempt += 1;
       try {
         return await this.breaker.fire(input.bytes, input.contentType);
