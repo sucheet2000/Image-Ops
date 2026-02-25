@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 function randomBase64(size: number): string {
   const bytes = new Uint8Array(size);
   crypto.getRandomValues(bytes);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
+  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
   return btoa(binary);
 }
 
