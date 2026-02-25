@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { InMemoryAuthService } from "../../src/services/auth";
+import { buildUploadFormData } from "./helpers/upload-form";
 
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1";
 const apiBaseUrl = process.env.INTEGRATION_API_BASE_URL || "http://127.0.0.1:4000";
@@ -62,16 +63,18 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
     const uploadInit = await readJson<{
       objectKey: string;
       uploadUrl: string;
+      uploadFields: Record<string, string>;
       expiresAt: string;
     }>(uploadInitResponse);
     expect(uploadInit.objectKey).toContain(`tmp/${subjectId}/`);
     expect(uploadInit.uploadUrl.length).toBeGreaterThan(10);
     expect(uploadInit.expiresAt).toBeTruthy();
 
+    const uploadFormData = buildUploadFormData(uploadInit.uploadFields || {}, samplePngBytes, "sample.png", "image/png");
+
     const uploadResponse = await fetch(uploadInit.uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": "image/png" },
-      body: samplePngBytes
+      method: "POST",
+      body: uploadFormData
     });
     expect([200, 204]).toContain(uploadResponse.status);
 

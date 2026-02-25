@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { InMemoryAuthService } from "../../src/services/auth";
+import { buildUploadFormData } from "./helpers/upload-form";
 
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1";
 const apiBaseUrl = process.env.INTEGRATION_API_BASE_URL || "http://127.0.0.1:4000";
@@ -37,7 +38,7 @@ function bearerAuthHeaders(subjectId: string, plan: "free" | "pro" | "team" = "f
 async function initAndUploadObject(
   subjectId: string,
   authHeaders: Record<string, string>
-): Promise<{ objectKey: string; uploadUrl: string }> {
+): Promise<{ objectKey: string; uploadUrl: string; uploadFields: Record<string, string> }> {
   const initResponse = await fetch(`${apiBaseUrl}/api/uploads/init`, {
     method: "POST",
     headers: {
@@ -53,12 +54,13 @@ async function initAndUploadObject(
     })
   });
   expect(initResponse.status).toBe(201);
-  const initPayload = await readJson<{ objectKey: string; uploadUrl: string }>(initResponse);
+  const initPayload = await readJson<{ objectKey: string; uploadUrl: string; uploadFields: Record<string, string> }>(initResponse);
+
+  const uploadFormData = buildUploadFormData(initPayload.uploadFields || {}, samplePngBytes, "sample.png", "image/png");
 
   const uploadResponse = await fetch(initPayload.uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": "image/png" },
-    body: samplePngBytes
+    method: "POST",
+    body: uploadFormData
   });
   expect([200, 204]).toContain(uploadResponse.status);
 

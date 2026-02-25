@@ -38,15 +38,30 @@ UPLOAD_INIT_RESPONSE="$(curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "
 
 OBJECT_KEY="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.objectKey||"")' "${UPLOAD_INIT_RESPONSE}")"
 UPLOAD_URL="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(v.uploadUrl||"")' "${UPLOAD_INIT_RESPONSE}")"
-if [[ -z "${OBJECT_KEY}" || -z "${UPLOAD_URL}" ]]; then
-  echo "upload init did not return objectKey/uploadUrl"
+UPLOAD_FIELDS_JSON="$(node -e 'const v=JSON.parse(process.argv[1]);process.stdout.write(JSON.stringify(v.uploadFields||{}))' "${UPLOAD_INIT_RESPONSE}")"
+if [[ -z "${OBJECT_KEY}" || -z "${UPLOAD_URL}" || "${UPLOAD_FIELDS_JSON}" == "{}" ]]; then
+  echo "upload init did not return objectKey/uploadUrl/uploadFields"
   exit 1
 fi
 
 echo "==> upload object"
-UPLOAD_STATUS="$(curl -sS "${CURL_LONG[@]}" -o /dev/null -w "%{http_code}" -X PUT "${UPLOAD_URL}" \
-  -H "content-type: image/png" \
-  --data-binary @"${TMP_PNG}")"
+UPLOAD_FORM_ARGS=()
+while IFS= read -r -d '' field_key && IFS= read -r -d '' field_value; do
+  [[ -z "${field_key}" ]] && continue
+  if [[ ! "${field_key}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "invalid upload form field key: ${field_key}"
+    exit 1
+  fi
+  UPLOAD_FORM_ARGS+=(--form-string "${field_key}=${field_value}")
+done < <(node -e 'const fields=JSON.parse(process.argv[1]||"{}");for (const [k,v] of Object.entries(fields)) {process.stdout.write(k);process.stdout.write("\0");process.stdout.write(String(v));process.stdout.write("\0");}' "${UPLOAD_FIELDS_JSON}")
+
+HAS_CONTENT_TYPE_FIELD="$(node -e 'const fields=JSON.parse(process.argv[1]||"{}");process.stdout.write(Object.prototype.hasOwnProperty.call(fields,"Content-Type")?"1":"0");' "${UPLOAD_FIELDS_JSON}")"
+if [[ "${HAS_CONTENT_TYPE_FIELD}" != "1" ]]; then
+  UPLOAD_FORM_ARGS+=(--form-string "Content-Type=image/png")
+fi
+UPLOAD_FORM_ARGS+=(-F "file=@${TMP_PNG};type=image/png")
+
+UPLOAD_STATUS="$(curl -sS "${CURL_LONG[@]}" -o /dev/null -w "%{http_code}" -X POST "${UPLOAD_URL}" "${UPLOAD_FORM_ARGS[@]}")"
 if [[ "${UPLOAD_STATUS}" != "200" && "${UPLOAD_STATUS}" != "204" ]]; then
   echo "unexpected upload status: ${UPLOAD_STATUS}"
   exit 1
@@ -64,7 +79,7 @@ CREATE_JOB_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_JOB
 
 if [[ "${CREATE_JOB_STATUS}" == "401" ]]; then
   echo "jobs endpoint is auth-protected; set API_BEARER_TOKEN (or STAGING_API_BEARER_TOKEN) and rerun for full smoke"
-  echo "partial smoke passed: health + upload init/put/complete"
+  echo "partial smoke passed: health + upload init/upload/complete"
   exit 0
 fi
 

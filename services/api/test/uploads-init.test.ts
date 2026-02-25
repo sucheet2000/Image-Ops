@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("POST /api/uploads/init", () => {
-  it("returns object key and signed upload URL", async () => {
+  it("returns object key and signed upload POST policy", async () => {
     const services = createFakeServices();
     const server = await startApiTestServer({ ...services, config: createTestConfig() });
     closers.push(server.close);
@@ -36,6 +36,9 @@ describe("POST /api/uploads/init", () => {
     const payload = await response.json();
     expect(payload.objectKey).toContain("tmp/seller_1/input/2026/02/23/resize/");
     expect(payload.uploadUrl).toContain(encodeURIComponent(payload.objectKey));
+    expect(payload.uploadFields).toBeTruthy();
+    expect(payload.uploadFields.key).toBe(payload.objectKey);
+    expect(payload.uploadFields["Content-Type"]).toBe("image/jpeg");
     expect(payload.tempStorageOnly).toBe(true);
     expect(payload.imageStoredInDatabase).toBe(false);
     expect(new Date(payload.expiresAt).getTime()).toBeGreaterThan(new Date("2026-02-23T00:00:00.000Z").getTime());
