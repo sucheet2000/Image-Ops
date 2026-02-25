@@ -31,7 +31,7 @@ export function createTestConfig(): ApiConfig {
     apiWriteRateLimitMax: 1000,
     signedUploadTtlSeconds: 300,
     signedDownloadTtlSeconds: 300,
-    tempObjectTtlMinutes: 30,
+    tempObjectTtlSeconds: 30 * 60,
     cleanupIdempotencyTtlSeconds: 3600,
     billingCheckoutTtlSeconds: 900,
     freePlanLimit: 6,

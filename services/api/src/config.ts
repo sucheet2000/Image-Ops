@@ -39,7 +39,7 @@ const envSchema = z.object({
   API_WRITE_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(120),
   SIGNED_UPLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
   SIGNED_DOWNLOAD_TTL_SECONDS: z.coerce.number().int().positive().default(300),
-  TEMP_OBJECT_TTL_MINUTES: z.coerce.number().int().positive().default(30),
+  TEMP_OBJECT_TTL_SECONDS: z.coerce.number().int().positive().default(30 * 60),
   CLEANUP_IDEMPOTENCY_TTL_SECONDS: z.coerce.number().int().positive().default(24 * 60 * 60),
   BILLING_CHECKOUT_TTL_SECONDS: z.coerce.number().int().positive().default(15 * 60),
   FREE_PLAN_LIMIT: z.coerce.number().int().positive().default(6),
@@ -181,7 +181,7 @@ export type ApiConfig = {
   apiWriteRateLimitMax: number;
   signedUploadTtlSeconds: number;
   signedDownloadTtlSeconds: number;
-  tempObjectTtlMinutes: number;
+  tempObjectTtlSeconds: number;
   cleanupIdempotencyTtlSeconds: number;
   billingCheckoutTtlSeconds: number;
   freePlanLimit: number;
@@ -243,7 +243,7 @@ export function loadApiConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     apiWriteRateLimitMax: parsed.API_WRITE_RATE_LIMIT_MAX,
     signedUploadTtlSeconds: parsed.SIGNED_UPLOAD_TTL_SECONDS,
     signedDownloadTtlSeconds: parsed.SIGNED_DOWNLOAD_TTL_SECONDS,
-    tempObjectTtlMinutes: parsed.TEMP_OBJECT_TTL_MINUTES,
+    tempObjectTtlSeconds: parsed.TEMP_OBJECT_TTL_SECONDS,
     cleanupIdempotencyTtlSeconds: parsed.CLEANUP_IDEMPOTENCY_TTL_SECONDS,
     billingCheckoutTtlSeconds: parsed.BILLING_CHECKOUT_TTL_SECONDS,
     freePlanLimit: parsed.FREE_PLAN_LIMIT,

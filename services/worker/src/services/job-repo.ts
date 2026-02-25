@@ -66,12 +66,21 @@ export class RedisWorkerJobRepository implements WorkerJobRepository {
     const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      outputObjectKey: input.outputObjectKey,
-      outputMime: input.outputMime,
-      errorCode: input.errorCode,
-      errorMessage: input.errorMessage,
       updatedAt: input.updatedAt
     };
+
+    if (input.outputObjectKey !== undefined) {
+      updated.outputObjectKey = input.outputObjectKey;
+    }
+    if (input.outputMime !== undefined) {
+      updated.outputMime = input.outputMime;
+    }
+    if (input.errorCode !== undefined) {
+      updated.errorCode = input.errorCode;
+    }
+    if (input.errorMessage !== undefined) {
+      updated.errorMessage = input.errorMessage;
+    }
 
     await this.redis.set(jobKey(input.id), JSON.stringify(updated));
   }
@@ -123,15 +132,26 @@ export class InMemoryWorkerJobRepository implements WorkerJobRepository {
       return;
     }
 
-    this.jobs.set(input.id, {
+    const updated: ImageJobRecord = {
       ...existing,
       status: input.status,
-      outputObjectKey: input.outputObjectKey,
-      outputMime: input.outputMime,
-      errorCode: input.errorCode,
-      errorMessage: input.errorMessage,
       updatedAt: input.updatedAt
-    });
+    };
+
+    if (input.outputObjectKey !== undefined) {
+      updated.outputObjectKey = input.outputObjectKey;
+    }
+    if (input.outputMime !== undefined) {
+      updated.outputMime = input.outputMime;
+    }
+    if (input.errorCode !== undefined) {
+      updated.errorCode = input.errorCode;
+    }
+    if (input.errorMessage !== undefined) {
+      updated.errorMessage = input.errorMessage;
+    }
+
+    this.jobs.set(input.id, updated);
   }
 
   async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
