@@ -9,10 +9,11 @@ fi
 BASE_URL="${STAGING_API_BASE_URL%/}"
 CURL_LONG=(--connect-timeout 5 --max-time 30)
 CURL_POLL=(--connect-timeout 5 --max-time 10)
+BEARER_TOKEN="${API_BEARER_TOKEN:-${STAGING_API_BEARER_TOKEN:-}}"
 
 curl_with_optional_auth() {
-  if [[ -n "${API_BEARER_TOKEN:-}" ]]; then
-    curl "$@" -H "authorization: Bearer ${API_BEARER_TOKEN}"
+  if [[ -n "${BEARER_TOKEN}" ]]; then
+    curl "$@" -H "authorization: Bearer ${BEARER_TOKEN}"
     return
   fi
 
@@ -31,7 +32,7 @@ printf '%s' "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwM
 PNG_SIZE="$(wc -c <"${TMP_PNG}" | tr -d ' ')"
 
 echo "==> init upload"
-UPLOAD_INIT_RESPONSE="$(curl -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/init" \
+UPLOAD_INIT_RESPONSE="$(curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/init" \
   -H "content-type: application/json" \
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"tool\":\"resize\",\"filename\":\"smoke.png\",\"mime\":\"image/png\",\"size\":${PNG_SIZE}}")"
 
@@ -62,7 +63,7 @@ CREATE_JOB_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_JOB
   -d "{\"subjectId\":\"${SUBJECT_ID}\",\"plan\":\"free\",\"tool\":\"resize\",\"inputObjectKey\":\"${OBJECT_KEY}\",\"options\":{\"width\":1,\"height\":1}}")"
 
 if [[ "${CREATE_JOB_STATUS}" == "401" ]]; then
-  echo "jobs endpoint is auth-protected; set API_BEARER_TOKEN and rerun for full smoke"
+  echo "jobs endpoint is auth-protected; set API_BEARER_TOKEN (or STAGING_API_BEARER_TOKEN) and rerun for full smoke"
   echo "partial smoke passed: health + upload init/put/complete"
   exit 0
 fi

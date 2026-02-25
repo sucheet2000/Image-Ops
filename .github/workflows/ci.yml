@@ -97,7 +97,10 @@ jobs:
       - name: Run staging smoke contract against integration stack
         env:
           STAGING_API_BASE_URL: "http://127.0.0.1:4000"
-        run: npm run smoke:staging
+          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
+        run: |
+          API_BEARER_TOKEN="$(node -e 'const jwt=require("jsonwebtoken"); const now=Math.floor(Date.now()/1000); process.stdout.write(jwt.sign({sub:"ci_smoke", plan:"free", iat:now, exp:now+3600}, process.env.INTEGRATION_AUTH_TOKEN_SECRET, { algorithm:"HS256", noTimestamp:true }));')"
+          STAGING_API_BASE_URL="${STAGING_API_BASE_URL}" API_BEARER_TOKEN="${API_BEARER_TOKEN}" npm run smoke:staging
       - name: Dump service logs
         if: always()
         run: |
