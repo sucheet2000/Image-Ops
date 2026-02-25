@@ -1,5 +1,13 @@
 import { TOKEN_KEY } from "./storage-keys";
 
+type RefreshPayload = {
+  token: string;
+  profile?: {
+    subjectId?: string;
+    plan?: "free" | "pro" | "team";
+  };
+};
+
 export function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 }
@@ -54,9 +62,9 @@ export function clearApiToken(): void {
   safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
-async function refreshApiToken(): Promise<string | null> {
+export async function refreshApiToken(apiBaseUrl = getApiBaseUrl()): Promise<RefreshPayload | null> {
   try {
-    const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
+    const response = await fetch(`${apiBaseUrl}/api/auth/refresh`, {
       method: "POST",
       credentials: "include"
     });
@@ -65,17 +73,28 @@ async function refreshApiToken(): Promise<string | null> {
       return null;
     }
 
-    const payload = await response.json() as { token?: string };
+    const payload = await response.json() as RefreshPayload;
     if (!payload.token) {
       clearApiToken();
       return null;
     }
 
     setApiToken(payload.token);
-    return payload.token;
+    return payload;
   } catch {
     clearApiToken();
     return null;
+  }
+}
+
+let isRefreshing = false;
+let refreshQueue: Array<(token: string | null) => void> = [];
+
+function flushRefreshQueue(token: string | null): void {
+  const queued = refreshQueue;
+  refreshQueue = [];
+  for (const resolve of queued) {
+    resolve(token);
   }
 }
 
@@ -96,16 +115,43 @@ export async function apiFetch(input: string, init: RequestInit = {}, retryOnUna
     return response;
   }
 
-  const refreshed = await refreshApiToken();
-  if (!refreshed) {
-    return response;
+  if (isRefreshing) {
+    return new Promise<Response>((resolve, reject) => {
+      refreshQueue.push((queuedToken) => {
+        if (!queuedToken) {
+          resolve(response);
+          return;
+        }
+
+        const retryHeaders = new Headers(init.headers || {});
+        retryHeaders.set("authorization", `Bearer ${queuedToken}`);
+        fetch(input, {
+          ...init,
+          credentials: init.credentials || "include",
+          headers: retryHeaders
+        }).then(resolve).catch(reject);
+      });
+    });
   }
 
-  const retryHeaders = new Headers(init.headers || {});
-  retryHeaders.set("authorization", `Bearer ${refreshed}`);
-  return fetch(input, {
-    ...init,
-    credentials: init.credentials || "include",
-    headers: retryHeaders
-  });
+  isRefreshing = true;
+  try {
+    const refreshed = await refreshApiToken();
+    const refreshedToken = refreshed?.token || null;
+    flushRefreshQueue(refreshedToken);
+
+    if (!refreshedToken) {
+      return response;
+    }
+
+    const retryHeaders = new Headers(init.headers || {});
+    retryHeaders.set("authorization", `Bearer ${refreshedToken}`);
+    return fetch(input, {
+      ...init,
+      credentials: init.credentials || "include",
+      headers: retryHeaders
+    });
+  } finally {
+    isRefreshing = false;
+  }
 }

@@ -5,6 +5,7 @@ import { Cormorant_Garamond, Josefin_Sans, Playfair_Display } from "next/font/go
 import MagneticCursor from "../components/cursor/MagneticCursor";
 import SmoothScrollProvider from "../components/layout/SmoothScrollProvider";
 import { EditorialChrome } from "./components/editorial-chrome";
+import { AuthProvider } from "./components/providers/auth-provider";
 import { getBaseUrl } from "./lib/seo-data";
 
 const baseUrl = getBaseUrl();
@@ -51,7 +52,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${displayFont.variable} ${bodyFont.variable} ${uiFont.variable}`}>
         <SmoothScrollProvider>
           <EditorialChrome />
-          <main className="site-main">{children}</main>
+          <AuthProvider>
+            <main className="site-main">{children}</main>
+          </AuthProvider>
           <footer className="editorial-footer">
             <div className="section-inner">
               <span className="site-logo">ImageOps</span>

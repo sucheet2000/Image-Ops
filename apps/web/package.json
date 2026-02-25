@@ -12,11 +12,13 @@
     "@studio-freight/lenis": "^1.0.42",
     "framer-motion": "^12.34.3",
     "next": "15.1.0",
+    "piexifjs": "^1.0.6",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@types/node": "22.10.1",
+    "@types/piexifjs": "^1.0.0",
     "@types/react": "19.0.1",
     "typescript": "5.7.2"
   }
