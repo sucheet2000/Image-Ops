@@ -91,6 +91,7 @@ jobs:
           RUN_INTEGRATION_TESTS: "1"
           INTEGRATION_API_BASE_URL: "http://127.0.0.1:4000"
           INTEGRATION_JOB_TIMEOUT_MS: "30000"
+          INTEGRATION_AUTH_TOKEN_SECRET: "wM/JKw7HTEis2vmpoiaH7p6UgEENww7fKAnUlWXCoDc="
           BILLING_WEBHOOK_SECRET: "dev-webhook-secret"
         run: npm run test:integration:api
       - name: Run staging smoke contract against integration stack
