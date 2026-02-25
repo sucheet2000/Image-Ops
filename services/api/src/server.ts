@@ -43,7 +43,7 @@ export type ApiRuntime = {
 const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred.";
 const METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
 const REQUEST_ID_MAX_LENGTH = 128;
-const REQUEST_ID_PATTERN = /^[A-Za-z0-9-]+$/;
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]+$/;
 
 type ReadyCheck = {
   status: "ok" | "error";
