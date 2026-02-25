@@ -1,19 +1,19 @@
-import { describe, expect, it, vi } from "vitest";
-import { createApiApp, createApiRuntime } from "../src/server";
-import type { JobRepository } from "../src/services/job-repo";
-import type { JobQueueService } from "../src/services/queue";
-import type { ObjectStorageService } from "../src/services/storage";
-import { createTestConfig } from "./helpers/fakes";
+import { describe, expect, it, vi } from 'vitest';
+import { createApiApp, createApiRuntime } from '../src/server';
+import type { JobRepository } from '../src/services/job-repo';
+import type { JobQueueService } from '../src/services/queue';
+import type { ObjectStorageService } from '../src/services/storage';
+import { createTestConfig } from './helpers/fakes';
 
-describe("API runtime wiring", () => {
-  it("returns resolved dependencies for lifecycle management", async () => {
+describe('API runtime wiring', () => {
+  it('returns resolved dependencies for lifecycle management', async () => {
     const queueClose = vi.fn().mockResolvedValue(undefined);
     const repoClose = vi.fn().mockResolvedValue(undefined);
     const storageClose = vi.fn().mockResolvedValue(undefined);
 
     const queue: JobQueueService = {
       enqueue: vi.fn().mockResolvedValue(undefined),
-      close: queueClose
+      close: queueClose,
     };
     const jobRepo: JobRepository = {
       getQuotaWindow: vi.fn().mockResolvedValue(null),
@@ -36,25 +36,27 @@ describe("API runtime wiring", () => {
       listBillingWebhookEvents: vi.fn().mockResolvedValue([]),
       getCleanupIdempotency: vi.fn().mockResolvedValue(null),
       setCleanupIdempotency: vi.fn().mockResolvedValue(undefined),
+      getBillingReconcileIdempotency: vi.fn().mockResolvedValue(null),
+      setBillingReconcileIdempotency: vi.fn().mockResolvedValue(undefined),
       appendDeletionAudit: vi.fn().mockResolvedValue(undefined),
       listDeletionAudit: vi.fn().mockResolvedValue([]),
-      close: repoClose
+      close: repoClose,
     };
     const storage: ObjectStorageService = {
       createPresignedUploadUrl: vi.fn().mockResolvedValue({
-        url: "https://upload.example",
-        fields: {}
+        url: 'https://upload.example',
+        fields: {},
       }),
-      createPresignedDownloadUrl: vi.fn().mockResolvedValue("https://download.example"),
+      createPresignedDownloadUrl: vi.fn().mockResolvedValue('https://download.example'),
       getObjectBuffer: vi.fn().mockResolvedValue({
-        bytes: Buffer.from("test"),
-        contentType: "image/png"
+        bytes: Buffer.from('test'),
+        contentType: 'image/png',
       }),
       headObject: vi.fn().mockResolvedValue({ exists: false }),
       deleteObjects: vi.fn().mockResolvedValue({ deleted: [], notFound: [] }),
-      close: storageClose
+      close: storageClose,
     };
-    const now = () => new Date("2026-02-23T00:00:00.000Z");
+    const now = () => new Date('2026-02-23T00:00:00.000Z');
 
     const runtime = createApiRuntime({ config: createTestConfig(), queue, jobRepo, storage, now });
 
@@ -72,12 +74,12 @@ describe("API runtime wiring", () => {
     expect(storageClose).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps createApiApp compatibility by returning only the express app", () => {
+  it('keeps createApiApp compatibility by returning only the express app', () => {
     const app = createApiApp({
       config: createTestConfig(),
       queue: {
         enqueue: async () => undefined,
-        close: async () => undefined
+        close: async () => undefined,
       },
       jobRepo: {
         getQuotaWindow: async () => null,
@@ -100,26 +102,28 @@ describe("API runtime wiring", () => {
         listBillingWebhookEvents: async () => [],
         getCleanupIdempotency: async () => null,
         setCleanupIdempotency: async () => undefined,
+        getBillingReconcileIdempotency: async () => null,
+        setBillingReconcileIdempotency: async () => undefined,
         appendDeletionAudit: async () => undefined,
         listDeletionAudit: async () => [],
-        close: async () => undefined
+        close: async () => undefined,
       },
       storage: {
         createPresignedUploadUrl: async () => ({
-          url: "https://upload.example",
-          fields: {}
+          url: 'https://upload.example',
+          fields: {},
         }),
-        createPresignedDownloadUrl: async () => "https://download.example",
+        createPresignedDownloadUrl: async () => 'https://download.example',
         getObjectBuffer: async () => ({
-          bytes: Buffer.from("test"),
-          contentType: "image/png"
+          bytes: Buffer.from('test'),
+          contentType: 'image/png',
         }),
         headObject: async () => ({ exists: false }),
         deleteObjects: async () => ({ deleted: [], notFound: [] }),
-        close: async () => undefined
-      }
+        close: async () => undefined,
+      },
     });
 
-    expect(typeof app.listen).toBe("function");
+    expect(typeof app.listen).toBe('function');
   });
 });

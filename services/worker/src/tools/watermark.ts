@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp from 'sharp';
 
 /**
  * Escape special XML characters in a string for safe inclusion in XML or SVG content.
@@ -8,11 +8,11 @@ import sharp from "sharp";
  */
 function escapeXml(value: string): string {
   return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&apos;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 /**
@@ -32,7 +32,7 @@ export async function applyWatermark(input: {
   const metadata = await image.metadata();
   const width = metadata.width || 1200;
   const height = metadata.height || 800;
-  const label = escapeXml(input.label || "Image Ops");
+  const label = escapeXml(input.label || 'Image Ops');
 
   const watermarkSvg = `
     <svg width="${width}" height="${height}">
@@ -47,6 +47,6 @@ export async function applyWatermark(input: {
 
   return {
     bytes: composited,
-    contentType: input.contentType
+    contentType: input.contentType,
   };
 }
