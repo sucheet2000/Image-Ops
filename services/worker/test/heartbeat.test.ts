@@ -6,7 +6,7 @@ describe("startWorkerHeartbeat", () => {
     vi.useRealTimers();
   });
 
-  it("emits heartbeat payloads on interval and stops cleanly", () => {
+  it("emits heartbeat payloads on interval and stops cleanly", async () => {
     vi.useFakeTimers();
     let uptime = 10;
     const events: WorkerHeartbeatPayload[] = [];
@@ -28,7 +28,7 @@ describe("startWorkerHeartbeat", () => {
       }
     });
 
-    vi.advanceTimersByTime(3000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(events).toHaveLength(3);
     expect(events[0]).toEqual({
       event: "worker.heartbeat",
@@ -41,7 +41,7 @@ describe("startWorkerHeartbeat", () => {
     expect(redis.set).toHaveBeenCalledWith("worker:heartbeat:worker-123", "2026-02-24T00:00:00.000Z", "EX", 90);
 
     stop();
-    vi.advanceTimersByTime(2000);
+    await vi.advanceTimersByTimeAsync(2000);
     expect(events).toHaveLength(3);
   });
 });

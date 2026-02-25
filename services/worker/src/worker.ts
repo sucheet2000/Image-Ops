@@ -12,7 +12,7 @@ const config = loadWorkerConfig();
 const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS || 10000);
 const WORKER_ID = process.env.HOSTNAME ?? `worker-${process.pid}`;
-const HEARTBEAT_TTL_SECONDS = Math.max(2, Math.ceil((config.workerHeartbeatIntervalMs / 1000) * 1.5));
+const HEARTBEAT_TTL_SECONDS = Math.max(2, Math.ceil((config.workerHeartbeatIntervalMs / 1000) * 2));
 
 const storage = new S3WorkerStorageService(config);
 const jobRepo: WorkerJobRepository = config.jobRepoDriver === "postgres"
@@ -32,6 +32,10 @@ const bgRemoveProvider = new HttpBackgroundRemoveProvider({
     }
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ event, workerId: WORKER_ID }));
+  },
+  onCircuitOpen: ({ reason }) => {
+    // eslint-disable-next-line no-console
+    console.error(JSON.stringify({ event: "worker.bg_remove_breaker.precheck_open", workerId: WORKER_ID, reason }));
   }
 });
 
@@ -59,11 +63,27 @@ const workers = workerDefinitions.map(({ queueName, concurrency }) =>
   )
 );
 
+const readyQueues = new Set<string>();
+let bootLogged = false;
+
 workers.forEach((worker, index) => {
   const { queueName, concurrency } = workerDefinitions[index];
   worker.on("ready", () => {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify({ event: "worker.ready", workerId: WORKER_ID, queue: queueName, concurrency }));
+
+    readyQueues.add(queueName);
+    if (!bootLogged && readyQueues.size === workerDefinitions.length) {
+      bootLogged = true;
+      // eslint-disable-next-line no-console
+      console.log(
+        JSON.stringify({
+          event: "worker.boot",
+          workerId: WORKER_ID,
+          queues: workerDefinitions.map((entry) => ({ queue: entry.queueName, concurrency: entry.concurrency }))
+        })
+      );
+    }
   });
 
   worker.on("completed", (job) => {
@@ -103,15 +123,6 @@ const stopHeartbeat = startWorkerHeartbeat({
 async function closeWorkers(): Promise<void> {
   await Promise.all(workers.map((worker) => worker.close()));
 }
-
-// eslint-disable-next-line no-console
-console.log(
-  JSON.stringify({
-    event: "worker.boot",
-    workerId: WORKER_ID,
-    queues: workerDefinitions.map((entry) => ({ queue: entry.queueName, concurrency: entry.concurrency }))
-  })
-);
 
 async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;

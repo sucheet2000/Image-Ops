@@ -68,11 +68,16 @@ const envSchema = z.object({
     });
   }
 
-  if (value.WORKER_FAST_CONCURRENCY < value.WORKER_SLOW_CONCURRENCY
-    || value.WORKER_SLOW_CONCURRENCY < value.WORKER_BULK_CONCURRENCY) {
+  if (value.WORKER_FAST_CONCURRENCY < value.WORKER_SLOW_CONCURRENCY) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["WORKER_FAST_CONCURRENCY"],
+      message: "WORKER_FAST_CONCURRENCY >= WORKER_SLOW_CONCURRENCY >= WORKER_BULK_CONCURRENCY is required"
+    });
+  } else if (value.WORKER_SLOW_CONCURRENCY < value.WORKER_BULK_CONCURRENCY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["WORKER_SLOW_CONCURRENCY"],
       message: "WORKER_FAST_CONCURRENCY >= WORKER_SLOW_CONCURRENCY >= WORKER_BULK_CONCURRENCY is required"
     });
   }
