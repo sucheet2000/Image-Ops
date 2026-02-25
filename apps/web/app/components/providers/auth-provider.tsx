@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getApiBaseUrl, refreshApiToken } from "../../lib/api-client";
 import { setViewerPlan, setViewerSubjectId } from "../../lib/session";
 
@@ -16,31 +16,43 @@ function shouldGuardPath(pathname: string | null): boolean {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
   const guarded = shouldGuardPath(pathname);
   const [ready, setReady] = useState(!guarded);
+  const [authorized, setAuthorized] = useState(!guarded);
 
   useEffect(() => {
     if (!guarded) {
+      setAuthorized(true);
       setReady(true);
       return;
     }
 
     let cancelled = false;
     setReady(false);
+    setAuthorized(false);
 
     void (async () => {
       try {
         const payload = await refreshApiToken(apiBaseUrl);
-        if (cancelled || !payload) {
+        if (cancelled) {
           return;
         }
+
+        if (!payload) {
+          setViewerPlan("free");
+          router.replace(`/login?next=${encodeURIComponent(pathname || "/")}`);
+          return;
+        }
+
         if (payload.profile?.subjectId) {
           setViewerSubjectId(payload.profile.subjectId);
         }
         if (payload.profile?.plan) {
           setViewerPlan(payload.profile.plan);
         }
+        setAuthorized(true);
       } finally {
         if (!cancelled) {
           setReady(true);
@@ -51,13 +63,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [apiBaseUrl, guarded]);
+  }, [apiBaseUrl, guarded, pathname, router]);
 
-  if (!ready) {
+  if (!ready || (guarded && !authorized)) {
     return (
       <main className="app-page">
         <section className="page-shell">
-          <p className="workbench-meta">Restoring secure session...</p>
+          <p className="workbench-meta">{guarded ? "Restoring secure session..." : "Loading..."}</p>
         </section>
       </main>
     );
