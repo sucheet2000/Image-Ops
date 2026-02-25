@@ -15,6 +15,7 @@ type OutputFormat = "jpeg" | "png" | "webp";
 type UploadInitResponse = {
   objectKey: string;
   uploadUrl: string;
+  uploadFields: Record<string, string>;
 };
 
 type UploadCompleteResponse = {
@@ -253,14 +254,22 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
       setLastInputKey(uploadInit.objectKey);
 
       setStatusText("Uploading binary");
+      const uploadFormData = new FormData();
+      for (const [key, value] of Object.entries(uploadInit.uploadFields || {})) {
+        uploadFormData.append(key, value);
+      }
+      if (!uploadInit.uploadFields?.["Content-Type"]) {
+        uploadFormData.append("Content-Type", mime);
+      }
+      uploadFormData.append("file", file);
+
       const uploadPutResponse = await fetch(uploadInit.uploadUrl, {
-        method: "PUT",
-        headers: { "content-type": mime },
-        body: file
+        method: "POST",
+        body: uploadFormData
       });
 
       if (!uploadPutResponse.ok) {
-        throw new Error(`Upload PUT failed (${uploadPutResponse.status}). Verify storage endpoint configuration.`);
+        throw new Error(`Upload POST failed (${uploadPutResponse.status}). Verify storage endpoint configuration.`);
       }
 
       setStatusText("Finalizing upload");

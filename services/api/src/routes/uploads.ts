@@ -205,7 +205,7 @@ export function registerUploadsRoutes(
     const extension = selectExtension(payload.filename, mime);
     const objectKey = `${prefix}/${ulid(deps.now().getTime())}.${extension}`;
 
-    const uploadUrl = await deps.storage.createPresignedUploadUrl({
+    const presignedUpload = await deps.storage.createPresignedUploadUrl({
       objectKey,
       contentType: mime,
       expiresInSeconds: deps.config.signedUploadTtlSeconds,
@@ -216,7 +216,8 @@ export function registerUploadsRoutes(
 
     res.status(201).json({
       objectKey,
-      uploadUrl,
+      uploadUrl: presignedUpload.url,
+      uploadFields: presignedUpload.fields,
       expiresAt,
       tempStorageOnly: true,
       imageStoredInDatabase: false

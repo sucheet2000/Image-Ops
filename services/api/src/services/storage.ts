@@ -2,9 +2,9 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  PutObjectCommand,
   S3Client
 } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { AppError, NotFoundError, ValidationError } from "@imageops/core";
 import type { ApiConfig } from "../config";
@@ -22,13 +22,18 @@ export type DeleteObjectsResult = {
   notFound: string[];
 };
 
+export type PresignedUploadPost = {
+  url: string;
+  fields: Record<string, string>;
+};
+
 export interface ObjectStorageService {
   createPresignedUploadUrl(input: {
     objectKey: string;
     contentType: string;
     expiresInSeconds: number;
     maxSizeBytes: number;
-  }): Promise<string>;
+  }): Promise<PresignedUploadPost>;
   createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string>;
   getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
@@ -70,17 +75,24 @@ export class S3ObjectStorageService implements ObjectStorageService {
     contentType: string;
     expiresInSeconds: number;
     maxSizeBytes: number;
-  }): Promise<string> {
-    // Presigned PUT URLs cannot enforce content-length-range; validate size server-side during upload completion/job creation.
-    void input.maxSizeBytes;
-
-    const command = new PutObjectCommand({
+  }): Promise<PresignedUploadPost> {
+    const presigned = await createPresignedPost(this.presignClient, {
       Bucket: this.bucket,
       Key: input.objectKey,
-      ContentType: input.contentType
+      Fields: {
+        "Content-Type": input.contentType
+      },
+      Conditions: [
+        ["content-length-range", 1, input.maxSizeBytes],
+        ["starts-with", "$Content-Type", "image/"]
+      ],
+      Expires: input.expiresInSeconds
     });
 
-    return getSignedUrl(this.presignClient, command, { expiresIn: input.expiresInSeconds });
+    return {
+      url: presigned.url,
+      fields: presigned.fields
+    };
   }
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {
@@ -176,8 +188,14 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
     contentType: string;
     expiresInSeconds: number;
     maxSizeBytes: number;
-  }): Promise<string> {
-    return `https://memory.storage/upload/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}&contentType=${encodeURIComponent(input.contentType)}&maxSizeBytes=${input.maxSizeBytes}`;
+  }): Promise<PresignedUploadPost> {
+    return {
+      url: `https://memory.storage/upload/${encodeURIComponent(input.objectKey)}?ttl=${input.expiresInSeconds}&maxSizeBytes=${input.maxSizeBytes}`,
+      fields: {
+        key: input.objectKey,
+        "Content-Type": input.contentType
+      }
+    };
   }
 
   async createPresignedDownloadUrl(input: { objectKey: string; expiresInSeconds: number }): Promise<string> {

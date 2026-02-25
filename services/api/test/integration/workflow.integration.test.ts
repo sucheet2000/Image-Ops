@@ -62,16 +62,25 @@ describe.skipIf(!shouldRun)("integration workflow", () => {
     const uploadInit = await readJson<{
       objectKey: string;
       uploadUrl: string;
+      uploadFields: Record<string, string>;
       expiresAt: string;
     }>(uploadInitResponse);
     expect(uploadInit.objectKey).toContain(`tmp/${subjectId}/`);
     expect(uploadInit.uploadUrl.length).toBeGreaterThan(10);
     expect(uploadInit.expiresAt).toBeTruthy();
 
+    const uploadFormData = new FormData();
+    for (const [key, value] of Object.entries(uploadInit.uploadFields || {})) {
+      uploadFormData.append(key, value);
+    }
+    if (!uploadInit.uploadFields?.["Content-Type"]) {
+      uploadFormData.append("Content-Type", "image/png");
+    }
+    uploadFormData.append("file", new Blob([samplePngBytes], { type: "image/png" }), "sample.png");
+
     const uploadResponse = await fetch(uploadInit.uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": "image/png" },
-      body: samplePngBytes
+      method: "POST",
+      body: uploadFormData
     });
     expect([200, 204]).toContain(uploadResponse.status);
 

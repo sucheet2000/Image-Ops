@@ -41,8 +41,15 @@ describe("API runtime wiring", () => {
       close: repoClose
     };
     const storage: ObjectStorageService = {
-      createPresignedUploadUrl: vi.fn().mockResolvedValue("https://upload.example"),
+      createPresignedUploadUrl: vi.fn().mockResolvedValue({
+        url: "https://upload.example",
+        fields: {}
+      }),
       createPresignedDownloadUrl: vi.fn().mockResolvedValue("https://download.example"),
+      getObjectBuffer: vi.fn().mockResolvedValue({
+        bytes: Buffer.from("test"),
+        contentType: "image/png"
+      }),
       headObject: vi.fn().mockResolvedValue({ exists: false }),
       deleteObjects: vi.fn().mockResolvedValue({ deleted: [], notFound: [] }),
       close: storageClose
@@ -98,8 +105,15 @@ describe("API runtime wiring", () => {
         close: async () => undefined
       },
       storage: {
-        createPresignedUploadUrl: async () => "https://upload.example",
+        createPresignedUploadUrl: async () => ({
+          url: "https://upload.example",
+          fields: {}
+        }),
         createPresignedDownloadUrl: async () => "https://download.example",
+        getObjectBuffer: async () => ({
+          bytes: Buffer.from("test"),
+          contentType: "image/png"
+        }),
         headObject: async () => ({ exists: false }),
         deleteObjects: async () => ({ deleted: [], notFound: [] }),
         close: async () => undefined
