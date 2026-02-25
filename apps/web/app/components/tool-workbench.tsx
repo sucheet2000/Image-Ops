@@ -263,13 +263,13 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
       }
       uploadFormData.append("file", file);
 
-      const uploadPutResponse = await fetch(uploadInit.uploadUrl, {
+      const uploadPostResponse = await fetch(uploadInit.uploadUrl, {
         method: "POST",
         body: uploadFormData
       });
 
-      if (!uploadPutResponse.ok) {
-        throw new Error(`Upload POST failed (${uploadPutResponse.status}). Verify storage endpoint configuration.`);
+      if (!uploadPostResponse.ok) {
+        throw new Error(`Upload POST failed (${uploadPostResponse.status}). Verify storage endpoint configuration.`);
       }
 
       setStatusText("Finalizing upload");

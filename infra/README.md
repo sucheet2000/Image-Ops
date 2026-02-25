@@ -5,7 +5,7 @@
 - Block all public access: enabled.
 - Public bucket ACLs: disabled (no public ACL).
 - CORS: allow `POST` from `WEB_ORIGIN` only and expose `ETag`.
-- Lifecycle: expire objects under `uploads/` after 1 day (24 hours).
+- Lifecycle: expire objects under `tmp/` after 1 day (24 hours).
 
 Example CORS rule:
 
@@ -29,7 +29,7 @@ Example lifecycle rule:
     {
       "ID": "expire-abandoned-uploads",
       "Status": "Enabled",
-      "Filter": { "Prefix": "uploads/" },
+      "Filter": { "Prefix": "tmp/" },
       "Expiration": { "Days": 1 }
     }
   ]

@@ -84,7 +84,7 @@ export class S3ObjectStorageService implements ObjectStorageService {
       },
       Conditions: [
         ["content-length-range", 1, input.maxSizeBytes],
-        ["starts-with", "$Content-Type", "image/"]
+        { "Content-Type": input.contentType }
       ],
       Expires: input.expiresInSeconds
     });

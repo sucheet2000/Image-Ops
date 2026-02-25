@@ -1,6 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { InMemoryAuthService } from "../../src/services/auth";
+import { buildUploadFormData } from "./helpers/upload-form";
 
 const shouldRun = process.env.RUN_INTEGRATION_TESTS === "1";
 const apiBaseUrl = process.env.INTEGRATION_API_BASE_URL || "http://127.0.0.1:4000";
@@ -55,14 +56,7 @@ async function initAndUploadObject(
   expect(initResponse.status).toBe(201);
   const initPayload = await readJson<{ objectKey: string; uploadUrl: string; uploadFields: Record<string, string> }>(initResponse);
 
-  const uploadFormData = new FormData();
-  for (const [key, value] of Object.entries(initPayload.uploadFields || {})) {
-    uploadFormData.append(key, value);
-  }
-  if (!initPayload.uploadFields?.["Content-Type"]) {
-    uploadFormData.append("Content-Type", "image/png");
-  }
-  uploadFormData.append("file", new Blob([samplePngBytes], { type: "image/png" }), "sample.png");
+  const uploadFormData = buildUploadFormData(initPayload.uploadFields || {}, samplePngBytes, "sample.png", "image/png");
 
   const uploadResponse = await fetch(initPayload.uploadUrl, {
     method: "POST",
