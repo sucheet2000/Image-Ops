@@ -78,6 +78,19 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
 
 type CleanupCallback = () => void | Promise<void>;
 
+async function ensureLiveWorkerHeartbeat(redis: IORedis): Promise<void> {
+  let cursor = "0";
+  do {
+    const [nextCursor, keys] = await redis.scan(cursor, "MATCH", "worker:heartbeat:*", "COUNT", "100");
+    if (keys.length > 0) {
+      return;
+    }
+    cursor = nextCursor;
+  } while (cursor !== "0");
+
+  throw new Error("no live workers detected");
+}
+
 async function runAppCleanup(app: Express): Promise<void> {
   const cleanupCallbacks = app.locals.__runtimeCleanup as CleanupCallback[] | undefined;
   if (!cleanupCallbacks) {
@@ -376,11 +389,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
       deps.storage.headObject(`${TMP_PREFIX}__ready_probe__`),
       deps.jobRepo.getQuotaWindow("__ready_probe_subject__"),
       readinessRedis
-        ? readinessRedis.keys("worker:heartbeat:*").then((keys) => {
-            if (keys.length === 0) {
-              throw new Error("no live workers detected");
-            }
-          })
+        ? ensureLiveWorkerHeartbeat(readinessRedis)
         : Promise.resolve()
     ]);
 

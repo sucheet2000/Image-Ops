@@ -53,4 +53,25 @@ describe("loadWorkerConfig production safeguards", () => {
 
     expect(config.s3AccessKey).toBe("prod-access-key");
   });
+
+  it("rejects background remove backoff base greater than max", () => {
+    expect(() =>
+      loadWorkerConfig({
+        ...baseEnv(),
+        BG_REMOVE_BACKOFF_BASE_MS: "2000",
+        BG_REMOVE_BACKOFF_MAX_MS: "1000"
+      })
+    ).toThrow();
+  });
+
+  it("rejects invalid worker concurrency ordering", () => {
+    expect(() =>
+      loadWorkerConfig({
+        ...baseEnv(),
+        WORKER_FAST_CONCURRENCY: "2",
+        WORKER_SLOW_CONCURRENCY: "4",
+        WORKER_BULK_CONCURRENCY: "1"
+      })
+    ).toThrow();
+  });
 });

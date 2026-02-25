@@ -59,6 +59,23 @@ const envSchema = z.object({
       });
     }
   }
+
+  if (value.BG_REMOVE_BACKOFF_BASE_MS > value.BG_REMOVE_BACKOFF_MAX_MS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["BG_REMOVE_BACKOFF_BASE_MS"],
+      message: "BG_REMOVE_BACKOFF_BASE_MS must be less than or equal to BG_REMOVE_BACKOFF_MAX_MS"
+    });
+  }
+
+  if (value.WORKER_FAST_CONCURRENCY < value.WORKER_SLOW_CONCURRENCY
+    || value.WORKER_SLOW_CONCURRENCY < value.WORKER_BULK_CONCURRENCY) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["WORKER_FAST_CONCURRENCY"],
+      message: "WORKER_FAST_CONCURRENCY >= WORKER_SLOW_CONCURRENCY >= WORKER_BULK_CONCURRENCY is required"
+    });
+  }
 });
 
 export type WorkerConfig = {
