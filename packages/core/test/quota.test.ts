@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyQuota,
+  checkAndIncrementQuota,
   cleanupRequestSignature,
   FREE_PLAN_LIMIT,
   FREE_PLAN_WINDOW_HOURS,
@@ -67,6 +68,21 @@ describe("quota", () => {
     expect(() =>
       applyQuota({ windowStartAt: now.toISOString(), usedCount: 1 }, -1, now)
     ).toThrow("requestedImages must be non-negative");
+  });
+
+  it("rejects non-positive quota window seconds for Redis quota checks", async () => {
+    const redis = {
+      script: async () => {
+        throw new Error("should not load script for invalid window");
+      },
+      evalsha: async () => {
+        throw new Error("should not eval for invalid window");
+      }
+    };
+
+    await expect(checkAndIncrementQuota(redis, "seller_invalid", 1, 0)).rejects.toThrow(
+      "windowSeconds must be a positive number"
+    );
   });
 });
 

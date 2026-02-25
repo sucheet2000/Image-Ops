@@ -31,7 +31,7 @@ export type QuotaRedisClient = {
   ): Promise<number | string>;
 };
 
-let quotaScriptSha: string | null = null;
+const quotaScriptShaByClient = new WeakMap<QuotaRedisClient, string>();
 
 function parseQuotaReply(reply: number | string): number {
   if (typeof reply === "number") {
@@ -45,7 +45,8 @@ function parseQuotaReply(reply: number | string): number {
 }
 
 export async function loadQuotaScript(redis: QuotaRedisClient): Promise<void> {
-  quotaScriptSha = await redis.script("LOAD", QUOTA_SCRIPT);
+  const sha = await redis.script("LOAD", QUOTA_SCRIPT);
+  quotaScriptShaByClient.set(redis, sha);
 }
 
 export async function checkAndIncrementQuota(
@@ -55,20 +56,33 @@ export async function checkAndIncrementQuota(
   windowSeconds: number,
   nowMs = Date.now()
 ): Promise<boolean> {
+  if (!Number.isFinite(windowSeconds) || windowSeconds <= 0) {
+    throw new Error("windowSeconds must be a positive number");
+  }
+
   const windowKey = Math.floor(nowMs / (windowSeconds * 1000));
   const key = `quota:${userId}:${windowKey}`;
 
+  let quotaScriptSha = quotaScriptShaByClient.get(redis);
   if (!quotaScriptSha) {
     await loadQuotaScript(redis);
+    quotaScriptSha = quotaScriptShaByClient.get(redis);
+  }
+  if (!quotaScriptSha) {
+    throw new Error("Failed to load Redis quota script SHA");
   }
 
   try {
-    const result = await redis.evalsha(quotaScriptSha!, 1, key, limit, windowSeconds);
+    const result = await redis.evalsha(quotaScriptSha, 1, key, limit, windowSeconds);
     return parseQuotaReply(result) !== -1;
   } catch (error) {
     if (error instanceof Error && /NOSCRIPT/i.test(error.message)) {
       await loadQuotaScript(redis);
-      const result = await redis.evalsha(quotaScriptSha!, 1, key, limit, windowSeconds);
+      quotaScriptSha = quotaScriptShaByClient.get(redis);
+      if (!quotaScriptSha) {
+        throw new Error("Failed to reload Redis quota script SHA");
+      }
+      const result = await redis.evalsha(quotaScriptSha, 1, key, limit, windowSeconds);
       return parseQuotaReply(result) !== -1;
     }
     throw error;
