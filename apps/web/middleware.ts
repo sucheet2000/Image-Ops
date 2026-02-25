@@ -1,6 +1,15 @@
-import { randomBytes } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+
+function randomBase64(size: number): string {
+  const bytes = new Uint8Array(size);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
 
 function buildCspHeader(nonce: string): string {
   return [
@@ -18,7 +27,7 @@ function buildCspHeader(nonce: string): string {
 }
 
 export function middleware(request: NextRequest) {
-  const nonce = randomBytes(16).toString("base64");
+  const nonce = randomBase64(16);
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
 
