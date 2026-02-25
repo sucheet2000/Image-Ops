@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { HmacBillingService } from "../src/services/billing";
+import { StripeBillingService } from "../src/services/billing";
 import { bearerAuthHeaders } from "./helpers/auth";
 import { createFakeServices, createTestConfig } from "./helpers/fakes";
 import { startApiTestServer } from "./helpers/server";
@@ -329,5 +330,87 @@ describe("billing routes", () => {
     const reactivated = await reactivateResponse.json();
     expect(reactivated.plan).toBe("team");
     expect(reactivated.changed).toBe(true);
+  });
+
+  it("rejects invalid Stripe signature and accepts valid Stripe signature for raw webhook body", async () => {
+    const services = createFakeServices();
+    const config = {
+      ...createTestConfig(),
+      billingProvider: "stripe" as const
+    };
+    const server = await startApiTestServer({ ...services, config });
+    closers.push(server.close);
+
+    const nowIso = new Date("2026-02-23T00:00:00.000Z").toISOString();
+    await services.jobRepo.upsertSubjectProfile({
+      subjectId: "seller_stripe_1",
+      plan: "free",
+      createdAt: nowIso,
+      updatedAt: nowIso
+    });
+
+    const checkoutSessionId = "cs_test_stripe_1";
+    await services.jobRepo.createBillingCheckoutSession({
+      id: checkoutSessionId,
+      subjectId: "seller_stripe_1",
+      plan: "pro",
+      status: "created",
+      checkoutUrl: "https://checkout.stripe.com/c/pay/cs_test_stripe_1",
+      successUrl: "https://example.com/success",
+      cancelUrl: "https://example.com/cancel",
+      expiresAt: new Date(Date.parse(nowIso) + 900_000).toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso
+    }, 900);
+
+    const stripeWebhookPayload = JSON.stringify({
+      id: "evt_stripe_paid_1",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: checkoutSessionId,
+          metadata: {
+            subjectId: "seller_stripe_1",
+            plan: "pro"
+          }
+        }
+      }
+    });
+
+    const invalidSignatureResponse = await fetch(`${server.baseUrl}/api/webhooks/billing`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": "t=123,v1=invalid"
+      },
+      body: stripeWebhookPayload
+    });
+    expect(invalidSignatureResponse.status).toBe(400);
+    const invalidPayload = await invalidSignatureResponse.json();
+    expect(invalidPayload.error).toBe("INVALID_SIGNATURE");
+
+    const stripeSigner = new StripeBillingService({
+      secretKey: config.stripeSecretKey || "sk_test_example",
+      webhookSecret: config.stripeWebhookSecret || "whsec_example",
+      webhookToleranceSeconds: config.stripeWebhookToleranceSeconds,
+      priceIdByPlan: {
+        pro: config.stripePriceIdPro || "price_pro",
+        team: config.stripePriceIdTeam || "price_team"
+      }
+    });
+    const validSignature = stripeSigner.signWebhookPayload(stripeWebhookPayload);
+
+    const validSignatureResponse = await fetch(`${server.baseUrl}/api/webhooks/billing`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": validSignature
+      },
+      body: stripeWebhookPayload
+    });
+    expect(validSignatureResponse.status).toBe(200);
+    const validPayload = await validSignatureResponse.json();
+    expect(validPayload.accepted).toBe(true);
+    expect(validPayload.replay).toBe(false);
   });
 });
