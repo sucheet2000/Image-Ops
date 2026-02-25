@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import piexif from "piexifjs";
 import { apiFetch, getApiBaseUrl } from "../lib/api-client";
 import { JOB_HISTORY_KEY } from "../lib/storage-keys";
 import { ensureViewerSubjectId } from "../lib/viewer-subject";
@@ -72,6 +73,33 @@ function readErrorMessage(payload: unknown, fallback: string): string {
   }
   const data = payload as { message?: string; error?: string };
   return data.message || data.error || fallback;
+}
+
+async function stripExif(rawFile: File): Promise<File> {
+  if (rawFile.type !== "image/jpeg") {
+    return rawFile;
+  }
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const dataUrl = String(event.target?.result || "");
+        const stripped = piexif.remove(dataUrl);
+        const base64 = stripped.split(",")[1] || "";
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+        resolve(new File([bytes], rawFile.name, { type: rawFile.type }));
+      } catch {
+        resolve(rawFile);
+      }
+    };
+    reader.onerror = () => resolve(rawFile);
+    reader.readAsDataURL(rawFile);
+  });
 }
 
 function persistJobHistory(entry: LocalJobHistoryEntry): void {
@@ -439,7 +467,17 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
                 id="tool-input-file"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => setFile(event.target.files?.[0] || null)}
+                onChange={(event) => {
+                  const selected = event.target.files?.[0];
+                  if (!selected) {
+                    setFile(null);
+                    return;
+                  }
+                  void (async () => {
+                    const cleanFile = await stripExif(selected);
+                    setFile(cleanFile);
+                  })();
+                }}
               />
             </div>
 
