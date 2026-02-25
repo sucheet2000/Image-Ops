@@ -40,6 +40,15 @@ const PLAN_RANK: Record<SubjectProfile['plan'], number> = {
   team: 2,
 };
 const BILLING_RECONCILE_IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+
+function getAuthSubjectId(req: { auth?: { sub?: string } }): string | null {
+  const sub = req.auth?.sub;
+  if (typeof sub !== 'string' || sub.trim().length === 0) {
+    return null;
+  }
+  return toSafeSubjectId(sub);
+}
 
 function buildManageUrl(portalBaseUrl: string | undefined, subjectId: string): string | null {
   if (!portalBaseUrl) {
@@ -71,9 +80,18 @@ export function registerBillingRoutes(
         return;
       }
 
+      const authSubjectId = getAuthSubjectId(req as { auth?: { sub?: string } });
+      const subjectId = toSafeSubjectId(parsed.data.subjectId);
+      if (!authSubjectId || authSubjectId !== subjectId) {
+        res.status(403).json({
+          error: 'BILLING_SUBJECT_FORBIDDEN',
+          message: 'Authenticated subject does not match subjectId.',
+        });
+        return;
+      }
+
       const now = deps.now();
       const nowIso = now.toISOString();
-      const subjectId = toSafeSubjectId(parsed.data.subjectId);
 
       const profile = await deps.jobRepo.getSubjectProfile(subjectId);
       if (!profile) {
@@ -235,9 +253,16 @@ export function registerBillingRoutes(
     '/api/billing/reconcile',
     asyncHandler(async (req, res) => {
       const idempotencyHeader = String(req.header('idempotency-key') || '').trim();
-      const authSubjectId = toSafeSubjectId(
-        String((req as { auth?: { sub?: string } }).auth?.sub || 'anonymous')
-      );
+      if (idempotencyHeader.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+        res.status(400).json({
+          error: 'INVALID_IDEMPOTENCY_KEY',
+          message: `idempotency-key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters.`,
+        });
+        return;
+      }
+
+      const authSubjectId =
+        getAuthSubjectId(req as { auth?: { sub?: string } }) || toSafeSubjectId('anonymous');
       const idempotencyScopeKey = idempotencyHeader ? `${authSubjectId}:${idempotencyHeader}` : '';
       if (idempotencyScopeKey) {
         const cached = await deps.jobRepo.getBillingReconcileIdempotency(idempotencyScopeKey);
@@ -343,8 +368,17 @@ export function registerBillingRoutes(
         return;
       }
 
-      const nowIso = deps.now().toISOString();
+      const authSubjectId = getAuthSubjectId(req as { auth?: { sub?: string } });
       const subjectId = toSafeSubjectId(parsed.data.subjectId);
+      if (!authSubjectId || authSubjectId !== subjectId) {
+        res.status(403).json({
+          error: 'BILLING_SUBJECT_FORBIDDEN',
+          message: 'Authenticated subject does not match subjectId.',
+        });
+        return;
+      }
+
+      const nowIso = deps.now().toISOString();
       const existing = await deps.jobRepo.getSubjectProfile(subjectId);
       const currentPlan = existing?.plan || 'free';
 

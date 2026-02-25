@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { HmacBillingService } from '../src/services/billing';
-import { StripeBillingService } from '../src/services/billing';
+import { HmacBillingService, StripeBillingService } from '../src/services/billing';
 import { bearerAuthHeaders } from './helpers/auth';
 import { createFakeServices, createTestConfig } from './helpers/fakes';
 import { startApiTestServer } from './helpers/server';

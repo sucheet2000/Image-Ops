@@ -13,11 +13,25 @@ describe('API runtime wiring', () => {
 
     const queue: JobQueueService = {
       enqueue: vi.fn().mockResolvedValue(undefined),
+      getMetrics: vi.fn().mockResolvedValue({
+        waiting: 0,
+        active: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+      }),
       close: queueClose,
     };
     const jobRepo: JobRepository = {
       getQuotaWindow: vi.fn().mockResolvedValue(null),
       setQuotaWindow: vi.fn().mockResolvedValue(undefined),
+      reserveQuotaAndCreateJob: vi.fn().mockResolvedValue({
+        allowed: true,
+        window: { windowStartAt: '2026-02-23T00:00:00.000Z', usedCount: 0 },
+      }),
+      getUploadCompletion: vi.fn().mockResolvedValue(null),
+      finalizeUploadCompletion: vi.fn().mockResolvedValue(undefined),
+      listDedupByHash: vi.fn().mockResolvedValue([]),
       getSubjectProfile: vi.fn().mockResolvedValue(null),
       upsertSubjectProfile: vi.fn().mockResolvedValue(undefined),
       putAuthRefreshSession: vi.fn().mockResolvedValue(undefined),
@@ -79,11 +93,25 @@ describe('API runtime wiring', () => {
       config: createTestConfig(),
       queue: {
         enqueue: async () => undefined,
+        getMetrics: async () => ({
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        }),
         close: async () => undefined,
       },
       jobRepo: {
         getQuotaWindow: async () => null,
         setQuotaWindow: async () => undefined,
+        reserveQuotaAndCreateJob: async () => ({
+          allowed: true,
+          window: { windowStartAt: '2026-02-23T00:00:00.000Z', usedCount: 0 },
+        }),
+        getUploadCompletion: async () => null,
+        finalizeUploadCompletion: async () => undefined,
+        listDedupByHash: async () => [],
         getSubjectProfile: async () => null,
         upsertSubjectProfile: async () => undefined,
         putAuthRefreshSession: async () => undefined,
