@@ -21,6 +21,7 @@ import {
 import type { ApiConfig } from "../config";
 import IORedis from "ioredis";
 import { Pool } from "pg";
+import { logError } from "../lib/log";
 
 const JOB_KEY_PREFIX = "imageops:job:";
 const QUOTA_KEY_PREFIX = "imageops:quota:";
@@ -144,6 +145,21 @@ function timestampMsOrNow(input: string): number {
   return Date.now();
 }
 
+function formatRepoErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isLuaUnavailableError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return /(NOSCRIPT|BUSY|BUSYKEY|LOADING|READONLY|EVALSHA)/i.test(error.message);
+}
+
 export class RedisJobRepository implements JobRepository {
   private static readonly MAX_OPTIMISTIC_RETRIES = 5;
   private static readonly RESERVE_QUOTA_AND_CREATE_JOB_LUA = `
@@ -240,14 +256,17 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
     quotaLimit?: number;
     quotaWindowHours?: number;
   }): Promise<QuotaResult> {
+    const subjectQuotaKey = quotaKey(input.subjectId);
+    const jobStorageKey = jobKey(input.job.id);
+
     try {
       const quotaLimit = input.quotaLimit ?? FREE_PLAN_LIMIT;
       const quotaWindowHours = input.quotaWindowHours ?? FREE_PLAN_WINDOW_HOURS;
       const evalResult = await this.redis.eval(
         RedisJobRepository.RESERVE_QUOTA_AND_CREATE_JOB_LUA,
         2,
-        quotaKey(input.subjectId),
-        jobKey(input.job.id),
+        subjectQuotaKey,
+        jobStorageKey,
         input.now.toISOString(),
         String(input.now.getTime()),
         String(input.requestedImages),
@@ -284,11 +303,41 @@ return {1, windowStartAt, tostring(nextUsedCount), ""}
             : undefined
         };
       }
+
+      if (evalResult !== null) {
+        let serialized = String(evalResult);
+        try {
+          serialized = JSON.stringify(evalResult);
+        } catch {
+          // Keep string fallback when serialization fails.
+        }
+
+        throw new Error(
+          `Unexpected Lua quota response for ${subjectQuotaKey} at ${input.now.toISOString()}: ${serialized}`
+        );
+      }
     } catch (error) {
       if (error instanceof Error && error.message.includes("REQUESTED_IMAGES_NEGATIVE")) {
         throw new ValidationError("requestedImages must be non-negative");
       }
-      // Fall through to optimistic locking fallback when Lua eval is unavailable.
+
+      if (isLuaUnavailableError(error)) {
+        logError("job_repo.reserve_quota.lua_unavailable", {
+          subjectId: input.subjectId,
+          jobId: input.job.id,
+          quotaKey: subjectQuotaKey,
+          error: formatRepoErrorMessage(error)
+        });
+        return this.reserveQuotaAndCreateJobOptimistic(input);
+      }
+
+      logError("job_repo.reserve_quota.lua_failed", {
+        subjectId: input.subjectId,
+        jobId: input.job.id,
+        quotaKey: subjectQuotaKey,
+        error: formatRepoErrorMessage(error)
+      });
+      throw error;
     }
 
     return this.reserveQuotaAndCreateJobOptimistic(input);

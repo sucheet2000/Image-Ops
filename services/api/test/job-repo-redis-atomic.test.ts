@@ -29,6 +29,8 @@ class FakeRedisMulti {
 class FakeRedisClient {
   public readonly store = new Map<string, string>();
   public execConflictCount = 0;
+  public luaUnavailable = false;
+  public evalReplyOverride: unknown = undefined;
 
   async watch(..._keys: string[]): Promise<"OK"> {
     return "OK";
@@ -45,6 +47,61 @@ class FakeRedisClient {
   async set(key: string, value: string): Promise<"OK"> {
     this.store.set(key, value);
     return "OK";
+  }
+
+  async eval(
+    _script: string,
+    _numKeys: number,
+    quotaKey: string,
+    jobKey: string,
+    nowIso: string,
+    nowMsRaw: string,
+    requestedRaw: string,
+    quotaLimitRaw: string,
+    quotaWindowHoursRaw: string,
+    jobJson: string
+  ): Promise<[number, string, string, string] | unknown> {
+    if (this.luaUnavailable) {
+      throw new Error("NOSCRIPT No matching script. Please use EVAL.");
+    }
+
+    if (this.evalReplyOverride !== undefined) {
+      return this.evalReplyOverride;
+    }
+
+    const nowMs = Number.parseInt(nowMsRaw, 10);
+    const requested = Number.parseInt(requestedRaw, 10);
+    const quotaLimit = Number.parseInt(quotaLimitRaw, 10);
+    const quotaWindowHours = Number.parseInt(quotaWindowHoursRaw, 10);
+    const quotaWindowMs = quotaWindowHours * 60 * 60 * 1000;
+
+    const existingRaw = this.store.get(quotaKey);
+    const existing = existingRaw
+      ? (JSON.parse(existingRaw) as { windowStartAt?: string; windowStartAtEpochMs?: number; usedCount?: number })
+      : undefined;
+
+    let windowStartAt = existing?.windowStartAt || nowIso;
+    let windowStartAtEpochMs = existing?.windowStartAtEpochMs || nowMs;
+    let usedCount = existing?.usedCount || 0;
+
+    if (nowMs - windowStartAtEpochMs >= quotaWindowMs) {
+      windowStartAt = nowIso;
+      windowStartAtEpochMs = nowMs;
+      usedCount = 0;
+    }
+
+    const nextUsedCount = usedCount + requested;
+    if (nextUsedCount > quotaLimit) {
+      return [0, windowStartAt, String(usedCount), String(windowStartAtEpochMs + quotaWindowMs)];
+    }
+
+    this.store.set(quotaKey, JSON.stringify({
+      windowStartAt,
+      windowStartAtEpochMs,
+      usedCount: nextUsedCount
+    }));
+    this.store.set(jobKey, jobJson);
+    return [1, windowStartAt, String(nextUsedCount), ""];
   }
 
   multi(): FakeRedisMulti {
@@ -81,6 +138,7 @@ describe("RedisJobRepository optimistic atomic operations", () => {
   it("retries quota+job reservation when transaction conflicts", async () => {
     const redis = new FakeRedisClient();
     redis.execConflictCount = 1;
+    redis.luaUnavailable = true;
     const repo = new RedisJobRepository({
       redisClient: redis as unknown as IORedis,
       clock: () => new Date("2026-02-24T00:00:00.000Z")
@@ -98,6 +156,22 @@ describe("RedisJobRepository optimistic atomic operations", () => {
 
     const stored = await repo.getJob("job_retry");
     expect(stored?.id).toBe("job_retry");
+  });
+
+  it("throws when lua script returns an unexpected reply shape", async () => {
+    const redis = new FakeRedisClient();
+    redis.evalReplyOverride = "unexpected-reply";
+    const repo = new RedisJobRepository({
+      redisClient: redis as unknown as IORedis,
+      clock: () => new Date("2026-02-24T00:00:00.000Z")
+    });
+
+    await expect(repo.reserveQuotaAndCreateJob({
+      subjectId: "seller_bad_reply",
+      requestedImages: 1,
+      now: new Date("2026-02-24T00:00:00.000Z"),
+      job: buildJob("job_bad_reply", "seller_bad_reply")
+    })).rejects.toThrow(/Unexpected Lua quota response/i);
   });
 
   it("retries dedup completion writes when transaction conflicts", async () => {
