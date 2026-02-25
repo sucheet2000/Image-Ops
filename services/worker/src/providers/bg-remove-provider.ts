@@ -34,6 +34,7 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
       backoffBaseMs?: number;
       backoffMaxMs?: number;
       onRetry?: (payload: { attempt: number; maxRetries: number; reason: string }) => void;
+      onCircuitOpen?: (payload: { reason: string }) => void;
       onCircuitStateChange?: (state: "open" | "halfOpen" | "close") => void;
     }
   ) {
@@ -90,11 +91,15 @@ export class HttpBackgroundRemoveProvider implements BackgroundRemoveProvider {
     while (attempt <= this.config.maxRetries) {
       if (this.breaker.opened) {
         const reason = "circuit open";
-        this.config.onRetry?.({
-          attempt: Math.max(1, attempt + 1),
-          maxRetries: this.config.maxRetries,
-          reason
-        });
+        if (this.config.onCircuitOpen) {
+          this.config.onCircuitOpen({ reason });
+        } else {
+          this.config.onRetry?.({
+            attempt: 0,
+            maxRetries: this.config.maxRetries,
+            reason
+          });
+        }
         lastError = reason;
         break;
       }

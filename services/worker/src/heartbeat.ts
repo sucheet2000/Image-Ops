@@ -35,19 +35,24 @@ export function startWorkerHeartbeat(input: {
       ts: now().toISOString(),
       uptimeSeconds: Math.floor(uptimeSeconds())
     };
-    void input.redis.set(heartbeatKey, payload.ts, "EX", input.ttlSeconds).catch((error) => {
-      // eslint-disable-next-line no-console
-      console.error(
-        JSON.stringify({
-          event: "worker.heartbeat.write_failed",
-          heartbeatKey,
-          ts: payload.ts,
-          ttlSeconds: input.ttlSeconds,
-          message: error instanceof Error ? error.message : String(error)
-        })
-      );
-    });
-    input.onHeartbeat(payload);
+    void input.redis
+      .set(heartbeatKey, payload.ts, "EX", input.ttlSeconds)
+      .then(() => {
+        input.onHeartbeat(payload);
+      })
+      .catch((error) => {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({
+            event: "worker.heartbeat.write_failed",
+            heartbeatKey,
+            workerId: input.workerId,
+            ts: payload.ts,
+            ttlSeconds: input.ttlSeconds,
+            message: error instanceof Error ? error.message : String(error)
+          })
+        );
+      });
   }, input.intervalMs);
 
   timer.unref?.();

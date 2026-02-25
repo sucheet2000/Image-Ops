@@ -74,4 +74,15 @@ describe("loadWorkerConfig production safeguards", () => {
       })
     ).toThrow();
   });
+
+  it("rejects worker concurrency ordering when slow is less than bulk", () => {
+    expect(() =>
+      loadWorkerConfig({
+        ...baseEnv(),
+        WORKER_FAST_CONCURRENCY: "4",
+        WORKER_SLOW_CONCURRENCY: "1",
+        WORKER_BULK_CONCURRENCY: "2"
+      })
+    ).toThrow();
+  });
 });

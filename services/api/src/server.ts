@@ -78,7 +78,7 @@ function formatErrorForLog(error: unknown): Record<string, unknown> {
 
 type CleanupCallback = () => void | Promise<void>;
 
-async function ensureLiveWorkerHeartbeat(redis: IORedis): Promise<void> {
+async function ensureLiveWorkerHeartbeat(redis: Pick<IORedis, "scan">): Promise<void> {
   let cursor = "0";
   do {
     const [nextCursor, keys] = await redis.scan(cursor, "MATCH", "worker:heartbeat:*", "COUNT", "100");
