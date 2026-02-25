@@ -18,6 +18,9 @@
     "infra:down:deploy": "docker compose -f infra/docker-compose.deploy.yml down",
     "infra:up:release": "docker compose -f infra/docker-compose.release.yml up -d",
     "infra:down:release": "docker compose -f infra/docker-compose.release.yml down",
+    "migrate:up": "tsx scripts/migrate.ts up",
+    "migrate:down": "tsx scripts/migrate.ts down",
+    "migrate:status": "tsx scripts/migrate.ts status",
     "test:integration:api": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration",
     "test:integration:api:workflow": "RUN_INTEGRATION_TESTS=1 npm run test -w services/api -- test/integration/workflow.integration.test.ts",
     "smoke:staging": "bash scripts/staging-smoke.sh"

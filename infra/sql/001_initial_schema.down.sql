@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS deletion_audit;
+DROP TABLE IF EXISTS jobs;
+DROP TABLE IF EXISTS quota_windows;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
+
+DROP TYPE IF EXISTS delete_result;
+DROP TYPE IF EXISTS delete_reason;
+DROP TYPE IF EXISTS subject_type;
+DROP TYPE IF EXISTS job_status;
+DROP TYPE IF EXISTS plan_type;

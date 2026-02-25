@@ -1,5 +1,15 @@
 # Infra Notes
 
+## Migration Commands
+
+Run migrations against `POSTGRES_URL` (or `DATABASE_URL`):
+
+```bash
+npm run migrate:status
+npm run migrate:up
+npm run migrate:down
+```
+
 ## Required S3 Bucket Settings for Presigned Upload POST
 
 - Block all public access: enabled.
