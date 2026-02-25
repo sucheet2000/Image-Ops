@@ -634,19 +634,28 @@ return redis.call("GET", key)
       return [];
     }
 
-    const ids = await this.redis.zrevrange(
-      billingCheckoutSubjectIndexKey(subjectId),
-      0,
-      Math.max(limit - 1, 0)
-    );
+    const indexKey = billingCheckoutSubjectIndexKey(subjectId);
+    const ids = await this.redis.zrevrange(indexKey, 0, Math.max(limit - 1, 0));
     if (ids.length === 0) {
       return [];
     }
 
     const rows = await this.redis.mget(...ids.map((id) => billingCheckoutKey(id)));
-    return rows
-      .filter((value): value is string => Boolean(value))
-      .map((value) => JSON.parse(value) as BillingCheckoutSession)
+    const staleIds: string[] = [];
+    const sessions: BillingCheckoutSession[] = [];
+    rows.forEach((value, index) => {
+      if (!value) {
+        staleIds.push(ids[index]);
+        return;
+      }
+      sessions.push(JSON.parse(value) as BillingCheckoutSession);
+    });
+
+    if (staleIds.length > 0) {
+      await this.redis.zrem(indexKey, ...staleIds);
+    }
+
+    return sessions
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, limit);
   }
@@ -721,7 +730,11 @@ return redis.call("GET", key)
     record: CleanupIdempotencyRecord,
     ttlSeconds: number
   ): Promise<void> {
-    await this.redis.set(idempotencyKey(key), JSON.stringify(record), 'EX', ttlSeconds);
+    if (ttlSeconds > 0) {
+      await this.redis.set(idempotencyKey(key), JSON.stringify(record), 'EX', ttlSeconds);
+      return;
+    }
+    await this.redis.set(idempotencyKey(key), JSON.stringify(record));
   }
 
   async getBillingReconcileIdempotency(
@@ -739,12 +752,16 @@ return redis.call("GET", key)
     record: { scanned: number; paidSessions: number; corrected: number },
     ttlSeconds: number
   ): Promise<void> {
-    await this.redis.set(
-      billingReconcileIdempotencyKey(key),
-      JSON.stringify(record),
-      'EX',
-      ttlSeconds
-    );
+    if (ttlSeconds > 0) {
+      await this.redis.set(
+        billingReconcileIdempotencyKey(key),
+        JSON.stringify(record),
+        'EX',
+        ttlSeconds
+      );
+      return;
+    }
+    await this.redis.set(billingReconcileIdempotencyKey(key), JSON.stringify(record));
   }
 
   async appendDeletionAudit(record: DeletionAuditRecord): Promise<void> {
@@ -852,9 +869,10 @@ export class PostgresJobRepository implements JobRepository {
 
   private async setStoredValue(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
     await this.initialize();
-    const expiresAt = ttlSeconds
-      ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString()
-      : null;
+    const expiresAt =
+      ttlSeconds && ttlSeconds > 0
+        ? new Date(this.now().getTime() + ttlSeconds * 1000).toISOString()
+        : null;
     await this.pool.query(
       `
         INSERT INTO ${POSTGRES_KV_TABLE} (key, value, expires_at)
@@ -1292,6 +1310,13 @@ export class InMemoryJobRepository implements JobRepository {
   >();
   private readonly deletionAudit: DeletionAuditRecord[] = [];
 
+  private toExpiryMs(ttlSeconds: number): number {
+    if (ttlSeconds > 0) {
+      return Date.now() + ttlSeconds * 1000;
+    }
+    return Number.POSITIVE_INFINITY;
+  }
+
   async getQuotaWindow(subjectId: string): Promise<QuotaWindow | null> {
     return this.quotas.get(subjectId) || null;
   }
@@ -1509,7 +1534,7 @@ export class InMemoryJobRepository implements JobRepository {
   ): Promise<void> {
     this.idempotency.set(key, {
       record,
-      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000,
+      expiresAtMs: this.toExpiryMs(ttlSeconds),
     });
   }
 
@@ -1534,7 +1559,7 @@ export class InMemoryJobRepository implements JobRepository {
   ): Promise<void> {
     this.billingReconcileIdempotency.set(key, {
       record,
-      expiresAtMs: Date.now() + Math.max(1, ttlSeconds) * 1000,
+      expiresAtMs: this.toExpiryMs(ttlSeconds),
     });
   }
 

@@ -10,7 +10,10 @@ module.exports = {
   rules: {
     'no-console': 'warn',
     '@typescript-eslint/no-explicit-any': 'error',
-    '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    '@typescript-eslint/no-unused-vars': [
+      'error',
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+    ],
     '@typescript-eslint/explicit-function-return-type': 'off',
   },
   ignorePatterns: ['node_modules/', 'dist/', '.next/'],
