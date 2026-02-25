@@ -4,6 +4,20 @@ export const FREE_PLAN_WINDOW_HOURS = 10;
 export const IMAGE_TOOLS = ["resize", "compress", "convert", "background-remove"] as const;
 export type ImageTool = (typeof IMAGE_TOOLS)[number];
 
+export const JOB_QUEUE_NAMES = {
+  fast: "image-ops-fast",
+  slow: "image-ops-slow",
+  bulk: "image-ops-bulk"
+} as const;
+export type JobQueueName = (typeof JOB_QUEUE_NAMES)[keyof typeof JOB_QUEUE_NAMES];
+
+export function queueNameForTool(tool: ImageTool): JobQueueName {
+  if (tool === "background-remove") {
+    return JOB_QUEUE_NAMES.slow;
+  }
+  return JOB_QUEUE_NAMES.fast;
+}
+
 export const IMAGE_PLANS = ["free", "pro", "team"] as const;
 export type ImagePlan = (typeof IMAGE_PLANS)[number];
 

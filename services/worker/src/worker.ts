@@ -1,4 +1,4 @@
-import type { ImageJobQueuePayload } from "@imageops/core";
+import { JOB_QUEUE_NAMES, type ImageJobQueuePayload } from "@imageops/core";
 import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { loadWorkerConfig } from "./config";
@@ -11,6 +11,8 @@ import { S3WorkerStorageService } from "./services/storage";
 const config = loadWorkerConfig();
 const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS || 10000);
+const WORKER_ID = process.env.HOSTNAME ?? `worker-${process.pid}`;
+const HEARTBEAT_TTL_SECONDS = 90;
 
 const storage = new S3WorkerStorageService(config);
 const jobRepo: WorkerJobRepository = config.jobRepoDriver === "postgres"
@@ -20,56 +22,98 @@ const bgRemoveProvider = new HttpBackgroundRemoveProvider({
   endpointUrl: config.bgRemoveApiUrl,
   apiKey: config.bgRemoveApiKey,
   timeoutMs: config.bgRemoveTimeoutMs,
-  maxRetries: config.bgRemoveMaxRetries
+  maxRetries: config.bgRemoveMaxRetries,
+  onCircuitStateChange: (state) => {
+    const event = `worker.bg_remove_breaker.${state}`;
+    if (state === "open") {
+      // eslint-disable-next-line no-console
+      console.error(JSON.stringify({ event, workerId: WORKER_ID }));
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event, workerId: WORKER_ID }));
+  }
 });
 
-const worker = new Worker<ImageJobQueuePayload>(
-  config.queueName,
-  async (job) => {
-    await processImageJob(job.data, {
-      storage,
-      jobRepo,
-      bgRemoveProvider,
-      now: () => new Date()
-    });
-  },
-  {
-    connection,
-    concurrency: config.concurrency
-  }
+const workerDefinitions = [
+  { queueName: JOB_QUEUE_NAMES.fast, concurrency: config.fastConcurrency },
+  { queueName: JOB_QUEUE_NAMES.slow, concurrency: config.slowConcurrency },
+  { queueName: JOB_QUEUE_NAMES.bulk, concurrency: config.bulkConcurrency }
+] as const;
+
+const workers = workerDefinitions.map(({ queueName, concurrency }) =>
+  new Worker<ImageJobQueuePayload>(
+    queueName,
+    async (job) => {
+      await processImageJob(job.data, {
+        storage,
+        jobRepo,
+        bgRemoveProvider,
+        now: () => new Date()
+      });
+    },
+    {
+      connection,
+      concurrency
+    }
+  )
 );
 
-worker.on("ready", () => {
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "worker.ready", queue: config.queueName, concurrency: config.concurrency }));
-});
+workers.forEach((worker, index) => {
+  const { queueName, concurrency } = workerDefinitions[index];
+  worker.on("ready", () => {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event: "worker.ready", workerId: WORKER_ID, queue: queueName, concurrency }));
+  });
 
-worker.on("completed", (job) => {
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "worker.completed", jobId: job.id }));
-});
+  worker.on("completed", (job) => {
+    // eslint-disable-next-line no-console
+    console.log(JSON.stringify({ event: "worker.completed", workerId: WORKER_ID, queue: queueName, jobId: job.id }));
+  });
 
-worker.on("failed", (job, error) => {
-  // eslint-disable-next-line no-console
-  console.error(
-    JSON.stringify({
-      event: "worker.failed",
-      jobId: job?.id,
-      message: error.message
-    })
-  );
+  worker.on("failed", (job, error) => {
+    // eslint-disable-next-line no-console
+    console.error(
+      JSON.stringify({
+        event: "worker.failed",
+        workerId: WORKER_ID,
+        queue: queueName,
+        jobId: job?.id,
+        tool: job?.data?.tool,
+        subjectId: job?.data?.subjectId,
+        attempts: job?.attemptsMade,
+        message: error.message
+      })
+    );
+  });
 });
 
 const stopHeartbeat = startWorkerHeartbeat({
-  queueName: config.queueName,
+  redis: connection,
+  workerId: WORKER_ID,
+  queueName: "multi",
   intervalMs: config.workerHeartbeatIntervalMs,
+  ttlSeconds: HEARTBEAT_TTL_SECONDS,
   onHeartbeat: (payload) => {
     // eslint-disable-next-line no-console
     console.log(JSON.stringify(payload));
   }
 });
 
-let shuttingDown = false;
+async function closeWorkers(): Promise<void> {
+  await Promise.all(workers.map((worker) => worker.close()));
+}
+
+void (async () => {
+  // eslint-disable-next-line no-console
+  console.log(
+    JSON.stringify({
+      event: "worker.boot",
+      workerId: WORKER_ID,
+      queues: workerDefinitions.map((entry) => ({ queue: entry.queueName, concurrency: entry.concurrency }))
+    })
+  );
+})();
 
 async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
@@ -89,6 +133,8 @@ async function withShutdownTimeout<T>(promise: Promise<T>, operation: string): P
   }
 }
 
+let shuttingDown = false;
+
 async function shutdown(reason: string, exitCode: number, error?: unknown): Promise<void> {
   if (shuttingDown) {
     return;
@@ -96,13 +142,14 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
 
   shuttingDown = true;
   // eslint-disable-next-line no-console
-  console.log(JSON.stringify({ event: "worker.shutdown.start", reason }));
+  console.log(JSON.stringify({ event: "worker.shutdown.start", workerId: WORKER_ID, reason }));
 
   if (error) {
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
         event: "worker.shutdown.error_context",
+        workerId: WORKER_ID,
         reason,
         message: error instanceof Error ? error.message : String(error)
       })
@@ -111,16 +158,17 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
 
   try {
     stopHeartbeat();
-    await withShutdownTimeout(worker.close(), "worker.close");
+    await withShutdownTimeout(closeWorkers(), "workers.close");
     await withShutdownTimeout(jobRepo.close(), "jobRepo.close");
     await withShutdownTimeout(connection.quit(), "connection.quit");
     // eslint-disable-next-line no-console
-    console.log(JSON.stringify({ event: "worker.shutdown.complete", reason }));
+    console.log(JSON.stringify({ event: "worker.shutdown.complete", workerId: WORKER_ID, reason }));
   } catch (closeError) {
     // eslint-disable-next-line no-console
     console.error(
       JSON.stringify({
         event: "worker.shutdown.failed",
+        workerId: WORKER_ID,
         reason,
         message: closeError instanceof Error ? closeError.message : String(closeError)
       })
@@ -129,6 +177,7 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
     console.error(
       JSON.stringify({
         event: "worker.shutdown.force_exit",
+        workerId: WORKER_ID,
         reason,
         timeoutMs: SHUTDOWN_TIMEOUT_MS
       })
