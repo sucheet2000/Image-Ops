@@ -222,7 +222,7 @@ The smoke script validates:
 
 ## V1 Notes
 - Uploaded binaries are temporary objects in S3-compatible storage only.
-- Relational metadata schema exists in `infra/sql/001_initial_schema.sql` and `infra/sql/002_metadata_runtime_tables.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
+- Relational metadata schema exists in `infra/sql/001_initial_schema.up.sql`, `infra/sql/002_metadata_runtime_tables.up.sql`, and `infra/sql/003_indexes.up.sql`; runtime metadata repository supports `JOB_REPO_DRIVER=redis|postgres`.
 - Quota is plan-aware at job creation (defaults: free 6/10h, pro 250/24h, team 1000/24h; configurable via env).
 - Watermark is applied only for advanced tool outputs (`background-remove`) on free plan.
 - SEO page surfaces include `/tools/:tool`, `/use-cases/:slug`, `/for/:audience/:intent`, `/guides/:topic`, and `/compare/:slug`.
