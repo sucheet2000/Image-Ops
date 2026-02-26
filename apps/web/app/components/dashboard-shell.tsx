@@ -148,7 +148,6 @@ export function DashboardShell() {
                 <Link href="/dashboard" className="active">
                   Overview
                 </Link>
-                <Link href="/dashboard/watchtower">Watch Tower</Link>
                 <Link href="/upload">Upload Studio</Link>
                 <Link href="/tools">Tool Catalog</Link>
                 <Link href="/billing">Billing</Link>
