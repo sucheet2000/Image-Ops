@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiFetch, getApiBaseUrl } from '../lib/api-client';
+import { getViewerSession } from '../lib/session';
 
 type LogLevel = 'all' | 'info' | 'error';
 
@@ -34,6 +35,9 @@ function formatPayload(payload: Record<string, unknown>): string {
 }
 
 export function WatchTowerShell() {
+  const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [hasAccess, setHasAccess] = useState<boolean>(false);
+  const [accessError, setAccessError] = useState<string>('');
   const [level, setLevel] = useState<LogLevel>('all');
   const [eventFilter, setEventFilter] = useState<string>('');
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
@@ -49,9 +53,57 @@ export function WatchTowerShell() {
   const [error, setError] = useState<string>('');
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
+  const watchTowerEnabled = useMemo(() => process.env.NEXT_PUBLIC_ENABLE_WATCHTOWER === 'true', []);
+  const allowedSubjects = useMemo(() => {
+    const csv = process.env.NEXT_PUBLIC_WATCHTOWER_SUBJECT_ALLOWLIST || '';
+    return new Set(
+      csv
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
+  }, []);
+
+  useEffect(() => {
+    const viewer = getViewerSession();
+    setSubjectId(viewer.subjectId);
+
+    if (!watchTowerEnabled) {
+      setHasAccess(false);
+      setAccessError('Watch Tower is disabled. Set NEXT_PUBLIC_ENABLE_WATCHTOWER=true.');
+      return;
+    }
+
+    if (allowedSubjects.size === 0) {
+      setHasAccess(false);
+      setAccessError(
+        'No Watch Tower operator allowlist configured. Set NEXT_PUBLIC_WATCHTOWER_SUBJECT_ALLOWLIST.'
+      );
+      return;
+    }
+
+    if (!viewer.subjectId) {
+      setHasAccess(false);
+      setAccessError('No authenticated operator identity found.');
+      return;
+    }
+
+    if (!allowedSubjects.has(viewer.subjectId)) {
+      setHasAccess(false);
+      setAccessError('This account is not authorized to access Watch Tower.');
+      return;
+    }
+
+    setHasAccess(true);
+    setAccessError('');
+  }, [allowedSubjects, watchTowerEnabled]);
 
   const loadLogs = useCallback(
     async (silent: boolean) => {
+      if (!hasAccess) {
+        setLoading(false);
+        return;
+      }
       if (!silent) {
         setLoading(true);
       }
@@ -86,15 +138,19 @@ export function WatchTowerShell() {
         setLoading(false);
       }
     },
-    [apiBaseUrl, eventFilter, level]
+    [apiBaseUrl, eventFilter, hasAccess, level]
   );
 
   useEffect(() => {
+    if (!hasAccess) {
+      setLoading(false);
+      return;
+    }
     void loadLogs(false);
-  }, [loadLogs]);
+  }, [hasAccess, loadLogs]);
 
   useEffect(() => {
-    if (!autoRefresh) {
+    if (!hasAccess || !autoRefresh) {
       return;
     }
 
@@ -105,7 +161,29 @@ export function WatchTowerShell() {
     return () => {
       clearInterval(timer);
     };
-  }, [autoRefresh, loadLogs]);
+  }, [autoRefresh, hasAccess, loadLogs]);
+
+  if (!hasAccess) {
+    return (
+      <main className="app-page">
+        <section className="page-shell">
+          <header className="page-head">
+            <span className="section-label">Operator Console</span>
+            <h1>Watch Tower access restricted.</h1>
+            <p>{accessError || 'You are not authorized to view operational logs.'}</p>
+          </header>
+          <section className="editorial-card" style={{ marginTop: '1rem' }}>
+            <p className="jobs-meta">Operator subject: {subjectId || 'unknown'}</p>
+            <div className="workbench-actions" style={{ marginTop: '0.75rem' }}>
+              <Link href="/dashboard" className="editorial-button ghost btn-cream">
+                <span>Back to Dashboard</span>
+              </Link>
+            </div>
+          </section>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="app-page">
@@ -125,19 +203,16 @@ export function WatchTowerShell() {
 
         <section className="dashboard-layout reveal-el" data-delay="280">
           <aside className="dashboard-sidebar">
-            <p className="section-label">Workspace</p>
+            <p className="section-label">Operations</p>
             <nav
               className="dashboard-nav"
-              aria-label="Dashboard navigation"
+              aria-label="Operations navigation"
               style={{ marginTop: '0.9rem' }}
             >
-              <Link href="/dashboard">Overview</Link>
-              <Link href="/dashboard/watchtower" className="active">
+              <Link href="/ops/watchtower" className="active">
                 Watch Tower
               </Link>
-              <Link href="/upload">Upload Studio</Link>
-              <Link href="/tools">Tool Catalog</Link>
-              <Link href="/billing">Billing</Link>
+              <Link href="/dashboard">Dashboard</Link>
             </nav>
           </aside>
 

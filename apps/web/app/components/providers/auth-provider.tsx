@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { getApiBaseUrl, refreshApiToken } from '../../lib/api-client';
 import { setViewerPlan, setViewerSubjectId } from '../../lib/session';
 
-const GUARDED_PATH_PREFIXES = ['/upload', '/dashboard', '/billing'];
+const GUARDED_PATH_PREFIXES = ['/upload', '/dashboard', '/billing', '/ops'];
 
 function shouldGuardPath(pathname: string | null): boolean {
   if (!pathname) {
