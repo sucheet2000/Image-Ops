@@ -50,7 +50,7 @@ export function getApiToken(): string | null {
     return null;
   }
 
-  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
+  return safeStorageGet(sessionStorage, TOKEN_KEY) ?? null;
 }
 
 export function setApiToken(token: string): void {
@@ -59,7 +59,6 @@ export function setApiToken(token: string): void {
   }
 
   safeStorageSet(sessionStorage, TOKEN_KEY, token);
-  safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
 export function clearApiToken(): void {
@@ -68,7 +67,6 @@ export function clearApiToken(): void {
   }
 
   safeStorageRemove(sessionStorage, TOKEN_KEY);
-  safeStorageRemove(localStorage, TOKEN_KEY);
 }
 
 export async function refreshApiToken(
