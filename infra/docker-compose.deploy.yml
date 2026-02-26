@@ -50,6 +50,7 @@ services:
       - path: ../.env
         required: false
     environment:
+      NODE_ENV: '${NODE_ENV:-development}'
       API_PORT: '4000'
       WEB_ORIGIN: '${WEB_ORIGIN:-http://localhost:3000}'
       AUTH_TOKEN_SECRET: '${AUTH_TOKEN_SECRET:-local-deploy-auth-token-secret-32bytes}'
