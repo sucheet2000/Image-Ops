@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { FREE_PLAN_LIMIT, type ImageJobRecord } from '@imageops/core';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  FREE_PLAN_LIMIT,
+  type CleanupIdempotencyRecord,
+  type ImageJobRecord,
+} from '@imageops/core';
 import { InMemoryJobRepository } from '../src/services/job-repo';
 
 function buildJob(id: string, subjectId: string): ImageJobRecord {
@@ -63,5 +67,51 @@ describe('JobRepository atomic quota+job', () => {
 
     const quota = await repo.getQuotaWindow('seller_2');
     expect(quota?.usedCount).toBe(FREE_PLAN_LIMIT);
+  });
+
+  it('treats cleanup idempotency ttl <= 0 as no expiry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+
+    try {
+      const repo = new InMemoryJobRepository();
+      const record: CleanupIdempotencyRecord = {
+        signature: 'sig',
+        response: {
+          accepted: true,
+          cleaned: 1,
+          notFound: 0,
+          idempotencyKey: 'cleanup-key',
+        },
+        status: 202,
+        createdAt: '2026-02-23T00:00:00.000Z',
+      };
+
+      await repo.setCleanupIdempotency('cleanup-key', record, 0);
+      vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
+
+      const stored = await repo.getCleanupIdempotency('cleanup-key');
+      expect(stored).toEqual(record);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats billing reconcile idempotency ttl <= 0 as no expiry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+
+    try {
+      const repo = new InMemoryJobRepository();
+      const record = { scanned: 10, paidSessions: 4, corrected: 2 };
+
+      await repo.setBillingReconcileIdempotency('reconcile-key', record, -1);
+      vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
+
+      const stored = await repo.getBillingReconcileIdempotency('reconcile-key');
+      expect(stored).toEqual(record);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

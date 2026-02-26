@@ -3,6 +3,7 @@ import { authMiddleware, requireScope, type AuthenticatedRequest } from './auth'
 import { audit } from './audit';
 import { config } from './config';
 import { executePlan } from './execute';
+import { assertInternalTokenSecret, internalTokenMiddleware } from './internal-auth';
 import { searchOperations, assertReducedSpecLoadable } from './openapi';
 import { assertAllowedHost, validateExecuteRequest } from './policy';
 import { assertSandboxPolicy } from './sandbox';
@@ -12,9 +13,17 @@ import type { ExecuteRequest } from './types';
 
 assertReducedSpecLoadable();
 assertAllowedHost(config.apiBaseUrl);
+try {
+  assertInternalTokenSecret(config.gatewaySecret);
+} catch (error) {
+  // eslint-disable-next-line no-console
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
 
 const app = express();
 app.use(express.json({ limit: '128kb' }));
+app.use(internalTokenMiddleware(config.gatewaySecret));
 
 app.get('/mcp/search', authMiddleware, rateLimitMiddleware, (req: AuthenticatedRequest, res) => {
   const query = String(req.query.q || '');
