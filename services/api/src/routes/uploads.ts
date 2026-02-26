@@ -40,8 +40,8 @@ const uploadCompleteSchema = z.object({
   objectKey: z.string().min(1),
   sha256: z
     .string()
-    .regex(/^[a-f0-9]{64}$/i)
-    .optional(),
+    .length(64)
+    .regex(/^[0-9a-f]+$/),
 });
 
 function mimeToDefaultExtension(mime: string): string {
@@ -355,10 +355,11 @@ export function registerUploadsRoutes(
       }
 
       const initialSha256 = await sha256HexStreaming(object.bytes);
-      if (payload.sha256 && payload.sha256.toLowerCase() !== initialSha256) {
-        res.status(400).json({
-          error: 'SHA256_MISMATCH',
-          message: 'Provided sha256 does not match uploaded bytes.',
+      if (payload.sha256 !== initialSha256) {
+        res.status(422).json({
+          error: 'integrity_mismatch',
+          message:
+            'File integrity check failed. The uploaded file does not match the declared checksum.',
         });
         return;
       }
