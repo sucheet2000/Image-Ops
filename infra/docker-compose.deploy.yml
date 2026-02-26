@@ -53,7 +53,7 @@ services:
       API_PORT: '4000'
       WEB_ORIGIN: 'http://localhost:3000'
       AUTH_TOKEN_SECRET: '${AUTH_TOKEN_SECRET:-local-deploy-auth-token-secret-32bytes}'
-      AUTH_REFRESH_COOKIE_SECURE: '${AUTH_REFRESH_COOKIE_SECURE:-true}'
+      AUTH_REFRESH_COOKIE_SECURE: '${AUTH_REFRESH_COOKIE_SECURE:-false}'
       BILLING_PROVIDER_SECRET: '${BILLING_PROVIDER_SECRET:-local-deploy-billing-provider}'
       BILLING_WEBHOOK_SECRET: '${BILLING_WEBHOOK_SECRET:-local-deploy-billing-webhook}'
       STRIPE_WEBHOOK_SECRET: '${STRIPE_WEBHOOK_SECRET:-local-deploy-stripe-webhook}'
