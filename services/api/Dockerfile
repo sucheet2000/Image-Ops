@@ -18,6 +18,7 @@ ENV NODE_ENV=production
 ENV API_PORT=4000
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/services/api/node_modules ./services/api/node_modules
 COPY --from=build /app/packages/core ./packages/core
 COPY --from=build /app/services/api/dist ./services/api/dist
 EXPOSE 4000
