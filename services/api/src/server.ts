@@ -191,6 +191,20 @@ function validateEnv(): void {
       process.exit(1);
     }
   }
+
+  const billingProvider = process.env.BILLING_PROVIDER || 'hmac';
+  if (billingProvider === 'stripe') {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      // eslint-disable-next-line no-console
+      console.error('FATAL: STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe');
+      process.exit(1);
+    }
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      // eslint-disable-next-line no-console
+      console.error('FATAL: STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe');
+      process.exit(1);
+    }
+  }
 }
 
 export function errorHandler(
