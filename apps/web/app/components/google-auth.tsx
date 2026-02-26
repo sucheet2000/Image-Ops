@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getApiBaseUrl, setApiToken } from '../lib/api-client';
+import { setViewerDisplayName, setViewerPlan, setViewerSubjectId } from '../lib/session';
 
 type GoogleCredentialResponse = {
   credential?: string;
@@ -13,6 +14,11 @@ type AuthPayload = {
     subjectId: string;
     plan: string;
   };
+};
+
+type GoogleIdTokenClaims = {
+  name?: string;
+  email?: string;
 };
 
 declare global {
@@ -36,6 +42,18 @@ export function GoogleAuthPanel() {
   const [message, setMessage] = useState('Sign in with Google to start secure API sessions.');
   const clientId = useMemo(() => process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '', []);
   const buttonRef = useRef<HTMLDivElement | null>(null);
+
+  function parseGoogleClaims(idToken: string): GoogleIdTokenClaims | null {
+    try {
+      const payloadSegment = idToken.split('.')[1] || '';
+      const normalized = payloadSegment.replace(/-/g, '+').replace(/_/g, '/');
+      const padding = normalized.length % 4 === 0 ? '' : '='.repeat(4 - (normalized.length % 4));
+      const decoded = atob(`${normalized}${padding}`);
+      return JSON.parse(decoded) as GoogleIdTokenClaims;
+    } catch {
+      return null;
+    }
+  }
 
   function setToken(token: string): void {
     setApiToken(token);
@@ -88,7 +106,36 @@ export function GoogleAuthPanel() {
 
             const payload = (await authResponse.json()) as AuthPayload;
             setToken(payload.token);
-            setMessage(`Signed in as ${payload.profile.subjectId} (${payload.profile.plan}).`);
+            setViewerSubjectId(payload.profile.subjectId);
+            if (
+              payload.profile.plan === 'free' ||
+              payload.profile.plan === 'pro' ||
+              payload.profile.plan === 'team'
+            ) {
+              setViewerPlan(payload.profile.plan);
+            }
+            const claims = parseGoogleClaims(response.credential);
+            let resolvedName: string | null = null;
+            if (claims?.name) {
+              resolvedName = claims.name;
+              setViewerDisplayName(claims.name);
+            } else if (claims?.email) {
+              const localPart = claims.email.split('@')[0]?.trim();
+              if (localPart) {
+                const formatted = localPart
+                  .split(/[._-]+/)
+                  .filter(Boolean)
+                  .map((word) => word[0]!.toUpperCase() + word.slice(1))
+                  .join(' ');
+                if (formatted) {
+                  resolvedName = formatted;
+                  setViewerDisplayName(formatted);
+                }
+              }
+            }
+            setMessage(
+              `Signed in as ${resolvedName || payload.profile.subjectId} (${payload.profile.plan}).`
+            );
           } catch (error) {
             setMessage(
               `Auth request failed: ${error instanceof Error ? error.message : String(error)}`

@@ -56,6 +56,7 @@ function statusClass(status: JobHistoryEntry['status']): 'completed' | 'failed' 
 
 export function DashboardShell() {
   const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [quota, setQuota] = useState<QuotaPayload | null>(null);
   const [history, setHistory] = useState<JobHistoryEntry[]>([]);
   const [error, setError] = useState<string>('');
@@ -73,6 +74,7 @@ export function DashboardShell() {
           return;
         }
         setSubjectId(resolvedSubject);
+        setDisplayName(viewer.displayName);
 
         const response = await apiFetch(
           `${apiBaseUrl}/api/quota/${encodeURIComponent(resolvedSubject)}`,
@@ -182,8 +184,11 @@ export function DashboardShell() {
               <article className="quota-box">
                 <p className="section-label">Quota Window</p>
                 <p style={{ marginTop: '0.4rem' }}>
-                  Subject {subjectId || 'initializing'} · {usedCount}/{limit || '-'} used over{' '}
+                  {displayName || 'User'} · {usedCount}/{limit || '-'} used over{' '}
                   {quota?.windowHours || '-'}h
+                </p>
+                <p className="jobs-meta" style={{ marginTop: '0.25rem' }}>
+                  Account ID {subjectId || 'initializing'}
                 </p>
                 <div
                   className="quota-meter"
