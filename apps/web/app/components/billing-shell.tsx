@@ -51,6 +51,8 @@ export function BillingShell() {
   const [viewer, setViewer] = useState<ViewerSession>({
     subjectId: null,
     displayName: null,
+    firstName: null,
+    lastName: null,
     plan: 'free',
     isAuthenticated: false,
   });

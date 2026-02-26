@@ -1,9 +1,18 @@
-import { DISPLAY_NAME_KEY, PLAN_KEY, SUBJECT_KEY, TOKEN_KEY } from './storage-keys';
+import {
+  DISPLAY_NAME_KEY,
+  FIRST_NAME_KEY,
+  LAST_NAME_KEY,
+  PLAN_KEY,
+  SUBJECT_KEY,
+  TOKEN_KEY,
+} from './storage-keys';
 
 export type ViewerPlan = 'free' | 'pro' | 'team';
 export type ViewerSession = {
   subjectId: string | null;
   displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
   plan: ViewerPlan;
   isAuthenticated: boolean;
 };
@@ -59,6 +68,22 @@ function readStoredDisplayName(): string | null {
     return null;
   }
   const value = safeStorageGet(localStorage, DISPLAY_NAME_KEY);
+  return value && value.length > 0 ? value : null;
+}
+
+function readStoredFirstName(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const value = safeStorageGet(localStorage, FIRST_NAME_KEY);
+  return value && value.length > 0 ? value : null;
+}
+
+function readStoredLastName(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const value = safeStorageGet(localStorage, LAST_NAME_KEY);
   return value && value.length > 0 ? value : null;
 }
 
@@ -118,11 +143,20 @@ function readApiToken(): string | null {
 
 export function getViewerSession(): ViewerSession {
   if (typeof window === 'undefined') {
-    return { subjectId: null, displayName: null, plan: 'free', isAuthenticated: false };
+    return {
+      subjectId: null,
+      displayName: null,
+      firstName: null,
+      lastName: null,
+      plan: 'free',
+      isAuthenticated: false,
+    };
   }
 
   const subjectId = readStoredSubjectId();
   const storedDisplayName = readStoredDisplayName();
+  const storedFirstName = normalizeDisplayName(readStoredFirstName());
+  const storedLastName = normalizeDisplayName(readStoredLastName());
   const explicitPlan = safeStorageGet(localStorage, PLAN_KEY);
   const token = readApiToken();
   if (!token) {
@@ -130,7 +164,17 @@ export function getViewerSession(): ViewerSession {
       explicitPlan === 'free' || explicitPlan === 'pro' || explicitPlan === 'team'
         ? explicitPlan
         : 'free';
-    return { subjectId, displayName: storedDisplayName, plan, isAuthenticated: false };
+    return {
+      subjectId,
+      displayName:
+        storedFirstName && storedLastName
+          ? `${storedFirstName} ${storedLastName}`
+          : storedDisplayName,
+      firstName: storedFirstName,
+      lastName: storedLastName,
+      plan,
+      isAuthenticated: false,
+    };
   }
 
   const claims = parseClaimsFromToken(token);
@@ -142,10 +186,13 @@ export function getViewerSession(): ViewerSession {
   return {
     subjectId: claims?.sub || subjectId,
     displayName:
+      (storedFirstName && storedLastName ? `${storedFirstName} ${storedLastName}` : null) ||
       normalizeDisplayName(claims?.name) ||
       normalizeDisplayName(storedDisplayName) ||
       deriveDisplayNameFromEmail(claims?.email) ||
       null,
+    firstName: storedFirstName,
+    lastName: storedLastName,
     plan,
     isAuthenticated: Boolean(claims?.sub),
   };
@@ -182,4 +229,18 @@ export function setViewerDisplayName(displayName: string): void {
     return;
   }
   safeStorageSet(localStorage, DISPLAY_NAME_KEY, trimmed);
+}
+
+export function setViewerName(firstName: string, lastName: string): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const first = firstName.trim();
+  const last = lastName.trim();
+  if (!first || !last) {
+    return;
+  }
+  safeStorageSet(localStorage, FIRST_NAME_KEY, first);
+  safeStorageSet(localStorage, LAST_NAME_KEY, last);
+  safeStorageSet(localStorage, DISPLAY_NAME_KEY, `${first} ${last}`);
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getApiBaseUrl, setApiToken } from '../lib/api-client';
 import { setViewerDisplayName, setViewerPlan, setViewerSubjectId } from '../lib/session';
 
@@ -42,6 +43,8 @@ export function GoogleAuthPanel() {
   const [message, setMessage] = useState('Sign in with Google to start secure API sessions.');
   const clientId = useMemo(() => process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '', []);
   const buttonRef = useRef<HTMLDivElement | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   function parseGoogleClaims(idToken: string): GoogleIdTokenClaims | null {
     try {
@@ -136,6 +139,10 @@ export function GoogleAuthPanel() {
             setMessage(
               `Signed in as ${resolvedName || payload.profile.subjectId} (${payload.profile.plan}).`
             );
+            const nextPath = searchParams.get('next');
+            const safeNextPath =
+              nextPath && nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : null;
+            router.replace(safeNextPath || '/dashboard');
           } catch (error) {
             setMessage(
               `Auth request failed: ${error instanceof Error ? error.message : String(error)}`
@@ -192,7 +199,7 @@ export function GoogleAuthPanel() {
         document.body.removeChild(script);
       }
     };
-  }, [clientId]);
+  }, [clientId, router, searchParams]);
 
   return (
     <section className="editorial-card reveal-el" data-delay="180">
