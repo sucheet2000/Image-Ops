@@ -181,6 +181,7 @@ function progressFromStatus(statusText: string, hasResult: boolean, hasError: bo
 
 export function ToolWorkbench(props: WorkbenchProps): ReactNode {
   const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [subjectPlan, setSubjectPlan] = useState<'free' | 'pro' | 'team'>('free');
   const [file, setFile] = useState<File | null>(null);
   const [running, setRunning] = useState(false);
@@ -210,6 +211,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
         if (viewer.plan) {
           setSubjectPlan(viewer.plan);
         }
+        setDisplayName(viewer.displayName);
 
         const id = await ensureViewerSubjectId(apiBaseUrl);
         if (!cancelled) {
@@ -485,7 +487,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
             </p>
           </div>
           <p className="workbench-meta">
-            Subject {subjectId || 'initializing'} · Plan {subjectPlan.toUpperCase()}
+            User {displayName || 'Guest'} · Plan {subjectPlan.toUpperCase()}
           </p>
         </div>
 

@@ -50,6 +50,7 @@ async function readErrorMessage(response: Response): Promise<string> {
 export function BillingShell() {
   const [viewer, setViewer] = useState<ViewerSession>({
     subjectId: null,
+    displayName: null,
     plan: 'free',
     isAuthenticated: false,
   });
@@ -236,7 +237,8 @@ export function BillingShell() {
           <section className="editorial-card reveal-el" data-delay="0">
             <span className="section-label">Current Session</span>
             <p>Authenticated: {viewer.isAuthenticated ? 'YES' : 'NO'}</p>
-            <p>Subject: {viewer.subjectId || 'not available'}</p>
+            <p>Name: {viewer.displayName || 'not available'}</p>
+            <p>Account ID: {viewer.subjectId || 'not available'}</p>
             <p>Plan: {viewer.plan.toUpperCase()}</p>
             {!viewer.isAuthenticated ? (
               <p style={{ marginTop: '0.75rem' }}>
