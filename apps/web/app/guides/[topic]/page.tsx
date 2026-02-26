@@ -10,6 +10,8 @@ type GuidePageProps = {
   params: Promise<{ topic: string }>;
 };
 
+export const revalidate = 86400;
+
 export function generateStaticParams() {
   return GUIDE_PAGES.map((guide) => ({ topic: guide.topic }));
 }

@@ -12,6 +12,8 @@ type ToolPageProps = {
   params: Promise<{ tool: string }>;
 };
 
+export const revalidate = 86400;
+
 type ToolNarrative = {
   beforeTitle: string;
   beforeCopy: string;
