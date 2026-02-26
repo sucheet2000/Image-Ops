@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
+import type { ImageFormat, ImageTool } from '@imageops/core';
 import { AnimatePresence, motion } from 'framer-motion';
 import piexif from 'piexifjs';
 import { apiFetch, getApiBaseUrl } from '../lib/api-client';
@@ -9,9 +10,7 @@ import { JOB_HISTORY_KEY } from '../lib/storage-keys';
 import { ensureViewerSubjectId } from '../lib/viewer-subject';
 import { getViewerSession } from '../lib/session';
 
-type ToolSlug = 'resize' | 'compress' | 'convert' | 'background-remove';
 type ResizeFit = 'cover' | 'contain' | 'inside' | 'outside' | 'fill';
-type OutputFormat = 'jpeg' | 'png' | 'webp';
 
 type UploadInitResponse = {
   objectKey: string;
@@ -195,9 +194,9 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
   const [resizeHeight, setResizeHeight] = useState('1600');
   const [resizeFit, setResizeFit] = useState<ResizeFit>('inside');
   const [compressQuality, setCompressQuality] = useState('80');
-  const [convertFormat, setConvertFormat] = useState<OutputFormat>('jpeg');
+  const [convertFormat, setConvertFormat] = useState<ImageFormat>('jpeg');
   const [convertQuality, setConvertQuality] = useState('85');
-  const [bgOutputFormat, setBgOutputFormat] = useState<OutputFormat>('png');
+  const [bgOutputFormat, setBgOutputFormat] = useState<ImageFormat>('png');
   const fileSelectionIdRef = useRef(0);
 
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
@@ -292,7 +291,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           subjectId: effectiveSubjectId,
-          tool: props.tool as ToolSlug,
+          tool: props.tool as ImageTool,
           filename: file.name,
           mime,
           size: file.size,
@@ -357,7 +356,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           subjectId: effectiveSubjectId,
-          tool: props.tool as ToolSlug,
+          tool: props.tool as ImageTool,
           inputObjectKey: uploadComplete.objectKey,
           options: buildOptions(),
         }),
@@ -579,7 +578,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
                   <select
                     id="convert-format"
                     value={convertFormat}
-                    onChange={(event) => setConvertFormat(event.target.value as OutputFormat)}
+                    onChange={(event) => setConvertFormat(event.target.value as ImageFormat)}
                   >
                     <option value="jpeg">jpeg</option>
                     <option value="png">png</option>
@@ -605,7 +604,7 @@ export function ToolWorkbench(props: WorkbenchProps): ReactNode {
                   <select
                     id="bg-output-format"
                     value={bgOutputFormat}
-                    onChange={(event) => setBgOutputFormat(event.target.value as OutputFormat)}
+                    onChange={(event) => setBgOutputFormat(event.target.value as ImageFormat)}
                   >
                     <option value="png">png</option>
                     <option value="jpeg">jpeg</option>

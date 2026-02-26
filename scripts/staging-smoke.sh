@@ -30,6 +30,7 @@ TMP_CLEANUP="$(mktemp /tmp/image-ops-smoke-cleanup-XXXXXX.json)"
 trap 'rm -f "${TMP_PNG}" "${TMP_JOB}" "${TMP_CLEANUP}"' EXIT
 printf '%s' "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2p6i8AAAAASUVORK5CYII=" | base64 -d >"${TMP_PNG}"
 PNG_SIZE="$(wc -c <"${TMP_PNG}" | tr -d ' ')"
+PNG_SHA256="$(node -e "const fs=require('fs'); const crypto=require('crypto'); const bytes=fs.readFileSync(process.argv[1]); process.stdout.write(crypto.createHash('sha256').update(bytes).digest('hex'));" "${TMP_PNG}")"
 
 echo "==> init upload"
 UPLOAD_INIT_RESPONSE="$(curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/init" \
@@ -70,7 +71,7 @@ fi
 echo "==> complete upload"
 curl_with_optional_auth -fsS "${CURL_LONG[@]}" -X POST "${BASE_URL}/api/uploads/complete" \
   -H "content-type: application/json" \
-  -d "{\"subjectId\":\"${SUBJECT_ID}\",\"objectKey\":\"${OBJECT_KEY}\"}" >/dev/null
+  -d "{\"subjectId\":\"${SUBJECT_ID}\",\"objectKey\":\"${OBJECT_KEY}\",\"sha256\":\"${PNG_SHA256}\"}" >/dev/null
 
 echo "==> create job (requires auth when API_AUTH_REQUIRED=true)"
 CREATE_JOB_STATUS="$(curl_with_optional_auth -sS "${CURL_LONG[@]}" -o "${TMP_JOB}" -w "%{http_code}" -X POST "${BASE_URL}/api/jobs" \

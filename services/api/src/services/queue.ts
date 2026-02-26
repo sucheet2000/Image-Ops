@@ -41,11 +41,11 @@ export class BullMqJobQueueService implements JobQueueService {
     await queue.add(payload.id, payload, {
       jobId: payload.id,
       removeOnComplete: { count: 100, age: 86400 },
-      removeOnFail: { count: 500 },
+      removeOnFail: false,
       attempts: 3,
       backoff: {
         type: 'exponential',
-        delay: 2000,
+        delay: 5000,
       },
     });
   }

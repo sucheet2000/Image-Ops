@@ -2,6 +2,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -39,6 +40,7 @@ export interface ObjectStorageService {
     expiresInSeconds: number;
   }): Promise<string>;
   getObjectBuffer(objectKey: string): Promise<{ bytes: Buffer; contentType: string }>;
+  putObject(input: { objectKey: string; contentType: string; bytes: Buffer }): Promise<void>;
   headObject(objectKey: string): Promise<StorageHeadResult>;
   deleteObjects(objectKeys: string[]): Promise<DeleteObjectsResult>;
   close(): Promise<void>;
@@ -128,6 +130,17 @@ export class S3ObjectStorageService implements ObjectStorageService {
       bytes,
       contentType: String(response.ContentType || 'application/octet-stream'),
     };
+  }
+
+  async putObject(input: { objectKey: string; contentType: string; bytes: Buffer }): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: input.objectKey,
+        Body: input.bytes,
+        ContentType: input.contentType,
+      })
+    );
   }
 
   async headObject(objectKey: string): Promise<StorageHeadResult> {
@@ -224,6 +237,13 @@ export class InMemoryObjectStorageService implements ObjectStorageService {
       bytes: Buffer.from(object.bytes),
       contentType: object.contentType,
     };
+  }
+
+  async putObject(input: { objectKey: string; contentType: string; bytes: Buffer }): Promise<void> {
+    this.objects.set(input.objectKey, {
+      contentType: input.contentType,
+      bytes: Buffer.from(input.bytes),
+    });
   }
 
   async headObject(objectKey: string): Promise<StorageHeadResult> {

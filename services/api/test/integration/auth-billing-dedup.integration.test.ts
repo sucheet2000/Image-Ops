@@ -1,4 +1,4 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { InMemoryAuthService } from '../../src/services/auth';
 import { buildUploadFormData } from './helpers/upload-form';
@@ -22,6 +22,10 @@ function nowTag(): string {
 
 async function readJson<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
+}
+
+function sha256Hex(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function bearerAuthHeaders(
@@ -147,6 +151,7 @@ describe.skipIf(!shouldRun)('integration auth+billing+dedup', () => {
       body: JSON.stringify({
         subjectId,
         objectKey: firstUpload.objectKey,
+        sha256: sha256Hex(samplePngBytes),
       }),
     });
     expect(firstCompleteResponse.status).toBe(200);
@@ -167,6 +172,7 @@ describe.skipIf(!shouldRun)('integration auth+billing+dedup', () => {
       body: JSON.stringify({
         subjectId,
         objectKey: secondUpload.objectKey,
+        sha256: sha256Hex(samplePngBytes),
       }),
     });
     expect(secondCompleteResponse.status).toBe(200);

@@ -1,5 +1,5 @@
 import { JOB_QUEUE_NAMES, type ImageJobQueuePayload } from '@imageops/core';
-import { Worker } from 'bullmq';
+import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { loadWorkerConfig } from './config';
 import { startWorkerHeartbeat } from './heartbeat';
@@ -17,6 +17,16 @@ const connection = new IORedis(config.redisUrl, { maxRetriesPerRequest: null });
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.WORKER_SHUTDOWN_TIMEOUT_MS || 10000);
 const WORKER_ID = process.env.HOSTNAME ?? `worker-${process.pid}`;
 const HEARTBEAT_TTL_SECONDS = Math.max(2, Math.ceil((config.workerHeartbeatIntervalMs / 1000) * 2));
+
+type DeadLetterPayload = {
+  originalJobId: string | undefined;
+  originalJobName: string;
+  originalQueue: string;
+  jobData: ImageJobQueuePayload;
+  failedReason: string;
+  failedAt: string;
+  attemptsMade: number;
+};
 
 const storage = new S3WorkerStorageService(config);
 const jobRepo: WorkerJobRepository =
@@ -56,6 +66,14 @@ const workerDefinitions = [
   { queueName: JOB_QUEUE_NAMES.bulk, concurrency: config.bulkConcurrency },
 ] as const;
 
+const deadLetterQueue = new Queue<DeadLetterPayload>('image-ops-dlq', {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: false,
+    removeOnFail: false,
+  },
+});
+
 const workers = workerDefinitions.map(
   ({ queueName, concurrency }) =>
     new Worker<ImageJobQueuePayload>(
@@ -71,6 +89,10 @@ const workers = workerDefinitions.map(
       {
         connection,
         concurrency,
+        settings: {
+          backoffStrategy: (attemptsMade: number) =>
+            Math.min(5000 * Math.pow(4, attemptsMade - 1), 600_000),
+        },
       }
     )
 );
@@ -129,6 +151,60 @@ workers.forEach((worker, index) => {
         message: error.message,
       })
     );
+
+    if (!job) {
+      return;
+    }
+
+    const maxAttempts = job.opts.attempts ?? 3;
+    if (job.attemptsMade < maxAttempts) {
+      return;
+    }
+
+    void deadLetterQueue
+      .add(
+        'failed-job',
+        {
+          originalJobId: typeof job.id === 'string' ? job.id : undefined,
+          originalJobName: job.name,
+          originalQueue: queueName,
+          jobData: job.data,
+          failedReason: error.message,
+          failedAt: new Date().toISOString(),
+          attemptsMade: job.attemptsMade,
+        },
+        {
+          jobId: `${queueName}:${String(job.id ?? 'unknown')}:${Date.now()}`,
+          removeOnComplete: false,
+          removeOnFail: false,
+        }
+      )
+      .then(() => {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({
+            event: 'worker.dlq.moved',
+            workerId: WORKER_ID,
+            queue: queueName,
+            jobId: job.id,
+            subjectId: job.data.subjectId,
+            tool: job.data.tool,
+            attemptsMade: job.attemptsMade,
+          })
+        );
+      })
+      .catch((dlqError) => {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({
+            event: 'worker.dlq.move_failed',
+            workerId: WORKER_ID,
+            queue: queueName,
+            jobId: job.id,
+            message: dlqError instanceof Error ? dlqError.message : String(dlqError),
+          })
+        );
+      });
   });
 });
 
@@ -191,6 +267,7 @@ async function shutdown(reason: string, exitCode: number, error?: unknown): Prom
 
   try {
     stopHeartbeat();
+    await withShutdownTimeout(deadLetterQueue.close(), 'deadLetterQueue.close');
     await withShutdownTimeout(closeWorkers(), 'workers.close');
     await withShutdownTimeout(jobRepo.close(), 'jobRepo.close');
     await withShutdownTimeout(connection.quit(), 'connection.quit');

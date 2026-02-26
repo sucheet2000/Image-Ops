@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { bearerAuthHeaders } from './helpers/auth';
 import { createFakeServices, createTestConfig } from './helpers/fakes';
 import { startApiTestServer } from './helpers/server';
@@ -21,15 +22,20 @@ function fakeImageBytes(marker: string): Buffer {
   ]);
 }
 
+function sha256Hex(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
 async function completeUpload(
   baseUrl: string,
   subjectId: string,
-  objectKey: string
+  objectKey: string,
+  bytes: Buffer
 ): Promise<void> {
   const response = await fetch(`${baseUrl}/api/uploads/complete`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...bearerAuthHeaders(subjectId) },
-    body: JSON.stringify({ subjectId, objectKey }),
+    body: JSON.stringify({ subjectId, objectKey, sha256: sha256Hex(bytes) }),
   });
   expect(response.status).toBe(200);
 }
@@ -41,8 +47,9 @@ describe('POST /api/jobs', () => {
     closers.push(server.close);
 
     const inputObjectKey = 'tmp/seller_1/input/2026/02/23/resize/input.jpg';
-    services.storage.setObject(inputObjectKey, 'image/png', fakeImageBytes('first-image-bytes'));
-    await completeUpload(server.baseUrl, 'seller_1', inputObjectKey);
+    const inputBytes = fakeImageBytes('first-image-bytes');
+    services.storage.setObject(inputObjectKey, 'image/png', inputBytes);
+    await completeUpload(server.baseUrl, 'seller_1', inputObjectKey, inputBytes);
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: 'POST',
@@ -79,6 +86,7 @@ describe('POST /api/jobs', () => {
       body: JSON.stringify({
         subjectId: 'seller_1',
         objectKey: missingObjectKey,
+        sha256: 'a'.repeat(64),
       }),
     });
     expect(completeResponse.status).toBe(404);
@@ -106,8 +114,9 @@ describe('POST /api/jobs', () => {
 
     for (let index = 0; index < 6; index += 1) {
       const key = `tmp/seller_2/input/2026/02/23/compress/${index}.jpg`;
-      services.storage.setObject(key, 'image/png', fakeImageBytes(`bytes-${index}`));
-      await completeUpload(server.baseUrl, 'seller_2', key);
+      const bytes = fakeImageBytes(`bytes-${index}`);
+      services.storage.setObject(key, 'image/png', bytes);
+      await completeUpload(server.baseUrl, 'seller_2', key, bytes);
 
       const response = await fetch(`${server.baseUrl}/api/jobs`, {
         method: 'POST',
@@ -124,8 +133,9 @@ describe('POST /api/jobs', () => {
     }
 
     const blockedKey = 'tmp/seller_2/input/2026/02/23/compress/blocked.jpg';
-    services.storage.setObject(blockedKey, 'image/png', fakeImageBytes('bytes-blocked'));
-    await completeUpload(server.baseUrl, 'seller_2', blockedKey);
+    const blockedBytes = fakeImageBytes('bytes-blocked');
+    services.storage.setObject(blockedKey, 'image/png', blockedBytes);
+    await completeUpload(server.baseUrl, 'seller_2', blockedKey, blockedBytes);
 
     const blocked = await fetch(`${server.baseUrl}/api/jobs`, {
       method: 'POST',
@@ -160,8 +170,9 @@ describe('POST /api/jobs', () => {
     });
 
     const inputObjectKey = 'tmp/seller_paid/input/2026/02/23/background-remove/input.png';
-    services.storage.setObject(inputObjectKey, 'image/png', fakeImageBytes('seller-paid-image'));
-    await completeUpload(server.baseUrl, 'seller_paid', inputObjectKey);
+    const inputBytes = fakeImageBytes('seller-paid-image');
+    services.storage.setObject(inputObjectKey, 'image/png', inputBytes);
+    await completeUpload(server.baseUrl, 'seller_paid', inputObjectKey, inputBytes);
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: 'POST',
@@ -199,8 +210,9 @@ describe('POST /api/jobs', () => {
 
     for (let index = 0; index < 2; index += 1) {
       const key = `tmp/seller_pro_limited/input/2026/02/23/convert/${index}.png`;
-      services.storage.setObject(key, 'image/png', fakeImageBytes(`seller-pro-${index}`));
-      await completeUpload(server.baseUrl, 'seller_pro_limited', key);
+      const bytes = fakeImageBytes(`seller-pro-${index}`);
+      services.storage.setObject(key, 'image/png', bytes);
+      await completeUpload(server.baseUrl, 'seller_pro_limited', key, bytes);
 
       const create = await fetch(`${server.baseUrl}/api/jobs`, {
         method: 'POST',
@@ -224,8 +236,9 @@ describe('POST /api/jobs', () => {
     }
 
     const blockedKey = 'tmp/seller_pro_limited/input/2026/02/23/convert/blocked.png';
-    services.storage.setObject(blockedKey, 'image/png', fakeImageBytes('seller-pro-blocked'));
-    await completeUpload(server.baseUrl, 'seller_pro_limited', blockedKey);
+    const blockedBytes = fakeImageBytes('seller-pro-blocked');
+    services.storage.setObject(blockedKey, 'image/png', blockedBytes);
+    await completeUpload(server.baseUrl, 'seller_pro_limited', blockedKey, blockedBytes);
 
     const blocked = await fetch(`${server.baseUrl}/api/jobs`, {
       method: 'POST',
@@ -255,8 +268,9 @@ describe('POST /api/jobs', () => {
     closers.push(server.close);
 
     const inputObjectKey = 'tmp/seller_spoof/input/2026/02/23/background-remove/input.png';
-    services.storage.setObject(inputObjectKey, 'image/png', fakeImageBytes('seller-spoof-image'));
-    await completeUpload(server.baseUrl, 'seller_spoof', inputObjectKey);
+    const inputBytes = fakeImageBytes('seller-spoof-image');
+    services.storage.setObject(inputObjectKey, 'image/png', inputBytes);
+    await completeUpload(server.baseUrl, 'seller_spoof', inputObjectKey, inputBytes);
 
     const response = await fetch(`${server.baseUrl}/api/jobs`, {
       method: 'POST',

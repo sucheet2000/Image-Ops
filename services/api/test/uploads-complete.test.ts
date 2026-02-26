@@ -71,9 +71,9 @@ describe('POST /api/uploads/complete', () => {
       }),
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     const payload = await response.json();
-    expect(payload.error).toBe('SHA256_MISMATCH');
+    expect(payload.error).toBe('integrity_mismatch');
 
     const completion = await services.jobRepo.getUploadCompletion(objectKey);
     expect(completion).toBeNull();
@@ -92,15 +92,22 @@ describe('POST /api/uploads/complete', () => {
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_2') },
-      body: JSON.stringify({ subjectId: 'seller_2', objectKey: canonicalKey }),
+      body: JSON.stringify({
+        subjectId: 'seller_2',
+        objectKey: canonicalKey,
+        sha256: sha256Hex(bytes),
+      }),
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_2') },
-      // Intentionally omits sha256 to exercise server-side digest computation.
-      body: JSON.stringify({ subjectId: 'seller_2', objectKey: duplicateKey }),
+      body: JSON.stringify({
+        subjectId: 'seller_2',
+        objectKey: duplicateKey,
+        sha256: sha256Hex(bytes),
+      }),
     });
     expect(second.status).toBe(200);
 
@@ -125,14 +132,22 @@ describe('POST /api/uploads/complete', () => {
     const first = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_a') },
-      body: JSON.stringify({ subjectId: 'seller_a', objectKey: subjectAKey }),
+      body: JSON.stringify({
+        subjectId: 'seller_a',
+        objectKey: subjectAKey,
+        sha256: sha256Hex(bytes),
+      }),
     });
     expect(first.status).toBe(200);
 
     const second = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_b') },
-      body: JSON.stringify({ subjectId: 'seller_b', objectKey: subjectBKey }),
+      body: JSON.stringify({
+        subjectId: 'seller_b',
+        objectKey: subjectBKey,
+        sha256: sha256Hex(bytes),
+      }),
     });
     expect(second.status).toBe(200);
 
@@ -179,7 +194,7 @@ describe('POST /api/uploads/complete', () => {
     const response = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...bearerAuthHeaders('seller_3') },
-      body: JSON.stringify({ subjectId: 'seller_3', objectKey: sourceKey }),
+      body: JSON.stringify({ subjectId: 'seller_3', objectKey: sourceKey, sha256: sourceHash }),
     });
 
     expect(response.status).toBe(200);

@@ -160,6 +160,8 @@ function validateEnv() {
 validateEnv(); // call before anything else
 ```
 
+`METRICS_TOKEN` is documented in both `/Users/sucheetboppana/Documents/New project/.env.example` and `/Users/sucheetboppana/Documents/New project/services/api/.env.example`.
+
 2. **Remove `API_AUTH_REQUIRED` entirely** from:
    - All source files in `services/api`
    - `.env.example`

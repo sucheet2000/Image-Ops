@@ -113,7 +113,7 @@ function readStoredSubjectId(): string | null {
 }
 
 function readApiToken(): string | null {
-  return safeStorageGet(sessionStorage, TOKEN_KEY) || safeStorageGet(localStorage, TOKEN_KEY);
+  return safeStorageGet(sessionStorage, TOKEN_KEY) ?? null;
 }
 
 export function getViewerSession(): ViewerSession {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { bearerAuthHeaders } from './helpers/auth';
 import { createFakeServices, createTestConfig } from './helpers/fakes';
 import { startApiTestServer } from './helpers/server';
@@ -21,6 +22,10 @@ function fakeImageBytes(marker: string): Buffer {
   ]);
 }
 
+function sha256Hex(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
 describe('GET /api/quota/:subjectId', () => {
   it('returns current usage for active window', async () => {
     let nowValue = new Date('2026-02-23T00:00:00.000Z');
@@ -30,7 +35,8 @@ describe('GET /api/quota/:subjectId', () => {
     closers.push(server.close);
 
     const inputObjectKey = 'tmp/seller_1/input/2026/02/23/compress/a.jpg';
-    services.storage.setObject(inputObjectKey, 'image/png', fakeImageBytes('quota-seller-1'));
+    const inputBytes = fakeImageBytes('quota-seller-1');
+    services.storage.setObject(inputObjectKey, 'image/png', inputBytes);
 
     const complete = await fetch(`${server.baseUrl}/api/uploads/complete`, {
       method: 'POST',
@@ -38,6 +44,7 @@ describe('GET /api/quota/:subjectId', () => {
       body: JSON.stringify({
         subjectId: 'seller_1',
         objectKey: inputObjectKey,
+        sha256: sha256Hex(inputBytes),
       }),
     });
     expect(complete.status).toBe(200);

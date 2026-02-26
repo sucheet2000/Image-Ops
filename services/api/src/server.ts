@@ -11,6 +11,7 @@ import { requireApiAuth, type RequestWithAuth } from './lib/auth-middleware';
 import { logError, logInfo } from './lib/log';
 import { createRateLimitMiddleware } from './lib/rate-limit';
 import { registerAuthRoutes } from './routes/auth';
+import { registerAdminRoutes } from './routes/admin';
 import { registerBillingRoutes } from './routes/billing';
 import { registerCleanupRoutes } from './routes/cleanup';
 import { registerJobsRoutes } from './routes/jobs';
@@ -187,6 +188,20 @@ function validateEnv(): void {
     if (!process.env.METRICS_TOKEN) {
       // eslint-disable-next-line no-console
       console.error('FATAL: METRICS_TOKEN is required in production');
+      process.exit(1);
+    }
+  }
+
+  const billingProvider = process.env.BILLING_PROVIDER || 'hmac';
+  if (billingProvider === 'stripe') {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      // eslint-disable-next-line no-console
+      console.error('FATAL: STRIPE_SECRET_KEY is required when BILLING_PROVIDER=stripe');
+      process.exit(1);
+    }
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      // eslint-disable-next-line no-console
+      console.error('FATAL: STRIPE_WEBHOOK_SECRET is required when BILLING_PROVIDER=stripe');
       process.exit(1);
     }
   }
@@ -564,6 +579,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   });
   registerObservabilityRoutes(app);
   registerQuotaRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, now: deps.now });
+  registerAdminRoutes(app, { config: deps.config });
 
   app.use(errorHandler);
   return { app, deps };
