@@ -120,4 +120,27 @@ describe('POST /api/cleanup', () => {
     const audits = await services.jobRepo.listDeletionAudit(10);
     expect(audits[0]?.result).toBe('not_found');
   });
+
+  it('rejects traversal-like cleanup keys', async () => {
+    const services = createFakeServices();
+    const server = await startApiTestServer({ ...services, config: createTestConfig() });
+    closers.push(server.close);
+
+    const response = await fetch(`${server.baseUrl}/api/cleanup`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'cleanup-key-4',
+        ...bearerAuthHeaders('seller_1'),
+      },
+      body: JSON.stringify({
+        objectKeys: ['tmp/../secrets/env'],
+        reason: 'manual',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe('invalid_key');
+  });
 });
