@@ -52,12 +52,12 @@ services:
     environment:
       API_PORT: '4000'
       WEB_ORIGIN: 'http://localhost:3000'
-      AUTH_TOKEN_SECRET: 'local-deploy-auth-token-secret-32bytes'
-      AUTH_REFRESH_COOKIE_SECURE: 'true'
-      BILLING_PROVIDER_SECRET: 'local-deploy-billing-provider'
-      BILLING_WEBHOOK_SECRET: 'local-deploy-billing-webhook'
-      STRIPE_WEBHOOK_SECRET: 'local-deploy-stripe-webhook'
-      METRICS_TOKEN: 'local-deploy-metrics-token'
+      AUTH_TOKEN_SECRET: '${AUTH_TOKEN_SECRET:-local-deploy-auth-token-secret-32bytes}'
+      AUTH_REFRESH_COOKIE_SECURE: '${AUTH_REFRESH_COOKIE_SECURE:-true}'
+      BILLING_PROVIDER_SECRET: '${BILLING_PROVIDER_SECRET:-local-deploy-billing-provider}'
+      BILLING_WEBHOOK_SECRET: '${BILLING_WEBHOOK_SECRET:-local-deploy-billing-webhook}'
+      STRIPE_WEBHOOK_SECRET: '${STRIPE_WEBHOOK_SECRET:-local-deploy-stripe-webhook}'
+      METRICS_TOKEN: '${METRICS_TOKEN:-local-deploy-metrics-token}'
       REDIS_URL: 'redis://redis:6379'
       JOB_QUEUE_NAME: 'image-ops-jobs'
       JOB_REPO_DRIVER: 'postgres'
@@ -115,7 +115,6 @@ services:
         required: false
     environment:
       NEXT_PUBLIC_API_BASE_URL: 'http://localhost:4000'
-      NEXT_PUBLIC_SITE_URL: 'http://localhost:3000'
     depends_on:
       - api
     ports:
