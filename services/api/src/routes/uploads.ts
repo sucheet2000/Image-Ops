@@ -7,6 +7,7 @@ import {
   type ImageTool,
   type UploadCompletionRecord,
 } from '@imageops/core';
+import sharp from 'sharp';
 import { ulid } from 'ulid';
 import { z } from 'zod';
 import type { Router } from 'express';
@@ -18,6 +19,13 @@ import type { MalwareScanService } from '../services/malware-scan';
 import type { ObjectStorageService } from '../services/storage';
 
 const SUPPORTED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const EXIF_STRIPPABLE_MIME = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/tiff',
+]);
 
 const uploadInitSchema = z.object({
   subjectId: z.string().min(1),
@@ -124,6 +132,30 @@ function detectMimeFromBytes(bytes: Buffer): string | null {
   }
 
   return null;
+}
+
+async function stripExifServerSide(input: {
+  storage: ObjectStorageService;
+  objectKey: string;
+  bytes: Buffer;
+  contentType: string;
+}): Promise<Buffer> {
+  const normalizedContentType = input.contentType.toLowerCase();
+  if (!EXIF_STRIPPABLE_MIME.has(normalizedContentType)) {
+    return input.bytes;
+  }
+
+  const strippedBuffer = await sharp(input.bytes).rotate().toBuffer();
+  if (strippedBuffer.length === input.bytes.length && strippedBuffer.equals(input.bytes)) {
+    return input.bytes;
+  }
+
+  await input.storage.putObject({
+    objectKey: input.objectKey,
+    contentType: input.contentType,
+    bytes: strippedBuffer,
+  });
+  return strippedBuffer;
 }
 
 function parseUploadObjectKeyForSubject(
@@ -322,13 +354,37 @@ export function registerUploadsRoutes(
         return;
       }
 
-      const sha256 = await sha256HexStreaming(object.bytes);
-      if (payload.sha256 && payload.sha256.toLowerCase() !== sha256) {
+      const initialSha256 = await sha256HexStreaming(object.bytes);
+      if (payload.sha256 && payload.sha256.toLowerCase() !== initialSha256) {
         res.status(400).json({
           error: 'SHA256_MISMATCH',
           message: 'Provided sha256 does not match uploaded bytes.',
         });
         return;
+      }
+
+      let sha256 = initialSha256;
+      try {
+        const strippedBytes = await stripExifServerSide({
+          storage: deps.storage,
+          objectKey: payload.objectKey,
+          bytes: object.bytes,
+          contentType: detectedMime,
+        });
+        if (!buffersEqualByteByByte(strippedBytes, object.bytes)) {
+          object = {
+            ...object,
+            bytes: strippedBytes,
+          };
+          sha256 = await sha256HexStreaming(strippedBytes);
+        }
+      } catch (error) {
+        logError('upload.exif_strip.failed_open', {
+          objectKey: payload.objectKey,
+          subjectId: safeSubjectId,
+          contentType: detectedMime,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
 
       try {
