@@ -11,6 +11,7 @@ import { requireApiAuth, type RequestWithAuth } from './lib/auth-middleware';
 import { logError, logInfo } from './lib/log';
 import { createRateLimitMiddleware } from './lib/rate-limit';
 import { registerAuthRoutes } from './routes/auth';
+import { registerAdminRoutes } from './routes/admin';
 import { registerBillingRoutes } from './routes/billing';
 import { registerCleanupRoutes } from './routes/cleanup';
 import { registerJobsRoutes } from './routes/jobs';
@@ -564,6 +565,7 @@ export function createApiRuntime(incomingDeps?: Partial<ApiDependencies>): ApiRu
   });
   registerObservabilityRoutes(app);
   registerQuotaRoutes(app, { config: deps.config, jobRepo: deps.jobRepo, now: deps.now });
+  registerAdminRoutes(app, { config: deps.config });
 
   app.use(errorHandler);
   return { app, deps };
