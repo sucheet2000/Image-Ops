@@ -19,6 +19,7 @@ All file paths are relative to the project root.
 **Problem:** `apps/web/app/components/google-auth.tsx:64` sets the access token as a regular `document.cookie`. This is readable by JavaScript and stolen instantly by any XSS attack.
 
 **Fix:**
+
 1. Open `apps/web/app/components/google-auth.tsx`
 2. Find the line that writes `image_ops_api_token` to `document.cookie`
 3. Delete that line entirely
@@ -27,6 +28,7 @@ All file paths are relative to the project root.
 6. Verify `apps/web/app/lib/api-client.ts:getApiToken()` reads from `sessionStorage` first (it already does per the audit) — the cookie fallback is no longer needed; remove it
 
 **Verification:**
+
 ```bash
 grep -r "image_ops_api_token" apps/web --include="*.ts" --include="*.tsx"
 # Should return ZERO results for document.cookie writes
@@ -34,6 +36,7 @@ grep -r "image_ops_api_token" apps/web --include="*.ts" --include="*.tsx"
 ```
 
 **Commit:**
+
 ```
 fix(web/auth): remove non-HttpOnly access token cookie; keep token in sessionStorage only
 ```
@@ -45,6 +48,7 @@ fix(web/auth): remove non-HttpOnly access token cookie; keep token in sessionSto
 **Problem:** `apps/web/app/lib/api-client.ts:48-54` — `getApiToken()` falls back to `localStorage` after `sessionStorage`. If a token ever lands in `localStorage` (a bug, a migration, anything), it persists across sessions and browser restarts — a session fixation risk.
 
 **Fix:**
+
 1. Open `apps/web/app/lib/api-client.ts`
 2. Find `getApiToken()` (around line 48–54)
 3. Remove the `localStorage.getItem(...)` fallback entirely
@@ -52,6 +56,7 @@ fix(web/auth): remove non-HttpOnly access token cookie; keep token in sessionSto
 5. Also remove any `localStorage.setItem(...)` calls for the access token anywhere in `apps/web`
 
 **After the fix, `getApiToken()` should look like this:**
+
 ```typescript
 function getApiToken(): string | null {
   return sessionStorage.getItem('imageops_access_token') ?? null;
@@ -60,12 +65,14 @@ function getApiToken(): string | null {
 ```
 
 **Verification:**
+
 ```bash
 grep -r "localStorage" apps/web --include="*.ts" --include="*.tsx"
 # Should return ZERO results for any token/auth-related localStorage usage
 ```
 
 **Commit:**
+
 ```
 fix(web/auth): remove localStorage fallback from getApiToken; sessionStorage only
 ```
@@ -77,6 +84,7 @@ fix(web/auth): remove localStorage fallback from getApiToken; sessionStorage onl
 **Problem:** `apps/web/app/components/tool-workbench.tsx:78-115` strips EXIF client-side for JPEG only. Any user calling the API directly via `curl` or Postman bypasses this entirely and uploads files containing GPS coordinates, device serial numbers, and other metadata that gets stored and processed.
 
 **Fix:**
+
 1. Install `sharp` in the API service if not already present:
    ```bash
    cd services/api && npm install sharp && npm install --save-dev @types/node
@@ -111,12 +119,11 @@ async function stripExifServerSide(
 
   // Strip EXIF using sharp (withMetadata(false) is the default — sharp strips all metadata)
   const strippedBuffer = await sharp(originalBuffer)
-    .withMetadata(false)  // Explicitly strip all metadata including GPS, device info
+    .withMetadata(false) // Explicitly strip all metadata including GPS, device info
     .toBuffer();
 
   // Only re-upload if the buffer actually changed (avoid unnecessary S3 writes)
-  if (strippedBuffer.length !== originalBuffer.length ||
-      !strippedBuffer.equals(originalBuffer)) {
+  if (strippedBuffer.length !== originalBuffer.length || !strippedBuffer.equals(originalBuffer)) {
     const putCmd = new PutObjectCommand({
       Bucket: bucket,
       Key: key,
@@ -132,6 +139,7 @@ async function stripExifServerSide(
 6. Wrap in try/catch — a strip failure should log a warning but NOT fail the upload (degrade gracefully)
 
 **Verification:**
+
 ```bash
 # In services/api:
 cd services/api
@@ -143,6 +151,7 @@ npx ts-node -e "
 ```
 
 **Commit:**
+
 ```
 fix(api/uploads): add server-side EXIF strip on upload completion for all image types
 ```
@@ -154,6 +163,7 @@ fix(api/uploads): add server-side EXIF strip on upload completion for all image 
 **Problem:** `services/api/src/server.ts:187-191` calls `process.exit(1)` at startup if `METRICS_TOKEN` is absent in production. This var is not in `.env.example` anywhere, so any developer deploying fresh will get an immediate crash with no obvious cause.
 
 **Fix:**
+
 1. Open `services/api/.env.example`
 2. Find the security/auth section and add:
    ```
@@ -164,12 +174,14 @@ fix(api/uploads): add server-side EXIF strip on upload completion for all image 
 4. Open `docs/REMEDIATION.md` and add a note that METRICS_TOKEN is now documented
 
 **Verification:**
+
 ```bash
 grep "METRICS_TOKEN" services/api/.env.example
 # Must return a result
 ```
 
 **Commit:**
+
 ```
 docs(api): add METRICS_TOKEN to .env.example with generation instructions
 ```
@@ -179,13 +191,16 @@ docs(api): add METRICS_TOKEN to .env.example with generation instructions
 ## FIX 5 — Add missing env vars to .env.example (P2 Config)
 
 **Problem:** Three env vars used in `apps/web` are missing from `.env.example`:
+
 - `NEXT_PUBLIC_ENABLE_WATCHTOWER` — gates the Watchtower feature
 - `NEXT_PUBLIC_WATCHTOWER_SUBJECT_ALLOWLIST` — allowlist for Watchtower
 - `NEXT_PUBLIC_SITE_URL` — used in SEO/OG metadata
 
 **Fix:**
+
 1. Open `apps/web/.env.example`
 2. Add these entries with clear comments:
+
    ```
    # Site URL — used for Open Graph tags and canonical URLs
    NEXT_PUBLIC_SITE_URL=https://yourdomain.com
@@ -197,6 +212,7 @@ docs(api): add METRICS_TOKEN to .env.example with generation instructions
    # Only used when NEXT_PUBLIC_ENABLE_WATCHTOWER=true
    NEXT_PUBLIC_WATCHTOWER_SUBJECT_ALLOWLIST=
    ```
+
 3. Verify `NEXT_PUBLIC_ENABLE_BILLING_RECONCILE` is also present (it should be per audit) — add if missing:
    ```
    # Enable billing reconciliation endpoint — for admin use only
@@ -204,12 +220,14 @@ docs(api): add METRICS_TOKEN to .env.example with generation instructions
    ```
 
 **Verification:**
+
 ```bash
 grep "NEXT_PUBLIC_ENABLE_WATCHTOWER\|NEXT_PUBLIC_SITE_URL\|NEXT_PUBLIC_WATCHTOWER" apps/web/.env.example
 # Must return 3 results
 ```
 
 **Commit:**
+
 ```
 docs(web): add NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_ENABLE_WATCHTOWER, NEXT_PUBLIC_WATCHTOWER_SUBJECT_ALLOWLIST to .env.example
 ```
@@ -227,7 +245,10 @@ docs(web): add NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_ENABLE_WATCHTOWER, NEXT_PUBLIC_
    ```typescript
    const uploadCompleteSchema = z.object({
      jobInputKey: z.string().min(1),
-     sha256: z.string().length(64).regex(/^[0-9a-f]+$/), // required, must be lowercase hex
+     sha256: z
+       .string()
+       .length(64)
+       .regex(/^[0-9a-f]+$/), // required, must be lowercase hex
      // ...other fields
    });
    ```
@@ -237,7 +258,8 @@ docs(web): add NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_ENABLE_WATCHTOWER, NEXT_PUBLIC_
    if (body.sha256 !== backendSha256) {
      return res.status(422).json({
        error: 'integrity_mismatch',
-       message: 'File integrity check failed. The uploaded file does not match the declared checksum.',
+       message:
+         'File integrity check failed. The uploaded file does not match the declared checksum.',
      });
    }
    ```
@@ -247,7 +269,7 @@ docs(web): add NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_ENABLE_WATCHTOWER, NEXT_PUBLIC_
      const buffer = await file.arrayBuffer();
      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
      const hashArray = Array.from(new Uint8Array(hashBuffer));
-     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+     return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
    }
    ```
 
@@ -256,6 +278,7 @@ docs(web): add NEXT_PUBLIC_SITE_URL, NEXT_PUBLIC_ENABLE_WATCHTOWER, NEXT_PUBLIC_
 If implementing Option A breaks the upload flow timeline, remove the `sha256` field entirely from the schema and any code that references it, so there is no misleading integrity signal.
 
 **Verification:**
+
 ```bash
 # If Option A: upload a file, tamper with the sha256 in the request, expect 422
 # If Option B:
@@ -264,10 +287,13 @@ grep -r "sha256" services/api/src/routes/uploads.ts
 ```
 
 **Commit:**
+
 ```
 fix(api/uploads): enforce client SHA256 integrity check against backend-computed hash
 ```
+
 or
+
 ```
 fix(api/uploads): remove no-op SHA256 field from uploadCompleteSchema to eliminate false trust signal
 ```
@@ -279,6 +305,7 @@ fix(api/uploads): remove no-op SHA256 field from uploadCompleteSchema to elimina
 **Problem:** Failed jobs in `services/worker/src/worker.ts` are marked as failed with no replay mechanism. If a job fails after the user has already been charged quota, they lose their quota allowance with no way to recover without contacting support.
 
 **Fix:**
+
 1. Open `services/worker/src/worker.ts`
 2. Find the BullMQ Worker configuration
 3. Add a dead-letter queue configuration:
@@ -315,17 +342,21 @@ worker.on('failed', async (job, error) => {
   const maxAttempts = job.opts.attempts ?? 3;
   if (job.attemptsMade >= maxAttempts) {
     // Move to dead-letter queue
-    await deadLetterQueue.add('failed-job', {
-      originalJobId: job.id,
-      originalQueue: 'image-ops-jobs',
-      jobData: job.data,
-      failedReason: error.message,
-      failedAt: new Date().toISOString(),
-      attemptsMade: job.attemptsMade,
-    }, {
-      removeOnComplete: false,
-      removeOnFail: false,
-    });
+    await deadLetterQueue.add(
+      'failed-job',
+      {
+        originalJobId: job.id,
+        originalQueue: 'image-ops-jobs',
+        jobData: job.data,
+        failedReason: error.message,
+        failedAt: new Date().toISOString(),
+        attemptsMade: job.attemptsMade,
+      },
+      {
+        removeOnComplete: false,
+        removeOnFail: false,
+      }
+    );
 
     // Log for alerting
     console.error('[DLQ] Job moved to dead-letter queue', {
@@ -339,6 +370,7 @@ worker.on('failed', async (job, error) => {
 ```
 
 4. Set a default `attempts` value in the job creation route (`services/api/src/routes/jobs.ts`) if not already set:
+
    ```typescript
    await imageJobsQueue.add('process', jobPayload, {
      attempts: 3,
@@ -355,6 +387,7 @@ worker.on('failed', async (job, error) => {
    ```
 
 **Verification:**
+
 ```bash
 cd services/worker
 npx ts-node -e "
@@ -365,6 +398,7 @@ npx ts-node -e "
 ```
 
 **Commit:**
+
 ```
 feat(worker): add dead-letter queue for failed jobs with exponential backoff and retry cap
 ```
@@ -376,6 +410,7 @@ feat(worker): add dead-letter queue for failed jobs with exponential backoff and
 **Problem:** `apps/web/next.config.ts:16-29` sets HSTS, X-Frame-Options, and other security headers but has no Content-Security-Policy. Without a CSP, inline script injection (XSS) is completely unmitigated.
 
 **Fix:**
+
 1. Open `apps/web/next.config.ts`
 2. Find the `headers()` function that currently sets security headers
 3. Add a CSP header entry. Use a nonce-based approach for Next.js App Router:
@@ -411,6 +446,7 @@ feat(worker): add dead-letter queue for failed jobs with exponential backoff and
    ```
 
 **Verification:**
+
 ```bash
 # Start the Next.js dev server and check response headers:
 curl -I http://localhost:3000 | grep -i "content-security-policy"
@@ -418,6 +454,7 @@ curl -I http://localhost:3000 | grep -i "content-security-policy"
 ```
 
 **Commit:**
+
 ```
 feat(web/security): add Content-Security-Policy header to Next.js config
 ```
@@ -429,6 +466,7 @@ feat(web/security): add Content-Security-Policy header to Next.js config
 **Problem:** `services/api/src/routes/cleanup.ts:72-82` validates that keys start with `tmp/` but does not reject traversal patterns like `tmp/../secrets/`. S3 normalizes these, so exploitation risk is low — but the defensive validation should be airtight.
 
 **Fix:**
+
 1. Open `services/api/src/routes/cleanup.ts`
 2. Find the key validation around line 72–82
 3. Replace the current startsWith check with a strict allowlist regex:
@@ -442,9 +480,10 @@ if (!key.startsWith('tmp/')) {
 // AFTER (strict allowlist — only alphanumeric, hyphens, underscores, forward slashes):
 const VALID_CLEANUP_KEY = /^tmp\/[a-zA-Z0-9_\-\/]+$/;
 if (!VALID_CLEANUP_KEY.test(key)) {
-  return res.status(400).json({ 
+  return res.status(400).json({
     error: 'invalid_key',
-    message: 'Key must start with tmp/ and contain only alphanumeric characters, hyphens, underscores, and forward slashes.'
+    message:
+      'Key must start with tmp/ and contain only alphanumeric characters, hyphens, underscores, and forward slashes.',
   });
 }
 
@@ -455,6 +494,7 @@ if (key.includes('..') || key.includes('//')) {
 ```
 
 **Verification:**
+
 ```bash
 # In your API test suite, add a test case:
 # POST /api/cleanup with key = "tmp/../secrets/env" should return 400
@@ -462,6 +502,7 @@ if (key.includes('..') || key.includes('//')) {
 ```
 
 **Commit:**
+
 ```
 fix(api/cleanup): tighten S3 key validation to strict allowlist regex, reject traversal patterns
 ```
@@ -473,6 +514,7 @@ fix(api/cleanup): tighten S3 key validation to strict allowlist regex, reject tr
 **Problem:** `services/api/src/server.ts:122-146` — the Stripe secret key presence check happens late in the boot sequence (when Stripe is first used), not at startup. A missing `STRIPE_SECRET_KEY` causes the service to start successfully and only crash on the first billing request — which could be minutes or hours after deploy.
 
 **Fix:**
+
 1. Open `services/api/src/server.ts` (or wherever `validateEnv()` is defined — check `services/api/src/config.ts` or similar)
 2. Find the `validateEnv()` function
 3. Add `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to the required vars list:
@@ -497,7 +539,7 @@ function validateEnv() {
     ...(process.env.NODE_ENV === 'production' ? ['METRICS_TOKEN'] : []),
   ];
 
-  const missing = required.filter(key => !process.env[key]);
+  const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
     console.error(`[startup] Missing required environment variables: ${missing.join(', ')}`);
     process.exit(1);
@@ -508,6 +550,7 @@ function validateEnv() {
 4. Ensure `validateEnv()` is called as the very first thing in the server startup, before any middleware or route registration
 
 **Verification:**
+
 ```bash
 # Temporarily unset STRIPE_SECRET_KEY and start the server:
 STRIPE_SECRET_KEY= node -r ts-node/register services/api/src/server.ts
@@ -515,6 +558,7 @@ STRIPE_SECRET_KEY= node -r ts-node/register services/api/src/server.ts
 ```
 
 **Commit:**
+
 ```
 fix(api/config): move STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET into validateEnv() startup check
 ```
@@ -526,6 +570,7 @@ fix(api/config): move STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET into validateE
 **Problem:** `apps/web/app/components/tool-workbench.tsx:12-39` defines its own `ToolSlug` and `OutputFormat` types locally instead of importing from `@imageops/core`. If the core enums change, the frontend won't get a compile error — it will silently diverge.
 
 **Fix:**
+
 1. Open `apps/web/app/components/tool-workbench.tsx`
 2. Find the local type definitions for `ToolSlug` and `OutputFormat` (around lines 12–39)
 3. Delete the local definitions
@@ -542,6 +587,7 @@ fix(api/config): move STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET into validateE
 6. Also fix `apps/web/app/lib/api-client.ts` — find the duplicated refresh payload type and replace with the import from `@imageops/core`
 
 **Verification:**
+
 ```bash
 cd apps/web
 npx tsc --noEmit
@@ -549,6 +595,7 @@ npx tsc --noEmit
 ```
 
 **Commit:**
+
 ```
 refactor(web): replace local ToolSlug/OutputFormat types with imports from @imageops/core
 ```
@@ -566,7 +613,9 @@ refactor(web): replace local ToolSlug/OutputFormat types with imports from @imag
    ```tsx
    import AdConsentBanner from '@/app/components/ad-consent-banner';
    // In layout JSX:
-   {process.env.NEXT_PUBLIC_ENABLE_ADS === 'true' && <AdConsentBanner />}
+   {
+     process.env.NEXT_PUBLIC_ENABLE_ADS === 'true' && <AdConsentBanner />;
+   }
    ```
 3. Open the landing page (`apps/web/app/(marketing)/page.tsx`) and any high-traffic pages
 4. Add `<AdSlot position="sidebar" />` or `<AdSlot position="banner" />` in appropriate locations, gated by the same env var
@@ -583,6 +632,7 @@ rm apps/web/app/components/ad-consent-banner.tsx
 **Decision:** Check with your product roadmap. If ads are planned for a future milestone, keep the files but add a `// TODO: wire into layout in v1.1 (tracked in #issue-number)` comment at the top of each file so it's clearly intentional. If ads are not planned, remove them to reduce dead code surface.
 
 **Verification:**
+
 ```bash
 # If Option A:
 grep -r "AdConsentBanner\|AdSlot" apps/web --include="*.tsx" | grep -v "components/"
@@ -594,10 +644,13 @@ ls apps/web/app/components/ad-*.tsx
 ```
 
 **Commit (Option A):**
+
 ```
 feat(web/ads): wire AdConsentBanner and AdSlot into marketing layout, gate with NEXT_PUBLIC_ENABLE_ADS
 ```
+
 **Commit (Option B):**
+
 ```
 chore(web): remove unwired ad components; to be revisited in v1.1
 ```
@@ -644,19 +697,19 @@ RUN_INTEGRATION_TESTS=1 INTEGRATION_API_BASE_URL=http://127.0.0.1:4000 npm run t
 
 ## PRIORITY ORDER SUMMARY
 
-| # | Fix | Priority | Effort |
-|---|-----|----------|--------|
-| 1 | Remove non-HttpOnly cookie | P1 Security | 10 min |
-| 2 | Remove localStorage fallback | P1 Security | 10 min |
-| 3 | Server-side EXIF stripping | P0 Privacy | 45 min |
-| 4 | Add METRICS_TOKEN to .env.example | P1 Config | 5 min |
-| 5 | Add missing env vars to .env.example | P2 Config | 10 min |
-| 6 | SHA256 integrity check | P1 Data Integrity | 30 min |
-| 7 | BullMQ dead-letter queue | P2 Reliability | 60 min |
-| 8 | Content-Security-Policy header | P3 Security | 20 min |
-| 9 | Cleanup route path validation | P3 Security | 10 min |
-| 10 | Stripe key in validateEnv() | P3 Reliability | 15 min |
-| 11 | Fix frontend type duplication | P3 Quality | 20 min |
-| 12 | Wire or remove ad components | P2 Completeness | 30 min |
+| #   | Fix                                  | Priority          | Effort |
+| --- | ------------------------------------ | ----------------- | ------ |
+| 1   | Remove non-HttpOnly cookie           | P1 Security       | 10 min |
+| 2   | Remove localStorage fallback         | P1 Security       | 10 min |
+| 3   | Server-side EXIF stripping           | P0 Privacy        | 45 min |
+| 4   | Add METRICS_TOKEN to .env.example    | P1 Config         | 5 min  |
+| 5   | Add missing env vars to .env.example | P2 Config         | 10 min |
+| 6   | SHA256 integrity check               | P1 Data Integrity | 30 min |
+| 7   | BullMQ dead-letter queue             | P2 Reliability    | 60 min |
+| 8   | Content-Security-Policy header       | P3 Security       | 20 min |
+| 9   | Cleanup route path validation        | P3 Security       | 10 min |
+| 10  | Stripe key in validateEnv()          | P3 Reliability    | 15 min |
+| 11  | Fix frontend type duplication        | P3 Quality        | 20 min |
+| 12  | Wire or remove ad components         | P2 Completeness   | 30 min |
 
 **Total estimated effort: ~4.5 hours of focused work.**
