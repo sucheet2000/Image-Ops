@@ -10,6 +10,7 @@ Constrained gateway for operation discovery and orchestration.
 ## Guardrails
 
 - Reduced operation allowlist from `openapi/reduced.v1.yaml`
+- Internal service token required via `x-internal-token`
 - JWT auth with issuer/audience checks
 - Scope checks per operation
 - Host allowlist for downstream API base URL

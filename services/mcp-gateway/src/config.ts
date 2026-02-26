@@ -11,6 +11,7 @@ function parseNumber(name: string, fallback: number): number {
 export const config = {
   port: parseNumber('MCP_PORT', 4300),
   apiBaseUrl: process.env.MCP_API_BASE_URL || 'http://localhost:4000',
+  gatewaySecret: process.env.MCP_GATEWAY_SECRET || '',
   allowedHosts: (process.env.MCP_ALLOWED_HOSTS || 'localhost')
     .split(',')
     .map((value) => value.trim()),
