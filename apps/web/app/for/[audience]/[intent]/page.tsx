@@ -10,6 +10,8 @@ type AudienceIntentPageProps = {
   params: Promise<{ audience: string; intent: string }>;
 };
 
+export const revalidate = 86400;
+
 export function generateStaticParams() {
   return AUDIENCE_INTENT_PAGES.map((item) => ({
     audience: item.audience,

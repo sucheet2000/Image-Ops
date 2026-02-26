@@ -10,6 +10,8 @@ type ComparePageProps = {
   params: Promise<{ slug: string }>;
 };
 
+export const revalidate = 86400;
+
 export function generateStaticParams() {
   return COMPARE_PAGES.map((item) => ({ slug: item.slug }));
 }
