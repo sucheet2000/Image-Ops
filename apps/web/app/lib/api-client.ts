@@ -1,10 +1,11 @@
+import type { ImagePlan } from '@imageops/core';
 import { TOKEN_KEY } from './storage-keys';
 
 type RefreshPayload = {
   token: string;
   profile?: {
     subjectId?: string;
-    plan?: 'free' | 'pro' | 'team';
+    plan?: ImagePlan;
   };
 };
 
