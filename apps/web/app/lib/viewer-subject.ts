@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from './api-client';
+import { getApiBaseUrl, getApiToken, setApiToken } from './api-client';
 import { SUBJECT_KEY } from './storage-keys';
 import { setViewerSubjectId } from './session';
 
@@ -20,14 +20,14 @@ export function getStoredViewerSubjectId(): string | null {
 
 export async function ensureViewerSubjectId(apiBaseUrl = getApiBaseUrl()): Promise<string> {
   const existing = getStoredViewerSubjectId();
-  if (existing) {
+  if (existing && getApiToken()) {
     return existing;
   }
 
   const response = await fetch(`${apiBaseUrl}/api/auth/session`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: '{}',
+    body: JSON.stringify(existing ? { subjectId: existing } : {}),
     credentials: 'include',
   });
 
@@ -35,12 +35,20 @@ export async function ensureViewerSubjectId(apiBaseUrl = getApiBaseUrl()): Promi
     throw new Error(`Unable to create viewer session (${response.status})`);
   }
 
-  const payload = (await response.json()) as { subjectId?: string; plan?: 'free' | 'pro' | 'team' };
+  const payload = (await response.json()) as {
+    subjectId?: string;
+    plan?: 'free' | 'pro' | 'team';
+    token?: string;
+  };
   const subjectId = String(payload.subjectId || '').trim();
   if (!subjectId) {
     throw new Error('Session response missing subjectId');
   }
+  if (!payload.token || payload.token.length === 0) {
+    throw new Error('Session response missing token');
+  }
 
   setViewerSubjectId(subjectId);
+  setApiToken(payload.token);
   return subjectId;
 }
