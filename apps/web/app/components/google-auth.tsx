@@ -57,11 +57,6 @@ export function GoogleAuthPanel() {
 
   function setToken(token: string): void {
     setApiToken(token);
-
-    const isLocalHost =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const securePart = isLocalHost ? '' : '; Secure';
-    document.cookie = `image_ops_api_token=${encodeURIComponent(token)}; path=/; max-age=3600; SameSite=Lax${securePart}`;
   }
 
   useEffect(() => {
