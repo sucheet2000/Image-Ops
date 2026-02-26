@@ -17,7 +17,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/services/worker/node_modules ./services/worker/node_modules
 COPY --from=build /app/packages/core ./packages/core
 COPY --from=build /app/services/worker/dist ./services/worker/dist
 CMD ["node", "services/worker/dist/worker.js"]
