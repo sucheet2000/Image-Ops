@@ -114,6 +114,37 @@ export function EditorialChrome() {
     };
   }, [pathname]);
 
+  useEffect(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('.reveal-el'));
+    if (nodes.length === 0) {
+      return;
+    }
+
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timers: number[] = [];
+
+    nodes.forEach((node) => {
+      const delayRaw = Number.parseInt(node.dataset.delay || '0', 10);
+      const delay = Number.isFinite(delayRaw) && delayRaw > 0 ? delayRaw : 0;
+
+      if (prefersReduced) {
+        node.classList.add('visible');
+        return;
+      }
+
+      node.classList.remove('visible');
+      const timer = window.setTimeout(() => {
+        node.classList.add('visible');
+      }, delay);
+      timers.push(timer);
+    });
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      nodes.forEach((node) => node.classList.remove('visible'));
+    };
+  }, [pathname]);
+
   return (
     <>
       <div className="scroll-progress" style={{ width: `${progress}%` }} />

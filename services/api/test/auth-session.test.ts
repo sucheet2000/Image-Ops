@@ -29,6 +29,8 @@ describe('auth session routes', () => {
     const payload = await response.json();
     expect(payload.subjectId).toContain('session_');
     expect(payload.plan).toBe('free');
+    expect(payload.token).toBeTruthy();
+    expect(payload.tokenType).toBe('Bearer');
 
     const stored = await services.jobRepo.getSubjectProfile(payload.subjectId);
     expect(stored?.plan).toBe('free');
@@ -46,6 +48,21 @@ describe('auth session routes', () => {
     });
 
     expect(created.status).toBe(201);
+    const createdPayload = await created.json();
+    expect(createdPayload.token).toBeTruthy();
+    expect(createdPayload.tokenType).toBe('Bearer');
+
+    const existing = await fetch(`${server.baseUrl}/api/auth/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ subjectId: 'seller_pro' }),
+    });
+
+    expect(existing.status).toBe(200);
+    const existingPayload = await existing.json();
+    expect(existingPayload.subjectId).toBe('seller_pro');
+    expect(existingPayload.token).toBeTruthy();
+    expect(existingPayload.tokenType).toBe('Bearer');
 
     const fetched = await fetch(`${server.baseUrl}/api/auth/session/seller_pro`);
     expect(fetched.status).toBe(200);

@@ -129,7 +129,18 @@ export function registerAuthRoutes(
 
       const existing = await deps.jobRepo.getSubjectProfile(subjectId);
       if (existing) {
-        res.status(200).json(existing);
+        const token = deps.auth.issueApiToken({
+          sub: existing.subjectId,
+          plan: existing.plan,
+          now: deps.now(),
+        });
+
+        res.status(200).json({
+          ...existing,
+          token,
+          tokenType: 'Bearer',
+          expiresIn: deps.config.authTokenTtlSeconds,
+        });
         return;
       }
 
@@ -153,7 +164,18 @@ export function registerAuthRoutes(
 
       await deps.jobRepo.upsertSubjectProfile(created);
 
-      res.status(201).json(created);
+      const token = deps.auth.issueApiToken({
+        sub: created.subjectId,
+        plan: created.plan,
+        now: deps.now(),
+      });
+
+      res.status(201).json({
+        ...created,
+        token,
+        tokenType: 'Bearer',
+        expiresIn: deps.config.authTokenTtlSeconds,
+      });
     })
   );
 
