@@ -6,6 +6,8 @@ RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 COPY tsconfig.base.json ./
 COPY apps/web apps/web
 RUN npm run build -w apps/web
